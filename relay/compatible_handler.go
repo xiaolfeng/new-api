@@ -426,6 +426,13 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		model.UpdateChannelUsedQuota(relayInfo.ChannelId, quota)
 	}
 
+	// 检测空响应：completion_tokens = 0 且 prompt_tokens > 0（有输入但无输出）
+	// 用于触发空响应重试逻辑
+	if completionTokens == 0 && promptTokens > 0 && operation_setting.IsEmptyResponseRetryEnabled() {
+		common.SetContextKey(ctx, constant.ContextKeyEmptyResponse, true)
+		logger.LogInfo(ctx, "empty response detected: completion_tokens=0, will trigger retry")
+	}
+
 	if err := service.SettleBilling(ctx, relayInfo, quota); err != nil {
 		logger.LogError(ctx, "error settling billing: "+err.Error())
 	}
@@ -441,6 +448,11 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 	}
 	logContent := strings.Join(extraContent, ", ")
 	other := service.GenerateTextOtherInfo(ctx, relayInfo, modelRatio, groupRatio, completionRatio, cacheTokens, cacheRatio, modelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
+	// 计算 TPS (Tokens Per Second)
+	frt := float64(relayInfo.FirstResponseTime.UnixMilli() - relayInfo.StartTime.UnixMilli())
+	if tps, valid := service.CalculateTPS(completionTokens, int(useTimeSeconds), frt, relayInfo.IsStream); valid {
+		other["tps"] = tps
+	}
 	if adminRejectReason != "" {
 		other["reject_reason"] = adminRejectReason
 	}

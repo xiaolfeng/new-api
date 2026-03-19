@@ -187,6 +187,14 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 	relayInfo.LastError = nil
 
 	for ; retryParam.GetRetry() <= common.RetryTimes; retryParam.IncreaseRetry() {
+		// 重试延迟（仅在重试时生效）
+		if retryParam.GetRetry() > 0 {
+			delaySeconds := operation_setting.GetEmptyResponseRetryDelaySeconds()
+			if delaySeconds > 0 {
+				time.Sleep(time.Duration(delaySeconds) * time.Second)
+			}
+		}
+
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
@@ -220,8 +228,19 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		}
 
 		if newAPIError == nil {
-			relayInfo.LastError = nil
-			return
+			// 检查空响应重试
+			if operation_setting.IsEmptyResponseRetryEnabled() {
+				if common.GetContextKeyBool(c, constant.ContextKeyEmptyResponse) {
+					newAPIError = types.NewError(
+						fmt.Errorf("empty response: completion tokens = 0"),
+						types.ErrorCodeEmptyResponse,
+					)
+				}
+			}
+			if newAPIError == nil {
+				relayInfo.LastError = nil
+				return
+			}
 		}
 
 		newAPIError = service.NormalizeViolationFeeError(newAPIError)
@@ -333,6 +352,10 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	}
 	if _, ok := c.Get("specific_channel_id"); ok {
 		return false
+	}
+	// 空响应重试：当错误码为 empty_response 时允许重试
+	if openaiErr.GetErrorCode() == types.ErrorCodeEmptyResponse {
+		return true
 	}
 	code := openaiErr.StatusCode
 	if code >= 200 && code < 300 {

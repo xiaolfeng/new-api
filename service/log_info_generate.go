@@ -12,6 +12,29 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// CalculateTPS 计算 TPS (Tokens Per Second)
+// TPS = completionTokens / (useTimeSeconds - frtMs/1000)
+// 仅对流式请求有效，非流式请求或无效数据返回 0, false
+func CalculateTPS(completionTokens int, useTimeSeconds int, frtMs float64, isStream bool) (tps float64, valid bool) {
+	// 非流式请求不计算 TPS
+	if !isStream {
+		return 0, false
+	}
+	// 输出 tokens 必须大于 0
+	if completionTokens <= 0 {
+		return 0, false
+	}
+	// 计算生成时间（秒）：总用时 - 首字用时
+	frtSeconds := frtMs / 1000.0
+	generationTime := float64(useTimeSeconds) - frtSeconds
+	// 生成时间必须大于 0
+	if generationTime <= 0 {
+		return 0, false
+	}
+	tps = float64(completionTokens) / generationTime
+	return tps, true
+}
+
 func appendRequestPath(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
 	if other == nil {
 		return

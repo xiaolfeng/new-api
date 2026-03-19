@@ -210,6 +210,32 @@ function renderFirstUseTime(type, t) {
   }
 }
 
+function renderTPS(tps, t) {
+  if (!tps || tps <= 0) {
+    return null;
+  }
+  const tpsValue = tps.toFixed(1);
+  if (tps >= 50) {
+    return (
+      <Tag color='green' shape='circle'>
+        {tpsValue} t/s
+      </Tag>
+    );
+  } else if (tps >= 20) {
+    return (
+      <Tag color='orange' shape='circle'>
+        {tpsValue} t/s
+      </Tag>
+    );
+  } else {
+    return (
+      <Tag color='blue' shape='circle'>
+        {tpsValue} t/s
+      </Tag>
+    );
+  }
+}
+
 function renderBillingTag(record, t) {
   const other = getLogOther(record.other);
   if (other?.billing_source === 'subscription') {
@@ -681,7 +707,7 @@ export const getLogsColumns = ({
     },
     {
       key: COLUMN_KEYS.USE_TIME,
-      title: t('用时/首字'),
+      title: t('用时/首字/TPS'),
       dataIndex: 'use_time',
       render: (text, record, index) => {
         if (!(record.type === 2 || record.type === 5)) {
@@ -694,6 +720,7 @@ export const getLogsColumns = ({
               <Space>
                 {renderUseTime(text, t)}
                 {renderFirstUseTime(other?.frt, t)}
+                {renderTPS(other?.tps, t)}
                 {renderIsStream(record.is_stream, t)}
               </Space>
             </>
