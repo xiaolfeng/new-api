@@ -28,6 +28,7 @@ export default function SettingsEmptyResponseRetry(props) {
   const [inputs, setInputs] = useState({
     'retry_setting.empty_response_retry_enabled': false,
     'retry_setting.empty_response_retry_delay_seconds': 0,
+    'retry_setting.record_consume_log_detail_enabled': false,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -113,6 +114,33 @@ export default function SettingsEmptyResponseRetry(props) {
           <Row>
             <Button size='default' onClick={onSubmit}>
               {t('保存空响应重试设置')}
+            </Button>
+          </Row>
+        </Form.Section>
+        <Form.Section text={t('日志详细记录设置')}>
+          <Row gutter={16}>
+            <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+              <Form.Switch
+                field={'retry_setting.record_consume_log_detail_enabled'}
+                label={t('启用消费日志详细记录')}
+                size='default'
+                checkedText='｜'
+                uncheckedText='〇'
+                extraText={t(
+                  '记录消费日志的请求内容、响应内容和 HTTP 头（排除敏感信息）'
+                )}
+                onChange={(value) =>
+                  setInputs({
+                    ...inputs,
+                    'retry_setting.record_consume_log_detail_enabled': value,
+                  })
+                }
+              />
+            </Col>
+          </Row>
+          <Row>
+            <Button size='default' onClick={onSubmit}>
+              {t('保存客制化设置')}
             </Button>
           </Row>
         </Form.Section>

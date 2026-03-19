@@ -74,7 +74,7 @@ const Setting = () => {
       tab: (
         <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <RefreshCw size={18} />
-          {t('重试设置')}
+          {t('客制化设置')}
         </span>
       ),
       content: <RetrySetting />,

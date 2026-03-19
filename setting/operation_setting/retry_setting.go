@@ -29,12 +29,16 @@ type RetrySetting struct {
 	// EmptyResponseRetryDelaySeconds 空响应重试延迟秒数
 	// 0 表示立即重试
 	EmptyResponseRetryDelaySeconds int `json:"empty_response_retry_delay_seconds"`
+	// RecordConsumeLogDetailEnabled 启用消费日志详细记录
+	// 记录消费日志的请求内容、响应内容和 HTTP 头（排除敏感信息）
+	RecordConsumeLogDetailEnabled bool `json:"record_consume_log_detail_enabled"`
 }
 
 // 默认配置
 var retrySetting = RetrySetting{
 	EmptyResponseRetryEnabled:      false,
 	EmptyResponseRetryDelaySeconds: 0,
+	RecordConsumeLogDetailEnabled:  false,
 }
 
 func init() {
@@ -55,4 +59,9 @@ func IsEmptyResponseRetryEnabled() bool {
 // GetEmptyResponseRetryDelaySeconds 获取空响应重试延迟秒数
 func GetEmptyResponseRetryDelaySeconds() int {
 	return retrySetting.EmptyResponseRetryDelaySeconds
+}
+
+// IsRecordConsumeLogDetailEnabled 是否启用消费日志详细记录
+func IsRecordConsumeLogDetailEnabled() bool {
+	return retrySetting.RecordConsumeLogDetailEnabled
 }

@@ -214,22 +214,28 @@ function renderTPS(tps, t) {
   if (!tps || tps <= 0) {
     return null;
   }
-  const tpsValue = tps.toFixed(1);
-  if (tps >= 50) {
+  const tpsValue = tps.toFixed(2);
+  if (tps >= 81) {
     return (
       <Tag color='green' shape='circle'>
         {tpsValue} t/s
       </Tag>
     );
-  } else if (tps >= 20) {
+  } else if (tps >= 51) {
     return (
-      <Tag color='orange' shape='circle'>
+      <Tag color='lime' shape='circle'>
+        {tpsValue} t/s
+      </Tag>
+    );
+  } else if (tps >= 11) {
+    return (
+      <Tag color='yellow' shape='circle'>
         {tpsValue} t/s
       </Tag>
     );
   } else {
     return (
-      <Tag color='blue' shape='circle'>
+      <Tag color='red' shape='circle'>
         {tpsValue} t/s
       </Tag>
     );
@@ -707,7 +713,7 @@ export const getLogsColumns = ({
     },
     {
       key: COLUMN_KEYS.USE_TIME,
-      title: t('用时/首字/TPS'),
+      title: t('用时/首字'),
       dataIndex: 'use_time',
       render: (text, record, index) => {
         if (!(record.type === 2 || record.type === 5)) {
@@ -720,7 +726,6 @@ export const getLogsColumns = ({
               <Space>
                 {renderUseTime(text, t)}
                 {renderFirstUseTime(other?.frt, t)}
-                {renderTPS(other?.tps, t)}
                 {renderIsStream(record.is_stream, t)}
               </Space>
             </>
@@ -735,6 +740,21 @@ export const getLogsColumns = ({
             </>
           );
         }
+      },
+    },
+    {
+      key: COLUMN_KEYS.TPS,
+      title: t('TPS'),
+      dataIndex: 'other',
+      render: (text, record, index) => {
+        if (!(record.type === 2 || record.type === 5)) {
+          return <></>;
+        }
+        if (!record.is_stream) {
+          return <></>;
+        }
+        const other = getLogOther(text);
+        return renderTPS(other?.tps, t);
       },
     },
     {

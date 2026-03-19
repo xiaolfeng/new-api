@@ -54,6 +54,7 @@ export const useLogsData = () => {
     TYPE: 'type',
     MODEL: 'model',
     USE_TIME: 'use_time',
+    TPS: 'tps',
     PROMPT: 'prompt',
     COMPLETION: 'completion',
     COST: 'cost',
@@ -117,6 +118,7 @@ export const useLogsData = () => {
       [COLUMN_KEYS.TYPE]: true,
       [COLUMN_KEYS.MODEL]: true,
       [COLUMN_KEYS.USE_TIME]: true,
+      [COLUMN_KEYS.TPS]: true,
       [COLUMN_KEYS.PROMPT]: true,
       [COLUMN_KEYS.COMPLETION]: true,
       [COLUMN_KEYS.COST]: true,
@@ -184,6 +186,15 @@ export const useLogsData = () => {
     useState(null);
   const [showParamOverrideModal, setShowParamOverrideModal] = useState(false);
   const [paramOverrideTarget, setParamOverrideTarget] = useState(null);
+
+  // Log detail modal state (admin only)
+  const [showLogDetailModal, setShowLogDetailModal] = useState(false);
+  const [logDetailTarget, setLogDetailTarget] = useState(null);
+
+  const openLogDetailModal = (log) => {
+    setLogDetailTarget(log);
+    setShowLogDetailModal(true);
+  };
 
   // Initialize default column visibility
   const initDefaultColumns = () => {
@@ -461,6 +472,23 @@ export const useLogsData = () => {
                 billingDisplayMode,
               ),
         });
+        // 查看详细记录按钮（仅管理员可见）
+        if (isAdminUser && logs[i].record) {
+          expandDataLocal.push({
+            key: t('详细记录'),
+            value: (
+              <Button
+                size='small'
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openLogDetailModal(logs[i]);
+                }}
+              >
+                {t('查看详情')}
+              </Button>
+            ),
+          });
+        }
         if (logs[i]?.content) {
           expandDataLocal.push({
             key: t('其他详情'),
@@ -846,6 +874,12 @@ export const useLogsData = () => {
     showParamOverrideModal,
     setShowParamOverrideModal,
     paramOverrideTarget,
+
+    // Log detail modal
+    showLogDetailModal,
+    setShowLogDetailModal,
+    logDetailTarget,
+    openLogDetailModal,
 
     // Functions
     loadLogs,
