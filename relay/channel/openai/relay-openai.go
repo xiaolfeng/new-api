@@ -188,6 +188,9 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	applyUsagePostProcessing(info, usage, common.StringToByteSlice(lastStreamData))
 
+	// 提取 completion 文本用于日志记录
+	info.CompletionText = responseTextBuilder.String()
+
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
 	return usage, nil
@@ -294,6 +297,19 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		}
 		responseBody = geminiRespStr
 	}
+
+	// 提取 completion 文本用于日志记录
+	var completionText strings.Builder
+	for _, choice := range simpleResponse.Choices {
+		completionText.WriteString(choice.Message.StringContent())
+		if choice.Message.ReasoningContent != "" {
+			completionText.WriteString(choice.Message.ReasoningContent)
+		}
+		if choice.Message.Reasoning != "" {
+			completionText.WriteString(choice.Message.Reasoning)
+		}
+	}
+	info.CompletionText = completionText.String()
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 

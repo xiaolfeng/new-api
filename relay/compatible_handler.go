@@ -506,7 +506,7 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		other["image_generation_call_price"] = imageGenerationCallPrice
 	}
 	// 构建详细记录
-	record := service.BuildLogRecord(relayInfo, "")
+	record := service.BuildLogRecord(relayInfo)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     promptTokens,

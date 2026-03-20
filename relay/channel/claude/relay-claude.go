@@ -790,6 +790,8 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	}
 
 	HandleStreamFinalResponse(c, info, claudeInfo)
+	// 提取 completion 文本用于日志记录
+	info.CompletionText = claudeInfo.ResponseText.String()
 	return claudeInfo.Usage, nil
 }
 
@@ -857,6 +859,8 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	if handleErr != nil {
 		return nil, handleErr
 	}
+	// 提取 completion 文本用于日志记录
+	info.CompletionText = claudeInfo.ResponseText.String()
 	return claudeInfo.Usage, nil
 }
 

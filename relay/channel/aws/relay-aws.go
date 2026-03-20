@@ -249,6 +249,8 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 	if handlerErr != nil {
 		return handlerErr, nil
 	}
+	// 提取 completion 文本用于日志记录
+	info.CompletionText = claudeInfo.ResponseText.String()
 	return nil, claudeInfo.Usage
 }
 
@@ -290,6 +292,8 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 	}
 
 	claude.HandleStreamFinalResponse(c, info, claudeInfo)
+	// 提取 completion 文本用于日志记录
+	info.CompletionText = claudeInfo.ResponseText.String()
 	return nil, claudeInfo.Usage
 }
 
@@ -347,5 +351,7 @@ func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) 
 	}
 
 	c.JSON(http.StatusOK, response)
+	// 提取 completion 文本用于日志记录
+	info.CompletionText = novaResp.Output.Message.Content[0].Text
 	return nil, &response.Usage
 }

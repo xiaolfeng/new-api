@@ -1344,6 +1344,9 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 		}
 	}
 
+	// 提取 completion 文本用于日志记录
+	info.CompletionText = responseText.String()
+
 	return usage, nil
 }
 
@@ -1508,6 +1511,19 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	case types.RelayFormatGemini:
 		break
 	}
+
+	// 提取 completion 文本用于日志记录
+	var completionText strings.Builder
+	for _, choice := range fullTextResponse.Choices {
+		completionText.WriteString(choice.Message.StringContent())
+		if choice.Message.ReasoningContent != "" {
+			completionText.WriteString(choice.Message.ReasoningContent)
+		}
+		if choice.Message.Reasoning != "" {
+			completionText.WriteString(choice.Message.Reasoning)
+		}
+	}
+	info.CompletionText = completionText.String()
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 

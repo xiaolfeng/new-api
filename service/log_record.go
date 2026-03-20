@@ -20,6 +20,7 @@ package service
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -30,10 +31,22 @@ import (
 
 const maxCompletionLength = 5000
 
+// safeTruncateUTF8 安全截断 UTF-8 字符串，避免在多字节字符中间截断
+func safeTruncateUTF8(s string, maxLen int) string {
+	if utf8.RuneCountInString(s) <= maxLen {
+		return s
+	}
+	// 按 rune 截断，保证不会截断多字节字符
+	runes := []rune(s)
+	if len(runes) > maxLen {
+		return string(runes[:maxLen])
+	}
+	return s
+}
+
 // BuildLogRecord 构建消费日志详细记录
-// relayInfo: 中继信息
-// completionText: AI 返回的内容文本
-func BuildLogRecord(relayInfo *relaycommon.RelayInfo, completionText string) string {
+// relayInfo: 中继信息（包含请求和响应内容）
+func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	if !operation_setting.IsRecordConsumeLogDetailEnabled() {
 		return ""
 	}
@@ -42,18 +55,29 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo, completionText string) str
 
 	// 1. Prompt (从 relayInfo.Request 获取 messages)
 	if relayInfo != nil && relayInfo.Request != nil {
-		if genReq, ok := relayInfo.Request.(*dto.GeneralOpenAIRequest); ok && genReq != nil {
-			record.Prompt = buildPromptRecord(genReq)
+		switch req := relayInfo.Request.(type) {
+		case *dto.GeneralOpenAIRequest:
+			if req != nil {
+				record.Prompt = buildPromptRecordFromOpenAI(req)
+			}
+		case *dto.ClaudeRequest:
+			if req != nil {
+				record.Prompt = buildPromptRecordFromClaude(req)
+			}
+		case *dto.GeminiChatRequest:
+			if req != nil {
+				record.Prompt = buildPromptRecordFromGemini(req)
+			}
+		case *dto.OpenAIResponsesRequest:
+			if req != nil {
+				record.Prompt = buildPromptRecordFromResponses(req)
+			}
 		}
 	}
 
-	// 2. Completion (截断到 5000 字符)
-	if completionText != "" {
-		if len(completionText) > maxCompletionLength {
-			record.Completion = completionText[:maxCompletionLength]
-		} else {
-			record.Completion = completionText
-		}
+	// 2. Completion (从 relayInfo.CompletionText 获取，安全截断到 5000 字符)
+	if relayInfo != nil && relayInfo.CompletionText != "" {
+		record.Completion = safeTruncateUTF8(relayInfo.CompletionText, maxCompletionLength)
 	}
 
 	// 3. Headers (排除敏感信息)
@@ -73,8 +97,8 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo, completionText string) str
 	return string(jsonBytes)
 }
 
-// buildPromptRecord 从请求中构建 prompt 记录
-func buildPromptRecord(req *dto.GeneralOpenAIRequest) map[string]interface{} {
+// buildPromptRecordFromOpenAI 从 OpenAI 格式请求中构建 prompt 记录
+func buildPromptRecordFromOpenAI(req *dto.GeneralOpenAIRequest) map[string]interface{} {
 	if req == nil {
 		return nil
 	}
@@ -104,6 +128,139 @@ func buildPromptRecord(req *dto.GeneralOpenAIRequest) map[string]interface{} {
 			messages = append(messages, m)
 		}
 		result["messages"] = messages
+	}
+
+	return result
+}
+
+// buildPromptRecordFromClaude 从 Claude 格式请求中构建 prompt 记录
+func buildPromptRecordFromClaude(req *dto.ClaudeRequest) map[string]interface{} {
+	if req == nil {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+
+	// 记录 system
+	if req.System != nil {
+		if req.IsStringSystem() {
+			result["system"] = req.GetStringSystem()
+		} else if sysMedia := req.ParseSystem(); len(sysMedia) > 0 {
+			textParts := make([]string, 0)
+			for _, media := range sysMedia {
+				if media.Type == "text" {
+					textParts = append(textParts, media.GetText())
+				}
+			}
+			if len(textParts) > 0 {
+				result["system"] = strings.Join(textParts, "\n")
+			}
+		}
+	}
+
+	// 记录 messages
+	if len(req.Messages) > 0 {
+		messages := make([]map[string]interface{}, 0, len(req.Messages))
+		for _, msg := range req.Messages {
+			m := make(map[string]interface{})
+			m["role"] = msg.Role
+			if msg.IsStringContent() {
+				m["content"] = msg.GetStringContent()
+			} else if contents, _ := msg.ParseContent(); len(contents) > 0 {
+				textParts := make([]string, 0)
+				for _, c := range contents {
+					if c.Text != nil && *c.Text != "" {
+						textParts = append(textParts, *c.Text)
+					}
+				}
+				if len(textParts) > 0 {
+					m["content"] = strings.Join(textParts, "\n")
+				}
+			}
+			messages = append(messages, m)
+		}
+		result["messages"] = messages
+	}
+
+	return result
+}
+
+// buildPromptRecordFromGemini 从 Gemini 格式请求中构建 prompt 记录
+func buildPromptRecordFromGemini(req *dto.GeminiChatRequest) map[string]interface{} {
+	if req == nil {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+
+	// 记录 systemInstruction
+	if req.SystemInstructions != nil && len(req.SystemInstructions.Parts) > 0 {
+		textParts := make([]string, 0)
+		for _, part := range req.SystemInstructions.Parts {
+			if part.Text != "" {
+				textParts = append(textParts, part.Text)
+			}
+		}
+		if len(textParts) > 0 {
+			result["systemInstruction"] = strings.Join(textParts, "\n")
+		}
+	}
+
+	// 记录 contents
+	if len(req.Contents) > 0 {
+		messages := make([]map[string]interface{}, 0, len(req.Contents))
+		for _, content := range req.Contents {
+			m := make(map[string]interface{})
+			m["role"] = content.Role
+			if len(content.Parts) > 0 {
+				textParts := make([]string, 0)
+				for _, part := range content.Parts {
+					if part.Text != "" {
+						textParts = append(textParts, part.Text)
+					}
+				}
+				if len(textParts) > 0 {
+					m["content"] = strings.Join(textParts, "\n")
+				}
+			}
+			messages = append(messages, m)
+		}
+		result["messages"] = messages
+	}
+
+	return result
+}
+
+// buildPromptRecordFromResponses 从 OpenAI Responses API 格式请求中构建 prompt 记录
+func buildPromptRecordFromResponses(req *dto.OpenAIResponsesRequest) map[string]interface{} {
+	if req == nil {
+		return nil
+	}
+
+	result := make(map[string]interface{})
+
+	// 记录 instructions
+	if len(req.Instructions) > 0 {
+		result["instructions"] = string(req.Instructions)
+	}
+
+	// 记录 input (解析为文本列表)
+	if req.Input != nil {
+		inputs := req.ParseInput()
+		textParts := make([]string, 0, len(inputs))
+		for _, input := range inputs {
+			if input.Text != "" {
+				textParts = append(textParts, input.Text)
+			}
+		}
+		if len(textParts) > 0 {
+			result["input"] = strings.Join(textParts, "\n")
+		}
+	}
+
+	// 记录 prompt (如果有)
+	if len(req.Prompt) > 0 {
+		result["prompt"] = string(req.Prompt)
 	}
 
 	return result

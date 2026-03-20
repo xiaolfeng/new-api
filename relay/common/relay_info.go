@@ -169,6 +169,9 @@ type RelayInfo struct {
 	*ResponsesUsageInfo
 	*ChannelMeta
 	*TaskRelayInfo
+
+	// CompletionText 存储 AI 响应内容，用于日志详细记录
+	CompletionText string
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
