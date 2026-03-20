@@ -449,9 +449,11 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 	logContent := strings.Join(extraContent, ", ")
 	other := service.GenerateTextOtherInfo(ctx, relayInfo, modelRatio, groupRatio, completionRatio, cacheTokens, cacheRatio, modelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	// 计算 TPS (Tokens Per Second)
+	var tpsValue float64
 	frt := float64(relayInfo.FirstResponseTime.UnixMilli() - relayInfo.StartTime.UnixMilli())
 	if tps, valid := service.CalculateTPS(completionTokens, int(useTimeSeconds), frt, relayInfo.IsStream); valid {
 		other["tps"] = tps
+		tpsValue = tps
 	}
 	if adminRejectReason != "" {
 		other["reject_reason"] = adminRejectReason
@@ -519,5 +521,6 @@ func postConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage 
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 		Record:           record,
+		Tps:              tpsValue,
 	})
 }

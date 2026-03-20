@@ -26,6 +26,7 @@ const RetrySetting = () => {
   const [inputs, setInputs] = useState({
     'retry_setting.empty_response_retry_enabled': false,
     'retry_setting.empty_response_retry_delay_seconds': 0,
+    'retry_setting.record_consume_log_detail_enabled': false,
   });
   const [loading, setLoading] = useState(false);
 
@@ -35,7 +36,9 @@ const RetrySetting = () => {
     if (success) {
       let newInputs = {};
       data.forEach((item) => {
-        if (typeof inputs[item.key] === 'boolean') {
+        if (item.key === 'retry_setting.record_consume_log_detail_enabled') {
+          newInputs[item.key] = toBoolean(item.value);
+        } else if (typeof inputs[item.key] === 'boolean') {
           newInputs[item.key] = toBoolean(item.value);
         } else if (item.key === 'retry_setting.empty_response_retry_delay_seconds') {
           newInputs[item.key] = parseInt(item.value) || 0;
