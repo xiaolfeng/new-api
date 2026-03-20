@@ -34,19 +34,19 @@ const RetrySetting = () => {
     const res = await API.get('/api/option/');
     const { success, message, data } = res.data;
     if (success) {
-      let newInputs = {};
-      data.forEach((item) => {
-        if (item.key === 'retry_setting.record_consume_log_detail_enabled') {
-          newInputs[item.key] = toBoolean(item.value);
-        } else if (typeof inputs[item.key] === 'boolean') {
-          newInputs[item.key] = toBoolean(item.value);
-        } else if (item.key === 'retry_setting.empty_response_retry_delay_seconds') {
-          newInputs[item.key] = parseInt(item.value) || 0;
-        } else {
-          newInputs[item.key] = item.value;
-        }
+      setInputs((prev) => {
+        const newInputs = { ...prev };
+        data.forEach((item) => {
+          if (typeof prev[item.key] === 'boolean') {
+            newInputs[item.key] = toBoolean(item.value);
+          } else if (item.key === 'retry_setting.empty_response_retry_delay_seconds') {
+            newInputs[item.key] = parseInt(item.value) || 0;
+          } else {
+            newInputs[item.key] = item.value;
+          }
+        });
+        return newInputs;
       });
-      setInputs(newInputs);
     } else {
       showError(message);
     }

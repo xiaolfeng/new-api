@@ -182,6 +182,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		}(),
 		RequestId: requestId,
 		Other:     otherStr,
+		Record:    params.Record,
 		Tps:       params.Tps,
 	}
 	err := LOG_DB.Create(log).Error
