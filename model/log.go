@@ -55,7 +55,8 @@ const (
 func formatUserLogs(logs []*Log, startIdx int) {
 	for i := range logs {
 		logs[i].ChannelName = ""
-		logs[i].Record = "" // 非管理员不返回详细记录
+		// Record 字段保留，用于前端解析来源和类型
+		// 敏感头信息已在 filterSensitiveHeaders() 中过滤
 		var otherMap map[string]interface{}
 		otherMap, _ = common.StrToMap(logs[i].Other)
 		if otherMap != nil {

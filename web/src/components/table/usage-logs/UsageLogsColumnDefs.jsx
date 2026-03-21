@@ -372,6 +372,84 @@ function getUsageLogGroupSummary(groupRatio, userGroupRatio, t) {
   return `${useUserGroupRatio ? t('专属倍率') : t('分组')} ${formatRatio(ratio)}x`;
 }
 
+/**
+ * 从 User-Agent 解析客户端来源
+ * @param {string} userAgent - User-Agent 字符串
+ * @returns {string} 来源名称
+ */
+function parseClientSource(userAgent) {
+  if (!userAgent) return '-';
+
+  const ua = userAgent.toLowerCase();
+
+  // Claude Code
+  if (ua.includes('claude-cli')) {
+    return 'Claude Code';
+  }
+
+  // Codex
+  if (ua.includes('codex_cli_rs') || ua.includes('codex-cli-rs')) {
+    return 'Codex';
+  }
+
+  // 通用浏览器匹配
+  if (ua.includes('firefox/')) return 'Firefox';
+  if (ua.includes('edg/')) return 'Edge';
+  if (ua.includes('chrome/')) return 'Chrome';
+  if (ua.includes('safari/') && !ua.includes('chrome')) return 'Safari';
+
+  // 其他工具：尝试提取名称
+  const match = ua.match(/^([a-z0-9_-]+)\//);
+  if (match) {
+    return match[1].charAt(0).toUpperCase() + match[1].slice(1);
+  }
+
+  return '-';
+}
+
+/**
+ * 判断交互类型
+ * @param {object|string} record - 日志记录对象
+ * @returns {string|null} 类型名称，Codex 返回 null
+ */
+function parseInteractionType(record) {
+  if (!record) return null;
+
+  try {
+    const recordData = typeof record === 'string' ? JSON.parse(record) : record;
+    const headers = recordData?.headers || {};
+    const prompt = recordData?.prompt || {};
+    const completion = recordData?.completion || '';
+
+    // 检查 User-Agent 是否为 Codex
+    const userAgent = Object.keys(headers).find(
+      key => key.toLowerCase() === 'user-agent'
+    );
+    if (userAgent) {
+      const ua = headers[userAgent]?.toLowerCase() || '';
+      if (ua.includes('codex_cli_rs') || ua.includes('codex-cli-rs')) {
+        return null; // Codex 不显示类型
+      }
+    }
+
+    // 获取最后一个用户消息的内容
+    const lastUserMessage = prompt?.lastUserMessage || {};
+    const hasContent = lastUserMessage.content && lastUserMessage.content.trim() !== '';
+    const hasCompletion = completion && completion.trim() !== '';
+
+    // 判断逻辑
+    if (!hasContent && !hasCompletion) {
+      return '工具';  // 工具调用
+    }
+    if (hasCompletion) {
+      return '输出';
+    }
+    return '输入';
+  } catch (e) {
+    return null;
+  }
+}
+
 function renderCompactDetailSummary(summarySegments) {
   const segments = Array.isArray(summarySegments)
     ? summarySegments.filter((segment) => segment?.text)
@@ -708,6 +786,63 @@ export const getLogsColumns = ({
           <>{renderModelName(record, copyText, t)}</>
         ) : (
           <></>
+        );
+      },
+    },
+    {
+      key: COLUMN_KEYS.SOURCE,
+      title: t('来源'),
+      render: (text, record, index) => {
+        if (!(record.type === 2 || record.type === 5)) {
+          return null;
+        }
+
+        try {
+          const recordData = record.record
+            ? typeof record.record === 'string'
+              ? JSON.parse(record.record)
+              : record.record
+            : null;
+          const headers = recordData?.headers || {};
+
+          // 查找 User-Agent（不区分大小写）
+          const uaKey = Object.keys(headers).find(
+            k => k.toLowerCase() === 'user-agent',
+          );
+          const userAgent = uaKey ? headers[uaKey] : '';
+
+          const source = parseClientSource(userAgent);
+          return source !== '-' ? (
+            <Tag color="blue" shape="circle">
+              {source}
+            </Tag>
+          ) : null;
+        } catch (e) {
+          return null;
+        }
+      },
+    },
+    {
+      key: COLUMN_KEYS.INTERACTION_TYPE,
+      title: t('类型'),
+      render: (text, record, index) => {
+        if (!(record.type === 2 || record.type === 5)) {
+          return null;
+        }
+
+        const interactionType = parseInteractionType(record.record);
+        if (!interactionType) return null;
+
+        const colorMap = {
+          工具: 'purple',
+          输入: 'cyan',
+          输出: 'green',
+        };
+
+        return (
+          <Tag color={colorMap[interactionType] || 'grey'} shape="circle">
+            {interactionType}
+          </Tag>
         );
       },
     },
