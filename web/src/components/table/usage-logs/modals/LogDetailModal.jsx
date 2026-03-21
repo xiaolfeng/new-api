@@ -24,9 +24,11 @@ import {
   Collapse,
   Typography,
   Empty,
+  Table,
 } from '@douyinfe/semi-ui';
 import { IconCopy } from '@douyinfe/semi-icons';
 import { copy, showError, showSuccess } from '../../../../helpers';
+import { MarkdownRenderer } from '../../../common/markdown/MarkdownRenderer';
 
 const { Text } = Typography;
 
@@ -60,6 +62,38 @@ const LogDetailModal = ({
     if (entries.length === 0) {
       return <Empty description={t('无请求头记录')} style={{ padding: '20px 0' }} />;
     }
+
+    const columns = [
+      {
+        title: t('请求头名称'),
+        dataIndex: 'key',
+        key: 'key',
+        width: 200,
+        render: (text) => <Text strong>{text}</Text>,
+      },
+      {
+        title: t('值'),
+        dataIndex: 'value',
+        key: 'value',
+        render: (text) => (
+          <Text
+            style={{
+              wordBreak: 'break-all',
+              maxWidth: 500,
+            }}
+          >
+            {text}
+          </Text>
+        ),
+      },
+    ];
+
+    const dataSource = entries.map(([key, value], index) => ({
+      key,
+      value,
+      rowKey: index,
+    }));
+
     return (
       <div style={{ padding: '8px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
@@ -72,34 +106,51 @@ const LogDetailModal = ({
             {t('复制')}
           </Button>
         </div>
-        <pre style={{
-          background: 'var(--semi-color-fill-0)',
-          padding: 12,
-          borderRadius: 8,
-          overflow: 'auto',
-          maxHeight: 300,
-          fontSize: 12,
-          margin: 0,
-        }}>
-          {entries.map(([key, value]) => (
-            <div key={key} style={{ marginBottom: 4 }}>
-              <Text strong>{key}:</Text> {value}
-            </div>
-          ))}
-        </pre>
+        <Table
+          columns={columns}
+          dataSource={dataSource}
+          pagination={false}
+          size='small'
+          bordered
+          rowKey='rowKey'
+          style={{
+            fontSize: 12,
+          }}
+        />
       </div>
     );
   };
 
   const renderPrompt = () => {
     const prompt = record?.prompt || {};
-    const messages = prompt?.messages || [];
-    if (messages.length === 0 && Object.keys(prompt).length === 0) {
+    const lastUserMessage = prompt?.lastUserMessage;
+    const input = prompt?.input;
+    const instructions = prompt?.instructions;
+    const promptText = prompt?.prompt;
+
+    // 提取要显示的内容
+    let displayContent = '';
+    let displayLabel = '';
+
+    if (lastUserMessage?.content) {
+      displayContent = lastUserMessage.content;
+      displayLabel = t('用户消息');
+    } else if (input) {
+      displayContent = typeof input === 'string' ? input : JSON.stringify(input, null, 2);
+      displayLabel = t('输入内容');
+    } else if (promptText) {
+      displayContent = typeof promptText === 'string' ? promptText : JSON.stringify(promptText, null, 2);
+      displayLabel = t('Prompt');
+    }
+
+    if (!displayContent && Object.keys(prompt).length === 0) {
       return <Empty description={t('无请求内容记录')} style={{ padding: '20px 0' }} />;
     }
+
     return (
       <div style={{ padding: '8px 0' }}>
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+          {displayLabel && <Text type='tertiary' size='small'>{displayLabel}</Text>}
           <Button
             icon={<IconCopy />}
             size='small'
@@ -109,17 +160,47 @@ const LogDetailModal = ({
             {t('复制')}
           </Button>
         </div>
-        <pre style={{
-          background: 'var(--semi-color-fill-0)',
-          padding: 12,
-          borderRadius: 8,
-          overflow: 'auto',
-          maxHeight: 400,
-          fontSize: 12,
-          margin: 0,
-        }}>
-          {JSON.stringify(prompt, null, 2)}
-        </pre>
+        {displayContent ? (
+          <div
+            style={{
+              background: 'var(--semi-color-fill-0)',
+              padding: 12,
+              borderRadius: 8,
+              maxHeight: 400,
+              overflow: 'auto',
+            }}
+          >
+            <MarkdownRenderer content={displayContent} fontSize={13} />
+          </div>
+        ) : (
+          <pre style={{
+            background: 'var(--semi-color-fill-0)',
+            padding: 12,
+            borderRadius: 8,
+            overflow: 'auto',
+            maxHeight: 400,
+            fontSize: 12,
+            margin: 0,
+          }}>
+            {JSON.stringify(prompt, null, 2)}
+          </pre>
+        )}
+        {instructions && (
+          <div style={{ marginTop: 12 }}>
+            <Text type='tertiary' size='small'>{t('指令')}:</Text>
+            <div
+              style={{
+                background: 'var(--semi-color-fill-0)',
+                padding: 8,
+                borderRadius: 6,
+                marginTop: 4,
+                fontSize: 12,
+              }}
+            >
+              {typeof instructions === 'string' ? instructions : JSON.stringify(instructions)}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -144,19 +225,17 @@ const LogDetailModal = ({
             {t('复制')}
           </Button>
         </div>
-        <pre style={{
-          background: 'var(--semi-color-fill-0)',
-          padding: 12,
-          borderRadius: 8,
-          overflow: 'auto',
-          maxHeight: 400,
-          fontSize: 12,
-          margin: 0,
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}>
-          {completion}
-        </pre>
+        <div
+          style={{
+            background: 'var(--semi-color-fill-0)',
+            padding: 12,
+            borderRadius: 8,
+            maxHeight: 400,
+            overflow: 'auto',
+          }}
+        >
+          <MarkdownRenderer content={completion} fontSize={13} />
+        </div>
       </div>
     );
   };
@@ -188,7 +267,8 @@ const LogDetailModal = ({
       centered
       closable
       maskClosable
-      width={720}
+      width={900}
+      bodyStyle={{ maxHeight: '70vh', overflow: 'auto' }}
     >
       <div style={{ padding: '8px 0 16px' }}>
         {!record ? (

@@ -98,6 +98,7 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 }
 
 // buildPromptRecordFromOpenAI 从 OpenAI 格式请求中构建 prompt 记录
+// 只提取最后一个用户消息，避免存储过多内容
 func buildPromptRecordFromOpenAI(req *dto.GeneralOpenAIRequest) map[string]interface{} {
 	if req == nil {
 		return nil
@@ -105,35 +106,39 @@ func buildPromptRecordFromOpenAI(req *dto.GeneralOpenAIRequest) map[string]inter
 
 	result := make(map[string]interface{})
 
-	// 记录 messages
+	// 只提取最后一个用户消息
 	if len(req.Messages) > 0 {
-		messages := make([]map[string]interface{}, 0, len(req.Messages))
-		for _, msg := range req.Messages {
-			m := make(map[string]interface{})
-			m["role"] = msg.Role
-			if msg.IsStringContent() {
-				m["content"] = msg.StringContent()
-			} else if contents := msg.ParseContent(); len(contents) > 0 {
-				// 对于多模态内容，只记录文本部分
-				textParts := make([]string, 0)
-				for _, c := range contents {
-					if c.Type == dto.ContentTypeText && c.Text != "" {
-						textParts = append(textParts, c.Text)
+		// 从后向前查找最后一个用户消息
+		for i := len(req.Messages) - 1; i >= 0; i-- {
+			msg := req.Messages[i]
+			if msg.Role == "user" {
+				m := make(map[string]interface{})
+				m["role"] = msg.Role
+				if msg.IsStringContent() {
+					m["content"] = msg.StringContent()
+				} else if contents := msg.ParseContent(); len(contents) > 0 {
+					// 对于多模态内容，只记录文本部分
+					textParts := make([]string, 0)
+					for _, c := range contents {
+						if c.Type == dto.ContentTypeText && c.Text != "" {
+							textParts = append(textParts, c.Text)
+						}
+					}
+					if len(textParts) > 0 {
+						m["content"] = strings.Join(textParts, "\n")
 					}
 				}
-				if len(textParts) > 0 {
-					m["content"] = strings.Join(textParts, "\n")
-				}
+				result["lastUserMessage"] = m
+				break
 			}
-			messages = append(messages, m)
 		}
-		result["messages"] = messages
 	}
 
 	return result
 }
 
 // buildPromptRecordFromClaude 从 Claude 格式请求中构建 prompt 记录
+// 只提取最后一个用户消息，避免存储过多内容
 func buildPromptRecordFromClaude(req *dto.ClaudeRequest) map[string]interface{} {
 	if req == nil {
 		return nil
@@ -141,51 +146,38 @@ func buildPromptRecordFromClaude(req *dto.ClaudeRequest) map[string]interface{} 
 
 	result := make(map[string]interface{})
 
-	// 记录 system
-	if req.System != nil {
-		if req.IsStringSystem() {
-			result["system"] = req.GetStringSystem()
-		} else if sysMedia := req.ParseSystem(); len(sysMedia) > 0 {
-			textParts := make([]string, 0)
-			for _, media := range sysMedia {
-				if media.Type == "text" {
-					textParts = append(textParts, media.GetText())
-				}
-			}
-			if len(textParts) > 0 {
-				result["system"] = strings.Join(textParts, "\n")
-			}
-		}
-	}
-
-	// 记录 messages
+	// 只提取最后一个用户消息
 	if len(req.Messages) > 0 {
-		messages := make([]map[string]interface{}, 0, len(req.Messages))
-		for _, msg := range req.Messages {
-			m := make(map[string]interface{})
-			m["role"] = msg.Role
-			if msg.IsStringContent() {
-				m["content"] = msg.GetStringContent()
-			} else if contents, _ := msg.ParseContent(); len(contents) > 0 {
-				textParts := make([]string, 0)
-				for _, c := range contents {
-					if c.Text != nil && *c.Text != "" {
-						textParts = append(textParts, *c.Text)
+		// 从后向前查找最后一个用户消息
+		for i := len(req.Messages) - 1; i >= 0; i-- {
+			msg := req.Messages[i]
+			if msg.Role == "user" {
+				m := make(map[string]interface{})
+				m["role"] = msg.Role
+				if msg.IsStringContent() {
+					m["content"] = msg.GetStringContent()
+				} else if contents, _ := msg.ParseContent(); len(contents) > 0 {
+					textParts := make([]string, 0)
+					for _, c := range contents {
+						if c.Text != nil && *c.Text != "" {
+							textParts = append(textParts, *c.Text)
+						}
+					}
+					if len(textParts) > 0 {
+						m["content"] = strings.Join(textParts, "\n")
 					}
 				}
-				if len(textParts) > 0 {
-					m["content"] = strings.Join(textParts, "\n")
-				}
+				result["lastUserMessage"] = m
+				break
 			}
-			messages = append(messages, m)
 		}
-		result["messages"] = messages
 	}
 
 	return result
 }
 
 // buildPromptRecordFromGemini 从 Gemini 格式请求中构建 prompt 记录
+// 只提取最后一个用户消息，避免存储过多内容
 func buildPromptRecordFromGemini(req *dto.GeminiChatRequest) map[string]interface{} {
 	if req == nil {
 		return nil
@@ -193,39 +185,30 @@ func buildPromptRecordFromGemini(req *dto.GeminiChatRequest) map[string]interfac
 
 	result := make(map[string]interface{})
 
-	// 记录 systemInstruction
-	if req.SystemInstructions != nil && len(req.SystemInstructions.Parts) > 0 {
-		textParts := make([]string, 0)
-		for _, part := range req.SystemInstructions.Parts {
-			if part.Text != "" {
-				textParts = append(textParts, part.Text)
-			}
-		}
-		if len(textParts) > 0 {
-			result["systemInstruction"] = strings.Join(textParts, "\n")
-		}
-	}
-
-	// 记录 contents
+	// 只提取最后一个用户消息
 	if len(req.Contents) > 0 {
-		messages := make([]map[string]interface{}, 0, len(req.Contents))
-		for _, content := range req.Contents {
-			m := make(map[string]interface{})
-			m["role"] = content.Role
-			if len(content.Parts) > 0 {
-				textParts := make([]string, 0)
-				for _, part := range content.Parts {
-					if part.Text != "" {
-						textParts = append(textParts, part.Text)
+		// 从后向前查找最后一个用户消息（role 为 "user" 或空）
+		for i := len(req.Contents) - 1; i >= 0; i-- {
+			content := req.Contents[i]
+			// Gemini 中用户消息的 role 可能是 "user" 或空字符串
+			if content.Role == "user" || content.Role == "" {
+				if len(content.Parts) > 0 {
+					textParts := make([]string, 0)
+					for _, part := range content.Parts {
+						if part.Text != "" {
+							textParts = append(textParts, part.Text)
+						}
+					}
+					if len(textParts) > 0 {
+						result["lastUserMessage"] = map[string]interface{}{
+							"role":    "user",
+							"content": strings.Join(textParts, "\n"),
+						}
+						break
 					}
 				}
-				if len(textParts) > 0 {
-					m["content"] = strings.Join(textParts, "\n")
-				}
 			}
-			messages = append(messages, m)
 		}
-		result["messages"] = messages
 	}
 
 	return result
