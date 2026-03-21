@@ -437,14 +437,17 @@ function parseInteractionType(record) {
     const hasContent = lastUserMessage.content && lastUserMessage.content.trim() !== '';
     const hasCompletion = completion && completion.trim() !== '';
 
-    // 判断逻辑
-    if (!hasContent && !hasCompletion) {
-      return '工具';  // 工具调用
+    // 判断逻辑：
+    // 1. 有请求内容 → "输入"（不管是否有响应）
+    // 2. 无请求内容 + 有响应 → "输出"
+    // 3. 无请求内容 + 无响应 → "工具"
+    if (hasContent) {
+      return '输入';
     }
     if (hasCompletion) {
       return '输出';
     }
-    return '输入';
+    return '工具';
   } catch (e) {
     return null;
   }
