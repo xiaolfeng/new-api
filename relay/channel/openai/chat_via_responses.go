@@ -65,8 +65,10 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
 
+	// 提取响应文本用于日志记录
+	text := service.ExtractOutputTextFromResponses(&responsesResp)
+
 	if usage == nil || usage.TotalTokens == 0 {
-		text := service.ExtractOutputTextFromResponses(&responsesResp)
 		usage = service.ResponseText2Usage(c, text, info.UpstreamModelName, info.GetEstimatePromptTokens())
 		chatResp.Usage = *usage
 	}
@@ -87,6 +89,10 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
+
+	// 提取响应文本用于日志记录
+	info.CompletionText = text
+
 	return usage, nil
 }
 
@@ -535,5 +541,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	if info.RelayFormat == types.RelayFormatOpenAI {
 		helper.Done(c)
 	}
+
+	// 提取响应文本用于日志记录
+	info.CompletionText = outputText.String()
+
 	return usage, nil
 }

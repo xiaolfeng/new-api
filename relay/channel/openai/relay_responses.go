@@ -53,6 +53,12 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			usage.PromptTokensDetails.CachedTokens = responsesResponse.Usage.InputTokensDetails.CachedTokens
 		}
 	}
+
+	// 提取响应文本用于日志记录（在早返回之前，确保始终记录）
+	if info != nil {
+		info.CompletionText = service.ExtractOutputTextFromResponses(&responsesResponse)
+	}
+
 	if info == nil || info.ResponsesUsageInfo == nil || info.ResponsesUsageInfo.BuiltInTools == nil {
 		return &usage, nil
 	}
@@ -145,6 +151,9 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+
+	// 提取响应文本用于日志记录
+	info.CompletionText = responseTextBuilder.String()
 
 	return usage, nil
 }

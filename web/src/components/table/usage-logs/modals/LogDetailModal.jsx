@@ -28,7 +28,7 @@ import {
 } from '@douyinfe/semi-ui';
 import { IconCopy } from '@douyinfe/semi-icons';
 import { copy, showError, showSuccess } from '../../../../helpers';
-import { MarkdownRenderer } from '../../../common/markdown/MarkdownRenderer';
+import { MarkdownSourceHighlighter } from '../../../common/markdown/MarkdownSourceHighlighter';
 
 const { Text } = Typography;
 
@@ -170,7 +170,7 @@ const LogDetailModal = ({
               overflow: 'auto',
             }}
           >
-            <MarkdownRenderer content={displayContent} fontSize={13} />
+            <MarkdownSourceHighlighter content={displayContent} fontSize={13} />
           </div>
         ) : (
           <pre style={{
@@ -234,7 +234,7 @@ const LogDetailModal = ({
             overflow: 'auto',
           }}
         >
-          <MarkdownRenderer content={completion} fontSize={13} />
+          <MarkdownSourceHighlighter content={completion} fontSize={13} />
         </div>
       </div>
     );
