@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal, Button } from '@douyinfe/semi-ui';
 import {
@@ -75,6 +75,8 @@ export const useLogsData = () => {
   const [logCount, setLogCount] = useState(0);
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   const [logType, setLogType] = useState(0);
+  const [autoRefresh, setAutoRefresh] = useState(false);
+  const autoRefreshRef = useRef(false);
 
   // User and admin
   const isAdminUser = isAdmin();
@@ -790,8 +792,35 @@ export const useLogsData = () => {
   const refresh = async () => {
     setActivePage(1);
     handleEyeClick();
-    await loadLogs(1, pageSize);
+    // 自动刷新时限制最大每页条数为 50
+    const effectivePageSize = autoRefreshRef.current ? Math.min(pageSize, 50) : pageSize;
+    await loadLogs(1, effectivePageSize);
   };
+
+  // Auto refresh effect
+  useEffect(() => {
+    autoRefreshRef.current = autoRefresh;
+
+    if (!autoRefresh) {
+      return;
+    }
+
+    // 开启自动刷新时，如果当前 pageSize > 50，则调整为 50
+    if (pageSize > 50) {
+      setPageSize(50);
+      localStorage.setItem('page-size', '50');
+    }
+
+    const intervalId = setInterval(() => {
+      loadLogs(1, 50).then(() => {
+        handleEyeClick();
+      });
+    }, 10000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [autoRefresh]);
 
   // Copy text function
   const copyText = async (e, text) => {
@@ -896,6 +925,10 @@ export const useLogsData = () => {
     hasExpandableRows,
     setLogType,
     openParamOverrideModal,
+
+    // Auto refresh
+    autoRefresh,
+    setAutoRefresh,
 
     // Translation
     t,

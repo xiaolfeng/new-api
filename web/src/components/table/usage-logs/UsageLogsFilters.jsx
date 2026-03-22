@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 
 import React from 'react';
-import { Button, Form } from '@douyinfe/semi-ui';
+import { Button, Form, Switch, Space } from '@douyinfe/semi-ui';
 import { IconSearch } from '@douyinfe/semi-icons';
 
 import { DATE_RANGE_PRESETS } from '../../../constants/console.constants';
@@ -32,6 +32,8 @@ const LogsFilters = ({
   setLogType,
   loading,
   isAdminUser,
+  autoRefresh,
+  setAutoRefresh,
   t,
 }) => {
   return (
@@ -183,6 +185,14 @@ const LogsFilters = ({
             >
               {t('列设置')}
             </Button>
+            <Space spacing={4} className='items-center'>
+              <Switch
+                size='small'
+                checked={autoRefresh}
+                onChange={setAutoRefresh}
+              />
+              <span className='text-xs text-gray-500'>{t('自动刷新')}</span>
+            </Space>
           </div>
         </div>
       </div>

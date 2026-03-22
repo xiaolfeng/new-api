@@ -559,6 +559,24 @@ function parseClientSource(userAgent) {
 }
 
 /**
+ * 根据来源名称获取颜色
+ * @param {string} source - 来源名称
+ * @returns {string} Semi Design 颜色名称
+ */
+function getSourceColor(source) {
+  if (!source || source === '-') {
+    return 'grey';
+  }
+  // 使用字符串计算颜色索引
+  let hash = 0;
+  for (let i = 0; i < source.length; i++) {
+    hash = source.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const index = Math.abs(hash) % colors.length;
+  return colors[index];
+}
+
+/**
  * 判断交互类型
  * @param {object|string} record - 日志记录对象
  * @returns {string|null} 类型名称，Codex 返回 null
@@ -967,7 +985,7 @@ export const getLogsColumns = ({
 
           const source = parseClientSource(userAgent);
           return source !== '-' ? (
-            <Tag color="blue" shape="circle">
+            <Tag color={getSourceColor(source)} shape="circle">
               {source}
             </Tag>
           ) : null;
