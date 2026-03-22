@@ -13,24 +13,33 @@ import (
 )
 
 // CalculateTPS 计算 TPS (Tokens Per Second)
-// TPS = completionTokens / (useTimeSeconds - frtMs/1000)
-// 仅对流式请求有效，非流式请求或无效数据返回 0, false
+// 流式请求: TPS = completionTokens / (useTimeSeconds - frtMs/1000)
+// 非流式请求: TPS = completionTokens / useTimeSeconds
 func CalculateTPS(completionTokens int, useTimeSeconds int, frtMs float64, isStream bool) (tps float64, valid bool) {
-	// 非流式请求不计算 TPS
-	if !isStream {
-		return 0, false
-	}
 	// 输出 tokens 必须大于 0
 	if completionTokens <= 0 {
 		return 0, false
 	}
-	// 计算生成时间（秒）：总用时 - 首字用时
-	frtSeconds := frtMs / 1000.0
-	generationTime := float64(useTimeSeconds) - frtSeconds
+	// 总用时必须大于 0
+	if useTimeSeconds <= 0 {
+		return 0, false
+	}
+
+	var generationTime float64
+	if isStream {
+		// 流式请求：计算生成时间（秒）= 总用时 - 首字用时
+		frtSeconds := frtMs / 1000.0
+		generationTime = float64(useTimeSeconds) - frtSeconds
+	} else {
+		// 非流式请求：直接使用总用时
+		generationTime = float64(useTimeSeconds)
+	}
+
 	// 生成时间必须大于 0
 	if generationTime <= 0 {
 		return 0, false
 	}
+
 	tps = float64(completionTokens) / generationTime
 	return tps, true
 }

@@ -382,26 +382,177 @@ function parseClientSource(userAgent) {
 
   const ua = userAgent.toLowerCase();
 
-  // Claude Code
+  // ===== AI 编程助手 =====
+  // Claude Code CLI
   if (ua.includes('claude-cli')) {
     return 'Claude Code';
   }
 
-  // Codex
+  // OpenAI Codex CLI
   if (ua.includes('codex_cli_rs') || ua.includes('codex-cli-rs')) {
     return 'Codex';
   }
 
-  // 通用浏览器匹配
+  // CherryStudio (需要在 Chrome 匹配之前)
+  if (ua.includes('cherrystudio/')) {
+    return 'Cherry Studio';
+  }
+
+  // Cursor IDE (Electron 应用，可能包含 cursor 关键字)
+  if (ua.includes('cursor/')) {
+    return 'Cursor';
+  }
+
+  // Windsurf/Codeium
+  if (ua.includes('windsurf/') || ua.includes('codeium/')) {
+    return 'Windsurf';
+  }
+
+  // Continue (VS Code Extension)
+  if (ua.includes('continue/')) {
+    return 'Continue';
+  }
+
+  // Copilot (GitHub Copilot)
+  if (ua.includes('github-copilot') || ua.includes('copilot/')) {
+    return 'Copilot';
+  }
+
+  // Cline (VS Code Extension) - 需要在通用 cline 匹配之前
+  if (ua.includes('cline/') || ua.includes('cline-vscode')) {
+    return 'Cline';
+  }
+
+  // Roo Code / Roo-Cline (VS Code Extension)
+  if (ua.includes('roo-cline') || ua.includes('roocode') || ua.includes('roo code')) {
+    return 'Roo Code';
+  }
+
+  // OpenCode / Crush (Terminal-based AI assistant)
+  if (ua.includes('opencode/') || ua.includes('crush/')) {
+    return 'OpenCode';
+  }
+
+  // Aider (Terminal-based pair programming, uses litellm)
+  if (ua.includes('aider/') || ua.includes('litellm/')) {
+    return 'Aider';
+  }
+
+  // Amazon Q Developer
+  if (ua.includes('amazon-q') || ua.includes('amazonq') || ua.includes('q-developer')) {
+    return 'Amazon Q';
+  }
+
+  // Tabnine
+  if (ua.includes('tabnine/')) {
+    return 'Tabnine';
+  }
+
+  // Codeium
+  if (ua.includes('codeium')) {
+    return 'Codeium';
+  }
+
+  // Sourcegraph Cody
+  if (ua.includes('cody/') || ua.includes('sourcegraph')) {
+    return 'Cody';
+  }
+
+  // Supermaven
+  if (ua.includes('supermaven/')) {
+    return 'Supermaven';
+  }
+
+  // Goose (AI coding agent)
+  if (ua.includes('goose/') || ua.includes('block-goose')) {
+    return 'Goose';
+  }
+
+  // Augment Code
+  if (ua.includes('augment/') || ua.includes('augmentcode')) {
+    return 'Augment';
+  }
+
+  // ===== AI 搜索/聊天客户端 =====
+  // Perplexity
+  if (ua.includes('perplexity-user') || ua.includes('perplexity/')) {
+    return 'Perplexity';
+  }
+
+  // Mistral AI
+  if (ua.includes('mistralai-user') || ua.includes('mistral/')) {
+    return 'Mistral';
+  }
+
+  // Poe (Quora 的 AI 聚合平台)
+  if (ua.includes('poe/')) {
+    return 'Poe';
+  }
+
+  // ===== 其他 AI 工具 =====
+  // LangChain
+  if (ua.includes('langchain')) {
+    return 'LangChain';
+  }
+
+  // OpenAI API (直接调用)
+  if (ua.includes('openai/') || ua.includes('openai-api')) {
+    return 'OpenAI API';
+  }
+
+  // Anthropic API (直接调用)
+  if (ua.includes('anthropic/') || ua.includes('anthropic-api')) {
+    return 'Anthropic API';
+  }
+
+  // ===== Postman/API 测试工具 =====
+  if (ua.includes('postmanruntime/')) {
+    return 'Postman';
+  }
+
+  if (ua.includes('insomnia/')) {
+    return 'Insomnia';
+  }
+
+  // ===== 命令行工具 =====
+  if (ua.includes('curl/')) {
+    return 'cURL';
+  }
+
+  if (ua.includes('wget/')) {
+    return 'Wget';
+  }
+
+  if (ua.includes('python-requests/') || ua.includes('python-urllib/')) {
+    return 'Python';
+  }
+
+  if (ua.includes('go-http-client/') || ua.includes('go-resty/')) {
+    return 'Go';
+  }
+
+  if (ua.includes('node-fetch/') || ua.includes('axios/')) {
+    return 'Node.js';
+  }
+
+  if (ua.includes('java/')) {
+    return 'Java';
+  }
+
+  // ===== 通用浏览器匹配（最后匹配，因为很多应用基于浏览器） =====
   if (ua.includes('firefox/')) return 'Firefox';
   if (ua.includes('edg/')) return 'Edge';
   if (ua.includes('chrome/')) return 'Chrome';
   if (ua.includes('safari/') && !ua.includes('chrome')) return 'Safari';
 
-  // 其他工具：尝试提取名称
+  // 其他工具：尝试提取名称（格式为 name/version）
   const match = ua.match(/^([a-z0-9_-]+)\//);
   if (match) {
-    return match[1].charAt(0).toUpperCase() + match[1].slice(1);
+    const name = match[1];
+    // 过滤掉一些常见的无关标识
+    if (!['mozilla', 'applewebkit', 'khtml', 'gecko', 'like'].includes(name)) {
+      return name.charAt(0).toUpperCase() + name.slice(1);
+    }
   }
 
   return '-';
@@ -886,9 +1037,6 @@ export const getLogsColumns = ({
       dataIndex: 'other',
       render: (text, record, index) => {
         if (!(record.type === 2 || record.type === 5)) {
-          return <></>;
-        }
-        if (!record.is_stream) {
           return <></>;
         }
         const other = getLogOther(text);

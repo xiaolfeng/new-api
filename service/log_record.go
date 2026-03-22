@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 package service
 
 import (
+	"encoding/json"
 	"strings"
 	"unicode/utf8"
 
@@ -215,6 +216,7 @@ func buildPromptRecordFromGemini(req *dto.GeminiChatRequest) map[string]interfac
 }
 
 // buildPromptRecordFromResponses 从 OpenAI Responses API 格式请求中构建 prompt 记录
+// 只提取最后一个用户消息，避免存储全量上下文
 func buildPromptRecordFromResponses(req *dto.OpenAIResponsesRequest) map[string]interface{} {
 	if req == nil {
 		return nil
@@ -222,31 +224,85 @@ func buildPromptRecordFromResponses(req *dto.OpenAIResponsesRequest) map[string]
 
 	result := make(map[string]interface{})
 
-	// 记录 instructions
-	if len(req.Instructions) > 0 {
-		result["instructions"] = string(req.Instructions)
-	}
-
-	// 记录 input (解析为文本列表)
-	if req.Input != nil {
-		inputs := req.ParseInput()
-		textParts := make([]string, 0, len(inputs))
-		for _, input := range inputs {
-			if input.Text != "" {
-				textParts = append(textParts, input.Text)
-			}
+	// 只提取最后一个用户消息，与其他格式保持一致
+	if text := extractLastUserMessageTextFromResponsesInput(req.Input); text != "" {
+		result["lastUserMessage"] = map[string]interface{}{
+			"role":    "user",
+			"content": text,
 		}
-		if len(textParts) > 0 {
-			result["input"] = strings.Join(textParts, "\n")
-		}
-	}
-
-	// 记录 prompt (如果有)
-	if len(req.Prompt) > 0 {
-		result["prompt"] = string(req.Prompt)
 	}
 
 	return result
+}
+
+// extractLastUserMessageTextFromResponsesInput 从 Responses API input 字段中提取最后一个用户消息的文本
+func extractLastUserMessageTextFromResponsesInput(input json.RawMessage) string {
+	if len(input) == 0 {
+		return ""
+	}
+
+	// input 为字符串时，视为当前用户输入
+	if common.GetJsonType(input) == "string" {
+		var s string
+		_ = common.Unmarshal(input, &s)
+		return strings.TrimSpace(s)
+	}
+
+	if common.GetJsonType(input) != "array" {
+		return ""
+	}
+
+	var items []map[string]interface{}
+	if err := common.Unmarshal(input, &items); err != nil {
+		return ""
+	}
+
+	// 优先：逆序找最后一个 role=user 的消息
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		role := strings.TrimSpace(common.Interface2String(item["role"]))
+		if role != "user" {
+			continue
+		}
+
+		switch content := item["content"].(type) {
+		case string:
+			if s := strings.TrimSpace(content); s != "" {
+				return s
+			}
+		case []interface{}:
+			textParts := make([]string, 0, len(content))
+			for _, p := range content {
+				part, ok := p.(map[string]interface{})
+				if !ok {
+					continue
+				}
+				t := strings.TrimSpace(common.Interface2String(part["type"]))
+				if t != "" && t != "input_text" && t != "text" {
+					continue
+				}
+				if txt := strings.TrimSpace(common.Interface2String(part["text"])); txt != "" {
+					textParts = append(textParts, txt)
+				}
+			}
+			if len(textParts) > 0 {
+				return strings.Join(textParts, "\n")
+			}
+		}
+	}
+
+	// 兜底：兼容无 role 的简化数组 [{type:"input_text",text:"..."}]
+	for i := len(items) - 1; i >= 0; i-- {
+		item := items[i]
+		t := strings.TrimSpace(common.Interface2String(item["type"]))
+		if t == "input_text" || t == "text" {
+			if txt := strings.TrimSpace(common.Interface2String(item["text"])); txt != "" {
+				return txt
+			}
+		}
+	}
+
+	return ""
 }
 
 // filterSensitiveHeaders 过滤敏感请求头
