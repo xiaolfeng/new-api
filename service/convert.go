@@ -628,7 +628,15 @@ func stopReasonOpenAI2Claude(reason string) string {
 func toJSONString(v interface{}) string {
 	b, err := json.Marshal(v)
 	if err != nil {
-		return "{}"
+		// 序列化失败时，尝试返回原始值的字符串表示，避免数据丢失
+		if v == nil {
+			return "null"
+		}
+		if str, ok := v.(string); ok {
+			return str
+		}
+		// 使用 fmt.Sprintf 作为降级方案
+		return fmt.Sprintf("%v", v)
 	}
 	return string(b)
 }
