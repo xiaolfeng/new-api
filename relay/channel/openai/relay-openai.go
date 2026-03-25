@@ -190,6 +190,7 @@ func OaiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Re
 
 	// 提取 completion 文本用于日志记录
 	info.CompletionText = responseTextBuilder.String()
+	info.ResponseBody = strings.Join(streamItems, "\n")
 
 	HandleFinalResponse(c, info, lastStreamData, responseId, createAt, model, systemFingerprint, usage, containStreamUsage)
 
@@ -207,6 +208,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	if common.DebugEnabled {
 		println("upstream response body:", string(responseBody))
 	}
+	info.ResponseBody = string(responseBody)
 	// Unmarshal to simpleResponse
 	if info.ChannelType == constant.ChannelTypeOpenRouter && info.ChannelOtherSettings.IsOpenRouterEnterprise() {
 		// 尝试解析为 openrouter enterprise
@@ -310,6 +312,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		}
 	}
 	info.CompletionText = completionText.String()
+	info.ResponseBody = string(responseBody)
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 

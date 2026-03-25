@@ -198,6 +198,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		relayInfo.RetryIndex = retryParam.GetRetry()
 		// 清空上一次重试的 CompletionText，避免污染本次记录
 		relayInfo.CompletionText = ""
+		relayInfo.ResponseBody = ""
 		channel, channelErr := getChannel(c, relayInfo, retryParam)
 		if channelErr != nil {
 			logger.LogError(c, channelErr.Error())

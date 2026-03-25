@@ -86,8 +86,51 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		record.Headers = filterSensitiveHeaders(relayInfo.RequestHeaders)
 	}
 
+	// 4. Tool invokes (Claude/Anthropic tool_use + tool_result)
+	if relayInfo != nil {
+		record.ToolInvokes = buildToolInvokeRecords(relayInfo)
+	}
+
 	// 如果所有字段都为空，返回空字符串
-	if len(record.Prompt) == 0 && record.Completion == "" && len(record.Headers) == 0 {
+	if len(record.Prompt) == 0 && record.Completion == "" && len(record.Headers) == 0 && len(record.ToolInvokes) == 0 {
+		return ""
+	}
+
+	jsonBytes, err := common.Marshal(record)
+	if err != nil {
+		return ""
+	}
+	return string(jsonBytes)
+}
+
+func BuildFullLogRecord(relayInfo *relaycommon.RelayInfo) string {
+	if !operation_setting.IsRecordConsumeLogDetailEnabled() || relayInfo == nil {
+		return ""
+	}
+
+	record := model.FullLogRecord{}
+	requestHeaders := filterSensitiveHeaders(relayInfo.RequestHeaders)
+	requestBody := buildFullLogRequestBody(relayInfo)
+	responseBody := parseLoggedBody(relayInfo.ResponseBody)
+
+	if requestHeaders != nil || requestBody != nil {
+		record.Request = &model.FullLogRequest{
+			Headers: requestHeaders,
+			Body:    requestBody,
+		}
+	}
+
+	if responseBody != nil {
+		record.Response = &model.FullLogResponse{
+			Body: responseBody,
+		}
+	}
+
+	if meta := buildFullLogMeta(relayInfo); meta != nil {
+		record.Meta = meta
+	}
+
+	if record.Request == nil && record.Response == nil && record.Meta == nil {
 		return ""
 	}
 
@@ -136,6 +179,67 @@ func buildPromptRecordFromOpenAI(req *dto.GeneralOpenAIRequest) map[string]inter
 	}
 
 	return result
+}
+
+func buildFullLogRequestBody(relayInfo *relaycommon.RelayInfo) interface{} {
+	if relayInfo == nil || relayInfo.Request == nil {
+		return nil
+	}
+
+	requestBytes, err := common.Marshal(relayInfo.Request)
+	if err != nil || len(requestBytes) == 0 {
+		return nil
+	}
+	return parseLoggedBody(string(requestBytes))
+}
+
+func buildFullLogMeta(relayInfo *relaycommon.RelayInfo) *model.FullLogMeta {
+	if relayInfo == nil {
+		return nil
+	}
+
+	meta := &model.FullLogMeta{
+		RequestID:          strings.TrimSpace(relayInfo.RequestId),
+		RequestPath:        sanitizeRequestPath(relayInfo.RequestURLPath),
+		IsStream:           relayInfo.IsStream,
+		RelayFormat:        string(relayInfo.RelayFormat),
+		FinalRequestFormat: string(relayInfo.GetFinalRequestRelayFormat()),
+		RetryIndex:         relayInfo.RetryIndex,
+	}
+
+	if meta.RequestID == "" &&
+		meta.RequestPath == "" &&
+		meta.RelayFormat == "" &&
+		meta.FinalRequestFormat == "" &&
+		meta.RetryIndex == 0 &&
+		!meta.IsStream {
+		return nil
+	}
+	return meta
+}
+
+func sanitizeRequestPath(requestURLPath string) string {
+	path := strings.TrimSpace(requestURLPath)
+	if path == "" {
+		return ""
+	}
+	if idx := strings.Index(path, "?"); idx != -1 {
+		return path[:idx]
+	}
+	return path
+}
+
+func parseLoggedBody(body string) interface{} {
+	body = strings.TrimSpace(body)
+	if body == "" {
+		return nil
+	}
+
+	var parsed interface{}
+	if err := common.UnmarshalJsonStr(body, &parsed); err == nil {
+		return parsed
+	}
+	return body
 }
 
 // buildPromptRecordFromClaude 从 Claude 格式请求中构建 prompt 记录
@@ -324,4 +428,166 @@ func filterSensitiveHeaders(headers map[string]string) map[string]string {
 		return nil
 	}
 	return filtered
+}
+
+func buildToolInvokeRecords(relayInfo *relaycommon.RelayInfo) []model.LogToolInvokeRecord {
+	if relayInfo == nil {
+		return nil
+	}
+
+	toolMap := make(map[string]*model.LogToolInvokeRecord)
+	toolOrder := make([]string, 0)
+
+	upsertTool := func(id string) *model.LogToolInvokeRecord {
+		if id == "" {
+			id = "tool-" + common.GetUUID()
+		}
+		if record, ok := toolMap[id]; ok {
+			return record
+		}
+		record := &model.LogToolInvokeRecord{ID: id}
+		toolMap[id] = record
+		toolOrder = append(toolOrder, id)
+		return record
+	}
+
+	for _, invoke := range relayInfo.ToolInvokes {
+		record := upsertTool(strings.TrimSpace(invoke.ID))
+		if record.Name == "" {
+			record.Name = strings.TrimSpace(invoke.Name)
+		}
+		if record.Input == nil && invoke.Input != nil {
+			record.Input = sanitizeToolLogValue(invoke.Input)
+		}
+		if record.Result == nil && invoke.Result != nil {
+			record.Result = sanitizeToolLogValue(invoke.Result)
+		}
+		if record.ResultText == "" && strings.TrimSpace(invoke.ResultText) != "" {
+			record.ResultText = invoke.ResultText
+		}
+		if record.IsError == nil && invoke.IsError != nil {
+			record.IsError = invoke.IsError
+		}
+		if record.StopReason == "" {
+			record.StopReason = strings.TrimSpace(invoke.StopReason)
+		}
+		if record.ResponseRole == "" {
+			record.ResponseRole = strings.TrimSpace(invoke.ResponseRole)
+		}
+	}
+
+	if claudeReq, ok := relayInfo.Request.(*dto.ClaudeRequest); ok && claudeReq != nil {
+		for _, invoke := range extractClaudeToolResults(claudeReq) {
+			record := upsertTool(invoke.ID)
+			if record.Name == "" {
+				record.Name = invoke.Name
+			}
+			if record.Result == nil && invoke.Result != nil {
+				record.Result = invoke.Result
+			}
+			if record.ResultText == "" {
+				record.ResultText = invoke.ResultText
+			}
+			if record.IsError == nil {
+				record.IsError = invoke.IsError
+			}
+		}
+	}
+
+	if len(toolOrder) == 0 {
+		return nil
+	}
+
+	result := make([]model.LogToolInvokeRecord, 0, len(toolOrder))
+	for _, id := range toolOrder {
+		if record, ok := toolMap[id]; ok {
+			result = append(result, *record)
+		}
+	}
+	return result
+}
+
+func extractClaudeToolResults(req *dto.ClaudeRequest) []model.LogToolInvokeRecord {
+	if req == nil || len(req.Messages) == 0 {
+		return nil
+	}
+
+	results := make([]model.LogToolInvokeRecord, 0)
+	for _, message := range req.Messages {
+		contents, err := message.ParseContent()
+		if err != nil || len(contents) == 0 {
+			continue
+		}
+		for _, content := range contents {
+			if content.Type != "tool_result" || strings.TrimSpace(content.ToolUseId) == "" {
+				continue
+			}
+			results = append(results, model.LogToolInvokeRecord{
+				ID:         strings.TrimSpace(content.ToolUseId),
+				Name:       strings.TrimSpace(content.Name),
+				Result:     sanitizeToolLogValue(content.Content),
+				ResultText: extractClaudeToolResultText(content.Content),
+				IsError:    content.IsError,
+			})
+		}
+	}
+	return results
+}
+
+func extractClaudeToolResultText(content any) string {
+	switch value := content.(type) {
+	case string:
+		return value
+	case []any:
+		textParts := make([]string, 0, len(value))
+		for _, item := range value {
+			itemMap, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			itemType := strings.TrimSpace(common.Interface2String(itemMap["type"]))
+			if itemType != "" && itemType != "text" {
+				continue
+			}
+			text := strings.TrimSpace(common.Interface2String(itemMap["text"]))
+			if text != "" {
+				textParts = append(textParts, text)
+			}
+		}
+		return strings.Join(textParts, "\n")
+	default:
+		jsonBytes, err := common.Marshal(value)
+		if err != nil {
+			return ""
+		}
+		return string(jsonBytes)
+	}
+}
+
+func sanitizeToolLogValue(value any) any {
+	if value == nil {
+		return nil
+	}
+	switch typed := value.(type) {
+	case json.RawMessage:
+		if len(typed) == 0 {
+			return nil
+		}
+		var decoded any
+		if err := common.Unmarshal(typed, &decoded); err == nil {
+			return decoded
+		}
+		return string(typed)
+	case []byte:
+		if len(typed) == 0 {
+			return nil
+		}
+		var decoded any
+		if err := common.Unmarshal(typed, &decoded); err == nil {
+			return decoded
+		}
+		return string(typed)
+	default:
+		return typed
+	}
 }

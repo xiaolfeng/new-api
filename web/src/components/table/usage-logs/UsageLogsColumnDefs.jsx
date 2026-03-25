@@ -586,9 +586,9 @@ function parseInteractionType(record) {
 
   try {
     const recordData = typeof record === 'string' ? JSON.parse(record) : record;
-    const headers = recordData?.headers || {};
-    const prompt = recordData?.prompt || {};
-    const completion = recordData?.completion || '';
+    const headers = recordData?.request?.headers || recordData?.headers || {};
+    const prompt = recordData?.request?.body || recordData?.prompt || {};
+    const completion = recordData?.response?.body || recordData?.completion || '';
 
     // 检查 User-Agent 是否为 Codex
     const userAgent = Object.keys(headers).find(
@@ -603,8 +603,16 @@ function parseInteractionType(record) {
 
     // 获取最后一个用户消息的内容
     const lastUserMessage = prompt?.lastUserMessage || {};
-    const hasContent = lastUserMessage.content && lastUserMessage.content.trim() !== '';
-    const hasCompletion = completion && completion.trim() !== '';
+    const hasContent =
+      (typeof prompt === 'string' && prompt.trim() !== '') ||
+      (lastUserMessage.content && lastUserMessage.content.trim() !== '') ||
+      (typeof prompt === 'object' && !Array.isArray(prompt) && Object.keys(prompt).length > 0) ||
+      (Array.isArray(prompt) && prompt.length > 0);
+    const hasCompletion =
+      (typeof completion === 'string' && completion.trim() !== '') ||
+      (typeof completion === 'object' && completion !== null &&
+        ((Array.isArray(completion) && completion.length > 0) ||
+          (!Array.isArray(completion) && Object.keys(completion).length > 0)));
 
     // 判断逻辑：
     // 1. 有请求内容 → "输入"（不管是否有响应）
@@ -970,12 +978,13 @@ export const getLogsColumns = ({
         }
 
         try {
-          const recordData = record.record
-            ? typeof record.record === 'string'
-              ? JSON.parse(record.record)
-              : record.record
+          const detailData = record.record;
+          const recordData = detailData
+            ? typeof detailData === 'string'
+              ? JSON.parse(detailData)
+              : detailData
             : null;
-          const headers = recordData?.headers || {};
+          const headers = recordData?.request?.headers || recordData?.headers || {};
 
           // 查找 User-Agent（不区分大小写）
           const uaKey = Object.keys(headers).find(

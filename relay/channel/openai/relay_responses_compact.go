@@ -20,6 +20,7 @@ func OaiResponsesCompactionHandler(c *gin.Context, info *relaycommon.RelayInfo, 
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
+	info.ResponseBody = string(responseBody)
 
 	var compactResp dto.OpenAIResponsesCompactionResponse
 	if err := common.Unmarshal(responseBody, &compactResp); err != nil {

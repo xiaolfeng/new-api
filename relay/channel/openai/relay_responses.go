@@ -26,6 +26,7 @@ func OaiResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeReadResponseBodyFailed, http.StatusInternalServerError)
 	}
+	info.ResponseBody = string(responseBody)
 	err = common.Unmarshal(responseBody, &responsesResponse)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
@@ -84,8 +85,12 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	var usage = &dto.Usage{}
 	var responseTextBuilder strings.Builder
+	var streamItems []string
 
 	helper.StreamScannerHandler(c, resp, info, func(data string) bool {
+		if data != "" {
+			streamItems = append(streamItems, data)
+		}
 
 		// 检查当前数据是否包含 completed 状态和 usage 信息
 		var streamResponse dto.ResponsesStreamResponse
@@ -154,6 +159,7 @@ func OaiResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	// 提取响应文本用于日志记录
 	info.CompletionText = responseTextBuilder.String()
+	info.ResponseBody = strings.Join(streamItems, "\n")
 
 	return usage, nil
 }

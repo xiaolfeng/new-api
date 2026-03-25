@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -63,14 +64,22 @@ func buildCompletionRatioMetaValue(optionValues map[string]string) string {
 func GetOptions(c *gin.Context) {
 	var options []*model.Option
 	optionValues := make(map[string]string)
+	recordLogEnabledRaw := false
 	common.OptionMapRWMutex.Lock()
 	for k, v := range common.OptionMap {
 		value := common.Interface2String(v)
+		if k == "retry_setting.record_consume_log_detail_enabled" {
+			recordLogEnabledRaw = value == "true"
+		}
 		if strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
 			strings.HasSuffix(k, "Key") ||
 			strings.HasSuffix(k, "secret") ||
 			strings.HasSuffix(k, "api_key") {
+			continue
+		}
+		if k == "retry_setting.record_consume_log_detail_enabled" ||
+			k == "retry_setting.record_consume_log_detail_expires_at" {
 			continue
 		}
 		options = append(options, &model.Option{
@@ -85,6 +94,25 @@ func GetOptions(c *gin.Context) {
 		}
 	}
 	common.OptionMapRWMutex.Unlock()
+	recordLogEnabled := operation_setting.IsRecordConsumeLogDetailEnabled()
+	recordLogExpiresAt := operation_setting.GetRecordConsumeLogDetailExpiresAt()
+	recordLogRemaining := operation_setting.GetRecordConsumeLogDetailRemainingSeconds()
+	if !recordLogEnabledRaw {
+		recordLogExpiresAt = 0
+		recordLogRemaining = 0
+	}
+	options = append(options, &model.Option{
+		Key:   "retry_setting.record_consume_log_detail_enabled",
+		Value: common.Interface2String(recordLogEnabled),
+	})
+	options = append(options, &model.Option{
+		Key:   "retry_setting.record_consume_log_detail_expires_at",
+		Value: common.Interface2String(recordLogExpiresAt),
+	})
+	options = append(options, &model.Option{
+		Key:   "retry_setting.record_consume_log_detail_remaining_seconds",
+		Value: common.Interface2String(recordLogRemaining),
+	})
 	options = append(options, &model.Option{
 		Key:   "CompletionRatioMeta",
 		Value: buildCompletionRatioMetaValue(optionValues),
@@ -121,6 +149,33 @@ func UpdateOption(c *gin.Context) {
 		option.Value = common.Interface2String(option.Value.(int))
 	default:
 		option.Value = fmt.Sprintf("%v", option.Value)
+	}
+	if option.Key == "retry_setting.record_consume_log_detail_enabled" {
+		enabled := option.Value == "true"
+		if err = model.UpdateOption(option.Key, common.Interface2String(enabled)); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		expiresAt := int64(0)
+		if enabled {
+			expiresAt = common.GetTimestamp() + operation_setting.GetRecordConsumeLogDetailDurationSeconds()
+		}
+		if err = model.UpdateOption("retry_setting.record_consume_log_detail_expires_at", strconv.FormatInt(expiresAt, 10)); err != nil {
+			common.ApiError(c, err)
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"message": "",
+		})
+		return
+	}
+	if option.Key == "retry_setting.record_consume_log_detail_expires_at" {
+		c.JSON(http.StatusOK, gin.H{
+			"success": false,
+			"message": "日志详细记录过期时间仅允许由系统自动管理",
+		})
+		return
 	}
 	switch option.Key {
 	case "GitHubOAuthEnabled":

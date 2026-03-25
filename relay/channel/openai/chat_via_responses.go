@@ -92,6 +92,7 @@ func OaiResponsesToChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 
 	// 提取响应文本用于日志记录
 	info.CompletionText = text
+	info.ResponseBody = string(responseBody)
 
 	return usage, nil
 }
@@ -111,6 +112,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 		usage       = &dto.Usage{}
 		outputText  strings.Builder
 		usageText   strings.Builder
+		streamItems []string
 		sentStart   bool
 		sentStop    bool
 		sawToolCall bool
@@ -305,6 +307,9 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 	helper.StreamScannerHandler(c, resp, info, func(data string) bool {
 		if streamErr != nil {
 			return false
+		}
+		if data != "" {
+			streamItems = append(streamItems, data)
 		}
 
 		var streamResp dto.ResponsesStreamResponse
@@ -544,6 +549,7 @@ func OaiResponsesToChatStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 
 	// 提取响应文本用于日志记录
 	info.CompletionText = outputText.String()
+	info.ResponseBody = strings.Join(streamItems, "\n")
 
 	return usage, nil
 }

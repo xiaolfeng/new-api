@@ -196,9 +196,11 @@ export const useLogsData = () => {
   // Log detail modal state (admin only)
   const [showLogDetailModal, setShowLogDetailModal] = useState(false);
   const [logDetailTarget, setLogDetailTarget] = useState(null);
+  const [logDetailMode, setLogDetailMode] = useState('record');
 
-  const openLogDetailModal = (log) => {
+  const openLogDetailModal = (log, mode = 'record') => {
     setLogDetailTarget(log);
+    setLogDetailMode(mode);
     setShowLogDetailModal(true);
   };
 
@@ -487,7 +489,23 @@ export const useLogsData = () => {
                 size='small'
                 onClick={(e) => {
                   e.stopPropagation();
-                  openLogDetailModal(logs[i]);
+                  openLogDetailModal(logs[i], 'record');
+                }}
+              >
+                {t('查看详情')}
+              </Button>
+            ),
+          });
+        }
+        if (isAdminUser && logs[i].full_log) {
+          expandDataLocal.push({
+            key: t('完整日志'),
+            value: (
+              <Button
+                size='small'
+                onClick={(e) => {
+                  e.stopPropagation();
+                  openLogDetailModal(logs[i], 'full_log');
                 }}
               >
                 {t('查看详情')}
@@ -912,6 +930,7 @@ export const useLogsData = () => {
     showLogDetailModal,
     setShowLogDetailModal,
     logDetailTarget,
+    logDetailMode,
     openLogDetailModal,
 
     // Functions

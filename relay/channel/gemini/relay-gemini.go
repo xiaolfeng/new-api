@@ -1296,8 +1296,12 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	var usage = &dto.Usage{}
 	var imageCount int
 	responseText := strings.Builder{}
+	var streamItems []string
 
 	helper.StreamScannerHandler(c, resp, info, func(data string) bool {
+		if data != "" {
+			streamItems = append(streamItems, data)
+		}
 		var geminiResponse dto.GeminiChatResponse
 		err := common.UnmarshalJsonStr(data, &geminiResponse)
 		if err != nil {
@@ -1346,6 +1350,7 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 
 	// 提取 completion 文本用于日志记录
 	info.CompletionText = responseText.String()
+	info.ResponseBody = strings.Join(streamItems, "\n")
 
 	return usage, nil
 }
@@ -1454,6 +1459,7 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}
+	info.ResponseBody = string(responseBody)
 	if len(geminiResponse.Candidates) == 0 {
 		usage := buildUsageFromGeminiMetadata(geminiResponse.UsageMetadata, info.GetEstimatePromptTokens())
 
@@ -1524,6 +1530,7 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 		}
 	}
 	info.CompletionText = completionText.String()
+	info.ResponseBody = string(responseBody)
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 

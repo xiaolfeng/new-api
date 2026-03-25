@@ -20,9 +20,45 @@ package model
 
 // LogDetailRecord 消费日志详细记录结构
 type LogDetailRecord struct {
-	Prompt     map[string]interface{} `json:"prompt,omitempty"`
-	Completion string                 `json:"completion,omitempty"`
-	Headers    map[string]string      `json:"headers,omitempty"`
+	Prompt      map[string]interface{} `json:"prompt,omitempty"`
+	Completion  string                 `json:"completion,omitempty"`
+	Headers     map[string]string      `json:"headers,omitempty"`
+	ToolInvokes []LogToolInvokeRecord  `json:"toolInvokes,omitempty"`
+}
+
+type LogToolInvokeRecord struct {
+	ID           string      `json:"id,omitempty"`
+	Name         string      `json:"name,omitempty"`
+	Input        interface{} `json:"input,omitempty"`
+	Result       interface{} `json:"result,omitempty"`
+	ResultText   string      `json:"resultText,omitempty"`
+	IsError      *bool       `json:"isError,omitempty"`
+	StopReason   string      `json:"stopReason,omitempty"`
+	ResponseRole string      `json:"responseRole,omitempty"`
+}
+
+type FullLogRecord struct {
+	Request  *FullLogRequest  `json:"request,omitempty"`
+	Response *FullLogResponse `json:"response,omitempty"`
+	Meta     *FullLogMeta     `json:"meta,omitempty"`
+}
+
+type FullLogRequest struct {
+	Headers map[string]string `json:"headers,omitempty"`
+	Body    interface{}       `json:"body,omitempty"`
+}
+
+type FullLogResponse struct {
+	Body interface{} `json:"body,omitempty"`
+}
+
+type FullLogMeta struct {
+	RequestID          string `json:"requestId,omitempty"`
+	RequestPath        string `json:"requestPath,omitempty"`
+	IsStream           bool   `json:"isStream,omitempty"`
+	RelayFormat        string `json:"relayFormat,omitempty"`
+	FinalRequestFormat string `json:"finalRequestFormat,omitempty"`
+	RetryIndex         int    `json:"retryIndex,omitempty"`
 }
 
 // SensitiveHeaders 敏感请求头列表（这些头信息不会被记录）

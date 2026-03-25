@@ -53,6 +53,17 @@ type BuildInToolInfo struct {
 	SearchContextSize string
 }
 
+type ToolInvokeInfo struct {
+	ID           string
+	Name         string
+	Input        any
+	Result       any
+	ResultText   string
+	IsError      *bool
+	StopReason   string
+	ResponseRole string
+}
+
 type ResponsesUsageInfo struct {
 	BuiltInTools map[string]*BuildInToolInfo
 }
@@ -172,6 +183,10 @@ type RelayInfo struct {
 
 	// CompletionText 存储 AI 响应内容，用于日志详细记录
 	CompletionText string
+	// ResponseBody 存储完整响应内容，用于完整日志记录
+	ResponseBody string
+	// ToolInvokes 存储 Claude/Anthropic 工具调用信息，用于日志详细记录
+	ToolInvokes []ToolInvokeInfo
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {

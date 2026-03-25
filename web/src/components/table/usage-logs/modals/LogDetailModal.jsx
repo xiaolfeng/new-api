@@ -36,16 +36,28 @@ const LogDetailModal = ({
   showLogDetailModal,
   setShowLogDetailModal,
   logDetailTarget,
+  logDetailMode,
   t,
 }) => {
-  const record = useMemo(() => {
-    if (!logDetailTarget?.record) return null;
+  const parseJson = (value) => {
+    if (!value) return null;
     try {
-      return JSON.parse(logDetailTarget.record);
+      return JSON.parse(value);
     } catch {
       return null;
     }
-  }, [logDetailTarget]);
+  };
+
+  const legacyRecord = useMemo(
+    () => parseJson(logDetailTarget?.record),
+    [logDetailTarget?.record],
+  );
+  const fullLogRecord = useMemo(
+    () => parseJson(logDetailTarget?.full_log),
+    [logDetailTarget?.full_log],
+  );
+  const isFullLogRecord = logDetailMode === 'full_log';
+  const record = isFullLogRecord ? fullLogRecord : legacyRecord;
 
   const copySection = async (section, content) => {
     const text = typeof content === 'object' ? JSON.stringify(content, null, 2) : String(content);
@@ -56,8 +68,46 @@ const LogDetailModal = ({
     }
   };
 
+  const renderContentBlock = (content) => {
+    if (content === null || content === undefined || content === '') {
+      return null;
+    }
+
+    if (typeof content === 'string') {
+      return (
+        <div
+          style={{
+            background: 'var(--semi-color-fill-0)',
+            padding: 12,
+            borderRadius: 8,
+            maxHeight: 400,
+            overflow: 'auto',
+          }}
+        >
+          <MarkdownSourceHighlighter content={content} fontSize={13} />
+        </div>
+      );
+    }
+
+    return (
+      <pre
+        style={{
+          background: 'var(--semi-color-fill-0)',
+          padding: 12,
+          borderRadius: 8,
+          overflow: 'auto',
+          maxHeight: 400,
+          fontSize: 12,
+          margin: 0,
+        }}
+      >
+        {JSON.stringify(content, null, 2)}
+      </pre>
+    );
+  };
+
   const renderHeaders = () => {
-    const headers = record?.headers || {};
+    const headers = record?.request?.headers || record?.headers || {};
     const entries = Object.entries(headers);
     if (entries.length === 0) {
       return <Empty description={t('无请求头记录')} style={{ padding: '20px 0' }} />;
@@ -122,6 +172,29 @@ const LogDetailModal = ({
   };
 
   const renderPrompt = () => {
+    if (isFullLogRecord) {
+      const prompt = record?.request?.body;
+      if (prompt === null || prompt === undefined || prompt === '') {
+        return <Empty description={t('无请求内容记录')} style={{ padding: '20px 0' }} />;
+      }
+
+      return (
+        <div style={{ padding: '8px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <Button
+              icon={<IconCopy />}
+              size='small'
+              theme='borderless'
+              onClick={() => copySection(t('请求内容'), prompt)}
+            >
+              {t('复制')}
+            </Button>
+          </div>
+          {renderContentBlock(prompt)}
+        </div>
+      );
+    }
+
     const prompt = record?.prompt || {};
     const lastUserMessage = prompt?.lastUserMessage;
     const input = prompt?.input;
@@ -160,31 +233,7 @@ const LogDetailModal = ({
             {t('复制')}
           </Button>
         </div>
-        {displayContent ? (
-          <div
-            style={{
-              background: 'var(--semi-color-fill-0)',
-              padding: 12,
-              borderRadius: 8,
-              maxHeight: 400,
-              overflow: 'auto',
-            }}
-          >
-            <MarkdownSourceHighlighter content={displayContent} fontSize={13} />
-          </div>
-        ) : (
-          <pre style={{
-            background: 'var(--semi-color-fill-0)',
-            padding: 12,
-            borderRadius: 8,
-            overflow: 'auto',
-            maxHeight: 400,
-            fontSize: 12,
-            margin: 0,
-          }}>
-            {JSON.stringify(prompt, null, 2)}
-          </pre>
-        )}
+        {displayContent ? renderContentBlock(displayContent) : renderContentBlock(prompt)}
         {instructions && (
           <div style={{ marginTop: 12 }}>
             <Text type='tertiary' size='small'>{t('指令')}:</Text>
@@ -206,16 +255,25 @@ const LogDetailModal = ({
   };
 
   const renderCompletion = () => {
-    const completion = record?.completion || '';
-    if (!completion) {
+    const completion = record?.response?.body ?? record?.completion ?? '';
+    const isEmptyObject =
+      typeof completion === 'object' &&
+      completion !== null &&
+      !Array.isArray(completion) &&
+      Object.keys(completion).length === 0;
+    if (completion === '' || completion === null || completion === undefined || isEmptyObject) {
       return <Empty description={t('无响应内容记录')} style={{ padding: '20px 0' }} />;
     }
     return (
       <div style={{ padding: '8px 0' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-          <Text type='tertiary' size='small'>
-            {t('长度')}: {completion.length} {t('字符')}
-          </Text>
+          {typeof completion === 'string' ? (
+            <Text type='tertiary' size='small'>
+              {t('长度')}: {completion.length} {t('字符')}
+            </Text>
+          ) : (
+            <span />
+          )}
           <Button
             icon={<IconCopy />}
             size='small'
@@ -225,17 +283,114 @@ const LogDetailModal = ({
             {t('复制')}
           </Button>
         </div>
-        <div
-          style={{
-            background: 'var(--semi-color-fill-0)',
-            padding: 12,
-            borderRadius: 8,
-            maxHeight: 400,
-            overflow: 'auto',
-          }}
-        >
-          <MarkdownSourceHighlighter content={completion} fontSize={13} />
+        {renderContentBlock(completion)}
+      </div>
+    );
+  };
+
+  const renderMeta = () => {
+    const meta = record?.meta || {};
+    if (!isFullLogRecord || Object.keys(meta).length === 0) {
+      return <Empty description={t('无元信息记录')} style={{ padding: '20px 0' }} />;
+    }
+
+    return (
+      <div style={{ padding: '8px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <Button
+            icon={<IconCopy />}
+            size='small'
+            theme='borderless'
+            onClick={() => copySection(t('元信息'), meta)}
+          >
+            {t('复制')}
+          </Button>
         </div>
+        {renderContentBlock(meta)}
+      </div>
+    );
+  };
+
+  const renderToolInvokes = () => {
+    const toolInvokes = Array.isArray(record?.toolInvokes) ? record.toolInvokes : [];
+    if (toolInvokes.length === 0) {
+      return <Empty description={t('无工具调用记录')} style={{ padding: '20px 0' }} />;
+    }
+
+    const columns = [
+      {
+        title: t('工具'),
+        dataIndex: 'name',
+        key: 'name',
+        width: 180,
+        render: (text, row) => <Text strong>{text || row.id || '-'}</Text>,
+      },
+      {
+        title: t('参数'),
+        dataIndex: 'input',
+        key: 'input',
+        render: (value) => (
+          <pre style={{
+            margin: 0,
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            fontSize: 12,
+          }}>
+            {value == null ? '-' : JSON.stringify(value, null, 2)}
+          </pre>
+        ),
+      },
+      {
+        title: t('结果'),
+        dataIndex: 'resultDisplay',
+        key: 'resultDisplay',
+        render: (value, row) => (
+          <div>
+            <pre style={{
+              margin: 0,
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+              fontSize: 12,
+            }}>
+              {value || '-'}
+            </pre>
+            {typeof row.isError === 'boolean' && (
+              <Text type={row.isError ? 'danger' : 'success'} size='small'>
+                {row.isError ? t('工具执行失败') : t('工具执行成功')}
+              </Text>
+            )}
+          </div>
+        ),
+      },
+    ];
+
+    const dataSource = toolInvokes.map((item, index) => ({
+      ...item,
+      rowKey: item.id || `${item.name || 'tool'}-${index}`,
+      resultDisplay: item.resultText || (item.result == null ? '' : JSON.stringify(item.result, null, 2)),
+    }));
+
+    return (
+      <div style={{ padding: '8px 0' }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          <Button
+            icon={<IconCopy />}
+            size='small'
+            theme='borderless'
+            onClick={() => copySection(t('工具调用'), toolInvokes)}
+          >
+            {t('复制')}
+          </Button>
+        </div>
+        <Table
+          columns={columns}
+          dataSource={dataSource}
+          pagination={false}
+          size='small'
+          bordered
+          rowKey='rowKey'
+          style={{ fontSize: 12 }}
+        />
       </div>
     );
   };
@@ -247,14 +402,24 @@ const LogDetailModal = ({
       key: 'headers',
     },
     {
-      header: t('请求内容'),
+      header: isFullLogRecord ? t('完整请求') : t('请求内容'),
       content: renderPrompt(),
       key: 'prompt',
     },
     {
-      header: t('响应内容'),
+      header: isFullLogRecord ? t('完整响应') : t('响应内容'),
       content: renderCompletion(),
       key: 'completion',
+    },
+    {
+      header: t('工具调用'),
+      content: renderToolInvokes(),
+      key: 'toolInvokes',
+    },
+    {
+      header: t('元信息'),
+      content: renderMeta(),
+      key: 'meta',
     },
   ];
 

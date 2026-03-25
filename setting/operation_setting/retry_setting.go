@@ -19,7 +19,13 @@ For commercial licensing, please contact support@quantumnous.com
 
 package operation_setting
 
-import "github.com/QuantumNous/new-api/setting/config"
+import (
+	"time"
+
+	"github.com/QuantumNous/new-api/setting/config"
+)
+
+const recordConsumeLogDetailDurationSeconds = 5 * 60
 
 // RetrySetting 空响应重试设置
 type RetrySetting struct {
@@ -32,13 +38,16 @@ type RetrySetting struct {
 	// RecordConsumeLogDetailEnabled 启用消费日志详细记录
 	// 记录消费日志的请求内容、响应内容和 HTTP 头（排除敏感信息）
 	RecordConsumeLogDetailEnabled bool `json:"record_consume_log_detail_enabled"`
+	// RecordConsumeLogDetailExpiresAt 消费日志详细记录过期时间（Unix 秒）
+	RecordConsumeLogDetailExpiresAt int64 `json:"record_consume_log_detail_expires_at"`
 }
 
 // 默认配置
 var retrySetting = RetrySetting{
-	EmptyResponseRetryEnabled:      false,
-	EmptyResponseRetryDelaySeconds: 0,
-	RecordConsumeLogDetailEnabled:  false,
+	EmptyResponseRetryEnabled:       false,
+	EmptyResponseRetryDelaySeconds:  0,
+	RecordConsumeLogDetailEnabled:   false,
+	RecordConsumeLogDetailExpiresAt: 0,
 }
 
 func init() {
@@ -63,5 +72,34 @@ func GetEmptyResponseRetryDelaySeconds() int {
 
 // IsRecordConsumeLogDetailEnabled 是否启用消费日志详细记录
 func IsRecordConsumeLogDetailEnabled() bool {
-	return retrySetting.RecordConsumeLogDetailEnabled
+	if !retrySetting.RecordConsumeLogDetailEnabled {
+		return false
+	}
+	if retrySetting.RecordConsumeLogDetailExpiresAt <= 0 {
+		return false
+	}
+	return retrySetting.RecordConsumeLogDetailExpiresAt > time.Now().Unix()
+}
+
+func GetRecordConsumeLogDetailExpiresAt() int64 {
+	if !IsRecordConsumeLogDetailEnabled() {
+		return 0
+	}
+	return retrySetting.RecordConsumeLogDetailExpiresAt
+}
+
+func GetRecordConsumeLogDetailRemainingSeconds() int64 {
+	expiresAt := GetRecordConsumeLogDetailExpiresAt()
+	if expiresAt <= 0 {
+		return 0
+	}
+	remaining := expiresAt - time.Now().Unix()
+	if remaining < 0 {
+		return 0
+	}
+	return remaining
+}
+
+func GetRecordConsumeLogDetailDurationSeconds() int64 {
+	return recordConsumeLogDetailDurationSeconds
 }

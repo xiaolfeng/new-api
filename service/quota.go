@@ -228,6 +228,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 	}
 	// 构建 Record 字段
 	record := BuildLogRecord(relayInfo)
+	fullLog := BuildFullLogRecord(relayInfo)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.InputTokens,
@@ -242,6 +243,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 		Record:           record,
+		FullLog:          fullLog,
 		Tps:              tpsValue,
 	})
 }
@@ -344,6 +346,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 	}
 	// 构建 Record 字段
 	record := BuildLogRecord(relayInfo)
+	fullLog := BuildFullLogRecord(relayInfo)
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
 		PromptTokens:     usage.PromptTokens,
@@ -358,6 +361,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 		Record:           record,
+		FullLog:          fullLog,
 		Tps:              tpsValue,
 	})
 }

@@ -38,6 +38,7 @@ type Log struct {
 	RequestId        string  `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
 	Other            string  `json:"other"`
 	Record           string  `json:"record" gorm:"type:text"`                 // 消费日志详细记录（仅管理员可见）
+	FullLog          string  `json:"full_log" gorm:"type:text"`               // 完整消费日志记录（仅管理员可见）
 	Tps              float64 `json:"tps" gorm:"type:decimal(10,2);default:0"` // Tokens Per Second
 }
 
@@ -158,7 +159,8 @@ type RecordConsumeLogParams struct {
 	Group            string                 `json:"group"`
 	Other            map[string]interface{} `json:"other"`
 	Record           string                 `json:"record"` // 消费日志详细记录
-	Tps              float64                `json:"tps"`    // Tokens Per Second
+	FullLog          string                 `json:"full_log"`
+	Tps              float64                `json:"tps"` // Tokens Per Second
 }
 
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
@@ -196,6 +198,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		RequestId: requestId,
 		Other:     otherStr,
 		Record:    params.Record,
+		FullLog:   params.FullLog,
 		Tps:       params.Tps,
 	}
 	err := LOG_DB.Create(log).Error

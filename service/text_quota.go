@@ -430,6 +430,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	// 构建 Record 字段
 	record := BuildLogRecord(relayInfo)
+	fullLog := BuildFullLogRecord(relayInfo)
 
 	model.RecordConsumeLog(ctx, relayInfo.UserId, model.RecordConsumeLogParams{
 		ChannelId:        relayInfo.ChannelId,
@@ -445,6 +446,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Group:            relayInfo.UsingGroup,
 		Other:            other,
 		Record:           record,
+		FullLog:          fullLog,
 		Tps:              tpsValue,
 	})
 }

@@ -548,12 +548,121 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 }
 
 type ClaudeResponseInfo struct {
-	ResponseId   string
-	Created      int64
-	Model        string
-	ResponseText strings.Builder
-	Usage        *dto.Usage
-	Done         bool
+	ResponseId    string
+	Created       int64
+	Model         string
+	ResponseText  strings.Builder
+	Usage         *dto.Usage
+	Done          bool
+	ToolInvokeIDs map[int]string
+	ToolInputs    map[int]*strings.Builder
+}
+
+func appendClaudeToolInvokes(info *relaycommon.RelayInfo, stopReason string, messages []dto.ClaudeMediaMessage) {
+	if info == nil || len(messages) == 0 {
+		return
+	}
+
+	for _, message := range messages {
+		if message.Type != "tool_use" {
+			continue
+		}
+		upsertClaudeToolInvoke(info, relaycommon.ToolInvokeInfo{
+			ID:           strings.TrimSpace(message.Id),
+			Name:         strings.TrimSpace(message.Name),
+			Input:        message.Input,
+			StopReason:   strings.TrimSpace(stopReason),
+			ResponseRole: "assistant",
+		})
+	}
+}
+
+func upsertClaudeToolInvoke(info *relaycommon.RelayInfo, invoke relaycommon.ToolInvokeInfo) {
+	if info == nil || strings.TrimSpace(invoke.ID) == "" {
+		return
+	}
+	invoke.ID = strings.TrimSpace(invoke.ID)
+	invoke.Name = strings.TrimSpace(invoke.Name)
+	invoke.StopReason = strings.TrimSpace(invoke.StopReason)
+	invoke.ResponseRole = strings.TrimSpace(invoke.ResponseRole)
+	for index := range info.ToolInvokes {
+		if strings.TrimSpace(info.ToolInvokes[index].ID) != invoke.ID {
+			continue
+		}
+		if info.ToolInvokes[index].Name == "" {
+			info.ToolInvokes[index].Name = invoke.Name
+		}
+		if info.ToolInvokes[index].Input == nil && invoke.Input != nil {
+			info.ToolInvokes[index].Input = invoke.Input
+		}
+		if info.ToolInvokes[index].StopReason == "" {
+			info.ToolInvokes[index].StopReason = invoke.StopReason
+		}
+		if info.ToolInvokes[index].ResponseRole == "" {
+			info.ToolInvokes[index].ResponseRole = invoke.ResponseRole
+		}
+		return
+	}
+	info.ToolInvokes = append(info.ToolInvokes, invoke)
+}
+
+func appendClaudeToolInvokeFromContentBlock(info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo, stopReason string, contentBlock *dto.ClaudeMediaMessage, index *int) {
+	if info == nil || contentBlock == nil || contentBlock.Type != "tool_use" {
+		return
+	}
+	if claudeInfo != nil && index != nil {
+		if claudeInfo.ToolInvokeIDs == nil {
+			claudeInfo.ToolInvokeIDs = make(map[int]string)
+		}
+		claudeInfo.ToolInvokeIDs[*index] = strings.TrimSpace(contentBlock.Id)
+	}
+	upsertClaudeToolInvoke(info, relaycommon.ToolInvokeInfo{
+		ID:           contentBlock.Id,
+		Name:         contentBlock.Name,
+		Input:        contentBlock.Input,
+		StopReason:   stopReason,
+		ResponseRole: "assistant",
+	})
+}
+
+func appendClaudeToolInputDelta(info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo, index *int, partialJSON *string) {
+	if info == nil || claudeInfo == nil || index == nil || partialJSON == nil || *partialJSON == "" {
+		return
+	}
+	if claudeInfo.ToolInputs == nil {
+		claudeInfo.ToolInputs = make(map[int]*strings.Builder)
+	}
+	builder, ok := claudeInfo.ToolInputs[*index]
+	if !ok {
+		builder = &strings.Builder{}
+		claudeInfo.ToolInputs[*index] = builder
+	}
+	builder.WriteString(*partialJSON)
+}
+
+func finalizeClaudeStreamToolInputs(info *relaycommon.RelayInfo, claudeInfo *ClaudeResponseInfo) {
+	if info == nil || claudeInfo == nil || len(claudeInfo.ToolInputs) == 0 {
+		return
+	}
+	for index, builder := range claudeInfo.ToolInputs {
+		if builder == nil || builder.Len() == 0 {
+			continue
+		}
+		toolID := strings.TrimSpace(claudeInfo.ToolInvokeIDs[index])
+		if toolID == "" {
+			continue
+		}
+		var inputObj any
+		raw := builder.String()
+		if err := common.UnmarshalJsonStr(raw, &inputObj); err != nil {
+			inputObj = map[string]any{"_raw": raw}
+		}
+		upsertClaudeToolInvoke(info, relaycommon.ToolInvokeInfo{
+			ID:           toolID,
+			Input:        inputObj,
+			ResponseRole: "assistant",
+		})
+	}
 }
 
 func cacheCreationTokensForOpenAIUsage(usage *dto.Usage) int {
@@ -753,19 +862,36 @@ func HandleStreamResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 			if claudeResponse.Message != nil {
 				info.UpstreamModelName = claudeResponse.Message.Model
 			}
+		} else if claudeResponse.Type == "content_block_start" {
+			appendClaudeToolInvokeFromContentBlock(info, claudeInfo, "", claudeResponse.ContentBlock, claudeResponse.Index)
+		} else if claudeResponse.Type == "content_block_delta" {
+			if claudeResponse.Delta != nil && claudeResponse.Delta.Type == "input_json_delta" {
+				appendClaudeToolInputDelta(info, claudeInfo, claudeResponse.Index, claudeResponse.Delta.PartialJson)
+			}
 		} else if claudeResponse.Type == "message_delta" {
 			// 确保 message_delta 的 usage 包含完整的 input_tokens 和 cache 相关字段
 			// 解决 AWS Bedrock 等上游返回的 message_delta 缺少这些字段的问题
 			if !shouldSkipClaudeMessageDeltaUsagePatch(info) {
 				data = patchClaudeMessageDeltaUsageData(data, buildMessageDeltaPatchUsage(&claudeResponse, claudeInfo))
 			}
+			finalizeClaudeStreamToolInputs(info, claudeInfo)
 		}
 		helper.ClaudeChunkData(c, claudeResponse, data)
 	} else if info.RelayFormat == types.RelayFormatOpenAI {
+		if claudeResponse.Type == "content_block_start" {
+			appendClaudeToolInvokeFromContentBlock(info, claudeInfo, "", claudeResponse.ContentBlock, claudeResponse.Index)
+		} else if claudeResponse.Type == "content_block_delta" {
+			if claudeResponse.Delta != nil && claudeResponse.Delta.Type == "input_json_delta" {
+				appendClaudeToolInputDelta(info, claudeInfo, claudeResponse.Index, claudeResponse.Delta.PartialJson)
+			}
+		}
 		response := StreamResponseClaude2OpenAI(&claudeResponse)
 
 		if !FormatClaudeResponseInfo(&claudeResponse, response, claudeInfo) {
 			return nil
+		}
+		if claudeResponse.Type == "message_delta" {
+			finalizeClaudeStreamToolInputs(info, claudeInfo)
 		}
 
 		err = helper.ObjectData(c, response)
@@ -807,14 +933,20 @@ func HandleStreamFinalResponse(c *gin.Context, info *relaycommon.RelayInfo, clau
 
 func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayInfo) (*dto.Usage, *types.NewAPIError) {
 	claudeInfo := &ClaudeResponseInfo{
-		ResponseId:   helper.GetResponseID(c),
-		Created:      common.GetTimestamp(),
-		Model:        info.UpstreamModelName,
-		ResponseText: strings.Builder{},
-		Usage:        &dto.Usage{},
+		ResponseId:    helper.GetResponseID(c),
+		Created:       common.GetTimestamp(),
+		Model:         info.UpstreamModelName,
+		ResponseText:  strings.Builder{},
+		Usage:         &dto.Usage{},
+		ToolInvokeIDs: make(map[int]string),
+		ToolInputs:    make(map[int]*strings.Builder),
 	}
 	var err *types.NewAPIError
+	var streamItems []string
 	helper.StreamScannerHandler(c, resp, info, func(data string) bool {
+		if data != "" {
+			streamItems = append(streamItems, data)
+		}
 		err = HandleStreamResponseData(c, info, claudeInfo, data)
 		if err != nil {
 			return false
@@ -828,6 +960,7 @@ func ClaudeStreamHandler(c *gin.Context, resp *http.Response, info *relaycommon.
 	HandleStreamFinalResponse(c, info, claudeInfo)
 	// 提取 completion 文本用于日志记录
 	info.CompletionText = claudeInfo.ResponseText.String()
+	info.ResponseBody = strings.Join(streamItems, "\n")
 	return claudeInfo.Usage, nil
 }
 
@@ -844,6 +977,7 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	if claudeInfo.Usage == nil {
 		claudeInfo.Usage = &dto.Usage{}
 	}
+	appendClaudeToolInvokes(info, claudeResponse.StopReason, claudeResponse.Content)
 	if claudeResponse.Usage != nil {
 		claudeInfo.Usage.PromptTokens = claudeResponse.Usage.InputTokens
 		claudeInfo.Usage.CompletionTokens = claudeResponse.Usage.OutputTokens
@@ -859,12 +993,23 @@ func HandleClaudeResponseData(c *gin.Context, info *relaycommon.RelayInfo, claud
 	case types.RelayFormatOpenAI:
 		openaiResponse := ResponseClaude2OpenAI(&claudeResponse)
 		openaiResponse.Usage = buildOpenAIStyleUsageFromClaudeUsage(claudeInfo.Usage)
-		responseData, err = json.Marshal(openaiResponse)
+		responseData, err = common.Marshal(openaiResponse)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
 	case types.RelayFormatClaude:
 		responseData = data
+	}
+
+	for _, message := range claudeResponse.Content {
+		switch message.Type {
+		case "text":
+			claudeInfo.ResponseText.WriteString(message.GetText())
+		case "thinking":
+			if message.Thinking != nil {
+				claudeInfo.ResponseText.WriteString(*message.Thinking)
+			}
+		}
 	}
 
 	if claudeResponse.Usage != nil && claudeResponse.Usage.ServerToolUse != nil && claudeResponse.Usage.ServerToolUse.WebSearchRequests > 0 {
@@ -879,11 +1024,13 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	defer service.CloseResponseBodyGracefully(resp)
 
 	claudeInfo := &ClaudeResponseInfo{
-		ResponseId:   helper.GetResponseID(c),
-		Created:      common.GetTimestamp(),
-		Model:        info.UpstreamModelName,
-		ResponseText: strings.Builder{},
-		Usage:        &dto.Usage{},
+		ResponseId:    helper.GetResponseID(c),
+		Created:       common.GetTimestamp(),
+		Model:         info.UpstreamModelName,
+		ResponseText:  strings.Builder{},
+		Usage:         &dto.Usage{},
+		ToolInvokeIDs: make(map[int]string),
+		ToolInputs:    make(map[int]*strings.Builder),
 	}
 	responseBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -892,6 +1039,7 @@ func ClaudeHandler(c *gin.Context, resp *http.Response, info *relaycommon.RelayI
 	if common.DebugEnabled {
 		println("responseBody: ", string(responseBody))
 	}
+	info.ResponseBody = string(responseBody)
 	handleErr := HandleClaudeResponseData(c, info, claudeInfo, resp, responseBody)
 	if handleErr != nil {
 		return nil, handleErr

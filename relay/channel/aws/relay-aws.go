@@ -251,6 +251,7 @@ func awsHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (*types
 	}
 	// 提取 completion 文本用于日志记录
 	info.CompletionText = claudeInfo.ResponseText.String()
+	info.ResponseBody = string(awsResp.Body)
 	return nil, claudeInfo.Usage
 }
 
@@ -273,10 +274,12 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 		ResponseText: strings.Builder{},
 		Usage:        &dto.Usage{},
 	}
+	var streamItems []string
 
 	for event := range stream.Events() {
 		switch v := event.(type) {
 		case *bedrockruntimeTypes.ResponseStreamMemberChunk:
+			streamItems = append(streamItems, string(v.Value.Bytes))
 			info.SetFirstResponseTime()
 			respErr := claude.HandleStreamResponseData(c, info, claudeInfo, string(v.Value.Bytes))
 			if respErr != nil {
@@ -294,6 +297,7 @@ func awsStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) (
 	claude.HandleStreamFinalResponse(c, info, claudeInfo)
 	// 提取 completion 文本用于日志记录
 	info.CompletionText = claudeInfo.ResponseText.String()
+	info.ResponseBody = strings.Join(streamItems, "\n")
 	return nil, claudeInfo.Usage
 }
 
@@ -353,5 +357,9 @@ func handleNovaRequest(c *gin.Context, info *relaycommon.RelayInfo, a *Adaptor) 
 	c.JSON(http.StatusOK, response)
 	// 提取 completion 文本用于日志记录
 	info.CompletionText = novaResp.Output.Message.Content[0].Text
+	responseBody, marshalErr := common.Marshal(response)
+	if marshalErr == nil {
+		info.ResponseBody = string(responseBody)
+	}
 	return nil, &response.Usage
 }
