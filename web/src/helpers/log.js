@@ -25,9 +25,14 @@ export function getLogOther(otherStr) {
     return otherStr;
   }
   try {
-    return JSON.parse(otherStr);
+    const parsed = JSON.parse(otherStr);
+    // 如果解析结果是 null 或非对象，返回空对象以保证兼容性
+    if (parsed === null || typeof parsed !== 'object') {
+      return {};
+    }
+    return parsed;
   } catch (e) {
     console.error(`Failed to parse record.other: "${otherStr}".`, e);
-    return null;
+    return {};
   }
 }

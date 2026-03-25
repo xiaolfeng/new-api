@@ -57,13 +57,25 @@ func formatUserLogs(logs []*Log, startIdx int) {
 		logs[i].ChannelName = ""
 		// Record 字段保留，用于前端解析来源和类型
 		// 敏感头信息已在 filterSensitiveHeaders() 中过滤
-		var otherMap map[string]interface{}
-		otherMap, _ = common.StrToMap(logs[i].Other)
-		if otherMap != nil {
-			// Remove admin-only debug fields.
-			delete(otherMap, "admin_info")
-			delete(otherMap, "reject_reason")
+
+		// 空字符串直接跳过处理
+		if logs[i].Other == "" {
+			logs[i].Id = startIdx + i + 1
+			continue
 		}
+
+		otherMap, err := common.StrToMap(logs[i].Other)
+		if err != nil {
+			// 解析失败时保留原始值，不覆盖为 "null"
+			// 这样可以避免丢失 Claude 等格式的日志信息
+			logger.LogWarn(context.TODO(), fmt.Sprintf("formatUserLogs: failed to parse other field: %v", err))
+			logs[i].Id = startIdx + i + 1
+			continue
+		}
+
+		// Remove admin-only debug fields.
+		delete(otherMap, "admin_info")
+		delete(otherMap, "reject_reason")
 		logs[i].Other = common.MapToJsonStr(otherMap)
 		logs[i].Id = startIdx + i + 1
 	}
