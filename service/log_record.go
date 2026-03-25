@@ -20,6 +20,7 @@ package service
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"unicode/utf8"
 
@@ -32,6 +33,7 @@ import (
 )
 
 const maxCompletionLength = 5000
+const maxLoggedJSONValueLength = 200
 
 // safeTruncateUTF8 安全截断 UTF-8 字符串，避免在多字节字符中间截断
 func safeTruncateUTF8(s string, maxLen int) string {
@@ -44,6 +46,21 @@ func safeTruncateUTF8(s string, maxLen int) string {
 		return string(runes[:maxLen])
 	}
 	return s
+}
+
+func summarizeLongUTF8(s string, maxLen int) string {
+	if maxLen <= 0 || utf8.RuneCountInString(s) <= maxLen {
+		return s
+	}
+	if maxLen <= 6 {
+		return safeTruncateUTF8(s, maxLen)
+	}
+
+	runes := []rune(s)
+	remaining := maxLen - 6
+	headLen := remaining / 2
+	tailLen := remaining - headLen
+	return string(runes[:headLen]) + "......" + string(runes[len(runes)-tailLen:])
 }
 
 // BuildLogRecord 构建消费日志详细记录
@@ -943,19 +960,87 @@ func sanitizeToolLogValue(value any) any {
 		}
 		var decoded any
 		if err := common.Unmarshal(typed, &decoded); err == nil {
-			return decoded
+			return sanitizeToolLogValue(decoded)
 		}
-		return string(typed)
+		return summarizeLongUTF8(string(typed), maxLoggedJSONValueLength)
 	case []byte:
 		if len(typed) == 0 {
 			return nil
 		}
 		var decoded any
 		if err := common.Unmarshal(typed, &decoded); err == nil {
-			return decoded
+			return sanitizeToolLogValue(decoded)
 		}
-		return string(typed)
+		return summarizeLongUTF8(string(typed), maxLoggedJSONValueLength)
+	case string:
+		return summarizeLongUTF8(typed, maxLoggedJSONValueLength)
+	}
+
+	rv := reflect.ValueOf(value)
+	if !rv.IsValid() {
+		return nil
+	}
+
+	switch rv.Kind() {
+	case reflect.Interface, reflect.Pointer:
+		if rv.IsNil() {
+			return nil
+		}
+		return sanitizeToolLogValue(rv.Elem().Interface())
+	case reflect.Map:
+		sanitizedMap := reflect.MakeMapWithSize(rv.Type(), rv.Len())
+		iter := rv.MapRange()
+		for iter.Next() {
+			key := iter.Key()
+			sanitizedValue := sanitizeToolLogValue(iter.Value().Interface())
+			valueToSet := reflect.ValueOf(sanitizedValue)
+			if !valueToSet.IsValid() {
+				valueToSet = reflect.Zero(rv.Type().Elem())
+			} else if !valueToSet.Type().AssignableTo(rv.Type().Elem()) {
+				if valueToSet.Type().ConvertibleTo(rv.Type().Elem()) {
+					valueToSet = valueToSet.Convert(rv.Type().Elem())
+				} else {
+					valueToSet = iter.Value()
+				}
+			}
+			sanitizedMap.SetMapIndex(key, valueToSet)
+		}
+		return sanitizedMap.Interface()
+	case reflect.Slice:
+		sanitizedSlice := reflect.MakeSlice(rv.Type(), rv.Len(), rv.Len())
+		for i := 0; i < rv.Len(); i++ {
+			sanitizedValue := sanitizeToolLogValue(rv.Index(i).Interface())
+			valueToSet := reflect.ValueOf(sanitizedValue)
+			if !valueToSet.IsValid() {
+				valueToSet = reflect.Zero(rv.Type().Elem())
+			} else if !valueToSet.Type().AssignableTo(rv.Type().Elem()) {
+				if valueToSet.Type().ConvertibleTo(rv.Type().Elem()) {
+					valueToSet = valueToSet.Convert(rv.Type().Elem())
+				} else {
+					valueToSet = rv.Index(i)
+				}
+			}
+			sanitizedSlice.Index(i).Set(valueToSet)
+		}
+		return sanitizedSlice.Interface()
+	case reflect.Array:
+		sanitizedArray := reflect.New(rv.Type()).Elem()
+		for i := 0; i < rv.Len(); i++ {
+			sanitizedValue := sanitizeToolLogValue(rv.Index(i).Interface())
+			valueToSet := reflect.ValueOf(sanitizedValue)
+			if !valueToSet.IsValid() {
+				valueToSet = reflect.Zero(rv.Type().Elem())
+			} else if !valueToSet.Type().AssignableTo(rv.Type().Elem()) {
+				if valueToSet.Type().ConvertibleTo(rv.Type().Elem()) {
+					valueToSet = valueToSet.Convert(rv.Type().Elem())
+				} else {
+					valueToSet = rv.Index(i)
+				}
+			}
+			sanitizedArray.Index(i).Set(valueToSet)
+		}
+		return sanitizedArray.Interface()
 	default:
-		return typed
+		return value
 	}
 }

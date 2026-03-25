@@ -122,6 +122,26 @@ const LogDetailModal = ({
     </pre>
   );
 
+  const renderHorizontalScrollableTableValue = (value) => (
+    <div
+      style={{
+        maxWidth: '100%',
+        overflowX: 'auto',
+        overflowY: 'hidden',
+      }}
+    >
+      <pre style={{
+        margin: 0,
+        whiteSpace: 'pre',
+        wordBreak: 'normal',
+        fontSize: 12,
+        minWidth: 'max-content',
+      }}>
+        {value == null ? '-' : JSON.stringify(value, null, 2)}
+      </pre>
+    </div>
+  );
+
   const renderClaudeToolResponsesTable = () => {
     if (claudeToolResponses.length === 0) {
       return <Empty description={t('无工具响应记录')} style={{ padding: '20px 0' }} />;
@@ -215,7 +235,7 @@ const LogDetailModal = ({
         title: t('参数'),
         dataIndex: 'input',
         key: 'input',
-        render: renderSimpleTableValue,
+        render: renderHorizontalScrollableTableValue,
       },
     ];
 

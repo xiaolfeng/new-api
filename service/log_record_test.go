@@ -3,6 +3,7 @@ package service
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
@@ -230,4 +231,41 @@ func TestBuildLogRecordClaudeToolOnlyRequestDoesNotStorePromptContent(t *testing
 			Role:      "user",
 		},
 	}, record.ClaudeToolResponses)
+}
+
+func TestSanitizeToolLogValueTruncatesLongNestedStringValues(t *testing.T) {
+	longValue := strings.Repeat("你好", 120)
+
+	sanitized := sanitizeToolLogValue(map[string]any{
+		"short": "ok",
+		"nested": map[string]any{
+			"value": longValue,
+		},
+		"items": []any{
+			map[string]any{
+				"text": longValue,
+			},
+		},
+	})
+
+	sanitizedMap, ok := sanitized.(map[string]any)
+	require.True(t, ok)
+
+	nestedMap, ok := sanitizedMap["nested"].(map[string]any)
+	require.True(t, ok)
+	nestedValue, ok := nestedMap["value"].(string)
+	require.True(t, ok)
+	require.Contains(t, nestedValue, "......")
+	require.True(t, utf8.RuneCountInString(nestedValue) <= maxLoggedJSONValueLength)
+	require.True(t, strings.HasPrefix(nestedValue, string([]rune(longValue)[:10])))
+	require.True(t, strings.HasSuffix(nestedValue, string([]rune(longValue)[len([]rune(longValue))-10:])))
+
+	items, ok := sanitizedMap["items"].([]any)
+	require.True(t, ok)
+	itemMap, ok := items[0].(map[string]any)
+	require.True(t, ok)
+	itemValue, ok := itemMap["text"].(string)
+	require.True(t, ok)
+	require.Contains(t, itemValue, "......")
+	require.True(t, utf8.RuneCountInString(itemValue) <= maxLoggedJSONValueLength)
 }
