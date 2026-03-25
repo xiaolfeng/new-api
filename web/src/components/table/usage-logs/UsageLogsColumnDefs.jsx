@@ -579,7 +579,7 @@ function getSourceColor(source) {
 /**
  * 判断交互类型
  * @param {object|string} record - 日志记录对象
- * @returns {string|null} 类型名称，Codex 返回 null
+ * @returns {string|null} 类型名称
  */
 function flattenResponsesPromptInputItems(input) {
   if (!Array.isArray(input)) {
@@ -714,17 +714,6 @@ function parseInteractionType(record) {
       ? recordData.responsesResponseBlocks
       : [];
     const responsesPromptItems = flattenResponsesPromptInputItems(prompt?.input);
-
-    // 检查 User-Agent 是否为 Codex
-    const userAgent = Object.keys(headers).find(
-      key => key.toLowerCase() === 'user-agent'
-    );
-    if (userAgent) {
-      const ua = headers[userAgent]?.toLowerCase() || '';
-      if (ua.includes('codex_cli_rs') || ua.includes('codex-cli-rs')) {
-        return null; // Codex 不显示类型
-      }
-    }
 
     const responsesStructuredType = inferResponsesStructuredInteractionType({
       responsesRequestBlocks,
