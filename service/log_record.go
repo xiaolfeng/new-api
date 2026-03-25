@@ -104,7 +104,7 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 }
 
 func BuildFullLogRecord(relayInfo *relaycommon.RelayInfo) string {
-	if !operation_setting.IsRecordConsumeLogDetailEnabled() || relayInfo == nil {
+	if !operation_setting.IsFullLogConsumeEnabled() || relayInfo == nil {
 		return ""
 	}
 

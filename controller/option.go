@@ -65,11 +65,15 @@ func GetOptions(c *gin.Context) {
 	var options []*model.Option
 	optionValues := make(map[string]string)
 	recordLogEnabledRaw := false
+	fullLogEnabledRaw := false
 	common.OptionMapRWMutex.Lock()
 	for k, v := range common.OptionMap {
 		value := common.Interface2String(v)
 		if k == "retry_setting.record_consume_log_detail_enabled" {
 			recordLogEnabledRaw = value == "true"
+		}
+		if k == "retry_setting.full_log_consume_enabled" {
+			fullLogEnabledRaw = value == "true"
 		}
 		if strings.HasSuffix(k, "Token") ||
 			strings.HasSuffix(k, "Secret") ||
@@ -79,7 +83,8 @@ func GetOptions(c *gin.Context) {
 			continue
 		}
 		if k == "retry_setting.record_consume_log_detail_enabled" ||
-			k == "retry_setting.record_consume_log_detail_expires_at" {
+			k == "retry_setting.full_log_consume_enabled" ||
+			k == "retry_setting.full_log_consume_expires_at" {
 			continue
 		}
 		options = append(options, &model.Option{
@@ -94,24 +99,28 @@ func GetOptions(c *gin.Context) {
 		}
 	}
 	common.OptionMapRWMutex.Unlock()
-	recordLogEnabled := operation_setting.IsRecordConsumeLogDetailEnabled()
-	recordLogExpiresAt := operation_setting.GetRecordConsumeLogDetailExpiresAt()
-	recordLogRemaining := operation_setting.GetRecordConsumeLogDetailRemainingSeconds()
-	if !recordLogEnabledRaw {
-		recordLogExpiresAt = 0
-		recordLogRemaining = 0
-	}
 	options = append(options, &model.Option{
 		Key:   "retry_setting.record_consume_log_detail_enabled",
-		Value: common.Interface2String(recordLogEnabled),
+		Value: common.Interface2String(recordLogEnabledRaw && operation_setting.IsRecordConsumeLogDetailEnabled()),
+	})
+	fullLogEnabled := operation_setting.IsFullLogConsumeEnabled()
+	fullLogExpiresAt := operation_setting.GetFullLogConsumeExpiresAt()
+	fullLogRemaining := operation_setting.GetFullLogConsumeRemainingSeconds()
+	if !fullLogEnabledRaw {
+		fullLogExpiresAt = 0
+		fullLogRemaining = 0
+	}
+	options = append(options, &model.Option{
+		Key:   "retry_setting.full_log_consume_enabled",
+		Value: common.Interface2String(fullLogEnabled),
 	})
 	options = append(options, &model.Option{
-		Key:   "retry_setting.record_consume_log_detail_expires_at",
-		Value: common.Interface2String(recordLogExpiresAt),
+		Key:   "retry_setting.full_log_consume_expires_at",
+		Value: common.Interface2String(fullLogExpiresAt),
 	})
 	options = append(options, &model.Option{
-		Key:   "retry_setting.record_consume_log_detail_remaining_seconds",
-		Value: common.Interface2String(recordLogRemaining),
+		Key:   "retry_setting.full_log_consume_remaining_seconds",
+		Value: common.Interface2String(fullLogRemaining),
 	})
 	options = append(options, &model.Option{
 		Key:   "CompletionRatioMeta",
@@ -150,7 +159,7 @@ func UpdateOption(c *gin.Context) {
 	default:
 		option.Value = fmt.Sprintf("%v", option.Value)
 	}
-	if option.Key == "retry_setting.record_consume_log_detail_enabled" {
+	if option.Key == "retry_setting.full_log_consume_enabled" {
 		enabled := option.Value == "true"
 		if err = model.UpdateOption(option.Key, common.Interface2String(enabled)); err != nil {
 			common.ApiError(c, err)
@@ -160,7 +169,7 @@ func UpdateOption(c *gin.Context) {
 		if enabled {
 			expiresAt = common.GetTimestamp() + operation_setting.GetRecordConsumeLogDetailDurationSeconds()
 		}
-		if err = model.UpdateOption("retry_setting.record_consume_log_detail_expires_at", strconv.FormatInt(expiresAt, 10)); err != nil {
+		if err = model.UpdateOption("retry_setting.full_log_consume_expires_at", strconv.FormatInt(expiresAt, 10)); err != nil {
 			common.ApiError(c, err)
 			return
 		}
@@ -170,10 +179,10 @@ func UpdateOption(c *gin.Context) {
 		})
 		return
 	}
-	if option.Key == "retry_setting.record_consume_log_detail_expires_at" {
+	if option.Key == "retry_setting.full_log_consume_expires_at" {
 		c.JSON(http.StatusOK, gin.H{
 			"success": false,
-			"message": "日志详细记录过期时间仅允许由系统自动管理",
+			"message": "完整日志过期时间仅允许由系统自动管理",
 		})
 		return
 	}

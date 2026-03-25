@@ -38,16 +38,20 @@ type RetrySetting struct {
 	// RecordConsumeLogDetailEnabled 启用消费日志详细记录
 	// 记录消费日志的请求内容、响应内容和 HTTP 头（排除敏感信息）
 	RecordConsumeLogDetailEnabled bool `json:"record_consume_log_detail_enabled"`
-	// RecordConsumeLogDetailExpiresAt 消费日志详细记录过期时间（Unix 秒）
-	RecordConsumeLogDetailExpiresAt int64 `json:"record_consume_log_detail_expires_at"`
+	// FullLogConsumeEnabled 启用完整消费日志记录
+	// 记录完整 request/response，仅允许短时间开启
+	FullLogConsumeEnabled bool `json:"full_log_consume_enabled"`
+	// FullLogConsumeExpiresAt 完整消费日志记录过期时间（Unix 秒）
+	FullLogConsumeExpiresAt int64 `json:"full_log_consume_expires_at"`
 }
 
 // 默认配置
 var retrySetting = RetrySetting{
-	EmptyResponseRetryEnabled:       false,
-	EmptyResponseRetryDelaySeconds:  0,
-	RecordConsumeLogDetailEnabled:   false,
-	RecordConsumeLogDetailExpiresAt: 0,
+	EmptyResponseRetryEnabled:      false,
+	EmptyResponseRetryDelaySeconds: 0,
+	RecordConsumeLogDetailEnabled:  false,
+	FullLogConsumeEnabled:          false,
+	FullLogConsumeExpiresAt:        0,
 }
 
 func init() {
@@ -72,24 +76,28 @@ func GetEmptyResponseRetryDelaySeconds() int {
 
 // IsRecordConsumeLogDetailEnabled 是否启用消费日志详细记录
 func IsRecordConsumeLogDetailEnabled() bool {
-	if !retrySetting.RecordConsumeLogDetailEnabled {
-		return false
-	}
-	if retrySetting.RecordConsumeLogDetailExpiresAt <= 0 {
-		return false
-	}
-	return retrySetting.RecordConsumeLogDetailExpiresAt > time.Now().Unix()
+	return retrySetting.RecordConsumeLogDetailEnabled
 }
 
-func GetRecordConsumeLogDetailExpiresAt() int64 {
-	if !IsRecordConsumeLogDetailEnabled() {
+func IsFullLogConsumeEnabled() bool {
+	if !retrySetting.FullLogConsumeEnabled {
+		return false
+	}
+	if retrySetting.FullLogConsumeExpiresAt <= 0 {
+		return false
+	}
+	return retrySetting.FullLogConsumeExpiresAt > time.Now().Unix()
+}
+
+func GetFullLogConsumeExpiresAt() int64 {
+	if !IsFullLogConsumeEnabled() {
 		return 0
 	}
-	return retrySetting.RecordConsumeLogDetailExpiresAt
+	return retrySetting.FullLogConsumeExpiresAt
 }
 
-func GetRecordConsumeLogDetailRemainingSeconds() int64 {
-	expiresAt := GetRecordConsumeLogDetailExpiresAt()
+func GetFullLogConsumeRemainingSeconds() int64 {
+	expiresAt := GetFullLogConsumeExpiresAt()
 	if expiresAt <= 0 {
 		return 0
 	}

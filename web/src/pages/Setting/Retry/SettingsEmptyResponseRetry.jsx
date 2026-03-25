@@ -31,17 +31,17 @@ export default function SettingsEmptyResponseRetry(props) {
     'retry_setting.empty_response_retry_enabled': false,
     'retry_setting.empty_response_retry_delay_seconds': 0,
     'retry_setting.record_consume_log_detail_enabled': false,
-    'retry_setting.record_consume_log_detail_expires_at': 0,
-    'retry_setting.record_consume_log_detail_remaining_seconds': 0,
+    'retry_setting.full_log_consume_enabled': false,
+    'retry_setting.full_log_consume_expires_at': 0,
+    'retry_setting.full_log_consume_remaining_seconds': 0,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
 
-  const remainingSeconds =
-    inputs['retry_setting.record_consume_log_detail_remaining_seconds'] || 0;
-  const expiresAt = inputs['retry_setting.record_consume_log_detail_expires_at'] || 0;
-  const isDetailLogActive =
-    inputs['retry_setting.record_consume_log_detail_enabled'] && remainingSeconds > 0;
+  const remainingSeconds = inputs['retry_setting.full_log_consume_remaining_seconds'] || 0;
+  const expiresAt = inputs['retry_setting.full_log_consume_expires_at'] || 0;
+  const isFullLogActive =
+    inputs['retry_setting.full_log_consume_enabled'] && remainingSeconds > 0;
 
   const formatExpireTime = (timestamp) => {
     if (!timestamp) return '-';
@@ -51,8 +51,8 @@ export default function SettingsEmptyResponseRetry(props) {
   function onSubmit() {
     const updateArray = compareObjects(inputs, inputsRow).filter(
       (item) =>
-        item.key !== 'retry_setting.record_consume_log_detail_expires_at' &&
-        item.key !== 'retry_setting.record_consume_log_detail_remaining_seconds',
+        item.key !== 'retry_setting.full_log_consume_expires_at' &&
+        item.key !== 'retry_setting.full_log_consume_remaining_seconds',
     );
     if (!updateArray.length) return showWarning(t('你似乎并没有修改什么'));
 
@@ -90,39 +90,31 @@ export default function SettingsEmptyResponseRetry(props) {
   }, [props.options]);
 
   useEffect(() => {
-    if (remainingSeconds <= 0) {
-      if (inputs['retry_setting.record_consume_log_detail_enabled']) {
-        setInputs((prev) => ({
-          ...prev,
-          'retry_setting.record_consume_log_detail_enabled': false,
-          'retry_setting.record_consume_log_detail_expires_at': 0,
-          'retry_setting.record_consume_log_detail_remaining_seconds': 0,
-        }));
-      }
+    if (!inputsRow['retry_setting.full_log_consume_enabled'] || remainingSeconds <= 0) {
       return undefined;
     }
 
     const timer = window.setInterval(() => {
       setInputs((prev) => {
-        const nextRemaining =
-          (prev['retry_setting.record_consume_log_detail_remaining_seconds'] || 0) - 1;
+        const currentRemaining = prev['retry_setting.full_log_consume_remaining_seconds'] || 0;
+        const nextRemaining = currentRemaining - 1;
         if (nextRemaining <= 0) {
           return {
             ...prev,
-            'retry_setting.record_consume_log_detail_enabled': false,
-            'retry_setting.record_consume_log_detail_expires_at': 0,
-            'retry_setting.record_consume_log_detail_remaining_seconds': 0,
+            'retry_setting.full_log_consume_enabled': false,
+            'retry_setting.full_log_consume_expires_at': 0,
+            'retry_setting.full_log_consume_remaining_seconds': 0,
           };
         }
         return {
           ...prev,
-          'retry_setting.record_consume_log_detail_remaining_seconds': nextRemaining,
+          'retry_setting.full_log_consume_remaining_seconds': nextRemaining,
         };
       });
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [remainingSeconds, inputs]);
+  }, [remainingSeconds, inputsRow]);
 
   return (
     <Spin spinning={loading}>
@@ -176,6 +168,24 @@ export default function SettingsEmptyResponseRetry(props) {
             <Col xs={24} sm={12} md={8} lg={8} xl={8}>
               <Form.Switch
                 field={'retry_setting.record_consume_log_detail_enabled'}
+                label={t('启用 record 日志记录')}
+                size='default'
+                checkedText='｜'
+                uncheckedText='〇'
+                extraText={t(
+                  '记录摘要请求内容、响应内容、工具调用和过滤后的 HTTP 头'
+                )}
+                onChange={(value) =>
+                  setInputs({
+                    ...inputs,
+                    'retry_setting.record_consume_log_detail_enabled': value,
+                  })
+                }
+              />
+            </Col>
+            <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+              <Form.Switch
+                field={'retry_setting.full_log_consume_enabled'}
                 label={t('启用 5 分钟完整日志记录')}
                 size='default'
                 checkedText='｜'
@@ -186,15 +196,15 @@ export default function SettingsEmptyResponseRetry(props) {
                 onChange={(value) =>
                   setInputs({
                     ...inputs,
-                    'retry_setting.record_consume_log_detail_enabled': value,
+                    'retry_setting.full_log_consume_enabled': value,
                   })
                 }
               />
               <div style={{ marginTop: 8 }}>
-                <Text type={isDetailLogActive ? 'success' : 'tertiary'} size='small'>
-                  {isDetailLogActive
-                    ? t('日志详细记录剩余 {{count}} 秒', { count: remainingSeconds })
-                    : t('日志详细记录已关闭')}
+                <Text type={isFullLogActive ? 'success' : 'tertiary'} size='small'>
+                  {isFullLogActive
+                    ? t('完整日志记录剩余 {{count}} 秒', { count: remainingSeconds })
+                    : t('完整日志记录已关闭')}
                 </Text>
                 <br />
                 <Text type='tertiary' size='small'>

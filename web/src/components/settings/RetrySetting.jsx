@@ -27,8 +27,9 @@ const RetrySetting = () => {
     'retry_setting.empty_response_retry_enabled': false,
     'retry_setting.empty_response_retry_delay_seconds': 0,
     'retry_setting.record_consume_log_detail_enabled': false,
-    'retry_setting.record_consume_log_detail_expires_at': 0,
-    'retry_setting.record_consume_log_detail_remaining_seconds': 0,
+    'retry_setting.full_log_consume_enabled': false,
+    'retry_setting.full_log_consume_expires_at': 0,
+    'retry_setting.full_log_consume_remaining_seconds': 0,
   });
   const [loading, setLoading] = useState(false);
 
@@ -43,8 +44,8 @@ const RetrySetting = () => {
             newInputs[item.key] = toBoolean(item.value);
           } else if (
             item.key === 'retry_setting.empty_response_retry_delay_seconds' ||
-            item.key === 'retry_setting.record_consume_log_detail_expires_at' ||
-            item.key === 'retry_setting.record_consume_log_detail_remaining_seconds'
+            item.key === 'retry_setting.full_log_consume_expires_at' ||
+            item.key === 'retry_setting.full_log_consume_remaining_seconds'
           ) {
             newInputs[item.key] = parseInt(item.value) || 0;
           } else {
