@@ -21,6 +21,7 @@ package service
 import (
 	"encoding/json"
 	"reflect"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -72,6 +73,7 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 
 	record := model.LogDetailRecord{}
 	isClaudeRecord := isClaudeStructuredRecord(relayInfo)
+	isResponsesRecord := isResponsesStructuredRecord(relayInfo)
 
 	// 1. Prompt (从 relayInfo.Request 获取 messages)
 	if relayInfo != nil && relayInfo.Request != nil {
@@ -95,6 +97,10 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		case *dto.OpenAIResponsesRequest:
 			if req != nil {
 				record.Prompt = buildPromptRecordFromResponses(req)
+				if isResponsesRecord {
+					record.ResponsesRequestBlocks = buildResponsesRequestBlocks(req)
+					record.ResponsesToolResponses = buildResponsesToolResponseBlocks(req)
+				}
 			}
 		}
 	}
@@ -107,6 +113,9 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	if shouldRecordClaudeResponseBlocks(relayInfo) {
 		record.ClaudeResponseBlocks = buildClaudeResponseBlocksFromSSE(relayInfo.ResponseBody)
 	}
+	if shouldRecordResponsesResponseBlocks(relayInfo) {
+		record.ResponsesResponseBlocks = buildResponsesResponseBlocksFromSSE(relayInfo.ResponseBody)
+	}
 
 	// 3. Headers (排除敏感信息)
 	if relayInfo != nil && relayInfo.RequestHeaders != nil {
@@ -116,6 +125,8 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	// 4. Tool invokes (Claude/Anthropic tool_use + tool_result)
 	if len(record.ClaudeResponseBlocks) > 0 {
 		record.ToolInvokes = buildClaudeToolInvokeRecordsFromBlocks(record.ClaudeResponseBlocks)
+	} else if len(record.ResponsesResponseBlocks) > 0 {
+		record.ToolInvokes = buildResponsesToolInvokeRecordsFromBlocks(record.ResponsesResponseBlocks)
 	} else if relayInfo != nil {
 		record.ToolInvokes = buildToolInvokeRecords(relayInfo)
 	}
@@ -127,7 +138,10 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		len(record.ToolInvokes) == 0 &&
 		len(record.ClaudeRequestBlocks) == 0 &&
 		len(record.ClaudeToolResponses) == 0 &&
-		len(record.ClaudeResponseBlocks) == 0 {
+		len(record.ClaudeResponseBlocks) == 0 &&
+		len(record.ResponsesRequestBlocks) == 0 &&
+		len(record.ResponsesToolResponses) == 0 &&
+		len(record.ResponsesResponseBlocks) == 0 {
 		return ""
 	}
 
@@ -145,8 +159,22 @@ func isClaudeStructuredRecord(relayInfo *relaycommon.RelayInfo) bool {
 	return relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatClaude
 }
 
+func isResponsesStructuredRecord(relayInfo *relaycommon.RelayInfo) bool {
+	if relayInfo == nil {
+		return false
+	}
+	return relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatOpenAIResponses
+}
+
 func shouldRecordClaudeResponseBlocks(relayInfo *relaycommon.RelayInfo) bool {
 	if !isClaudeStructuredRecord(relayInfo) || relayInfo == nil || !relayInfo.IsStream || strings.TrimSpace(relayInfo.ResponseBody) == "" {
+		return false
+	}
+	return true
+}
+
+func shouldRecordResponsesResponseBlocks(relayInfo *relaycommon.RelayInfo) bool {
+	if !isResponsesStructuredRecord(relayInfo) || relayInfo == nil || !relayInfo.IsStream || strings.TrimSpace(relayInfo.ResponseBody) == "" {
 		return false
 	}
 	return true
@@ -334,6 +362,285 @@ func buildClaudeToolInvokeRecordsFromBlocks(blocks []model.ClaudeResponseBlock) 
 			ID:    block.ID,
 			Name:  block.Name,
 			Input: block.Input,
+		})
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	return records
+}
+
+type responsesResponseBlockState struct {
+	Block        model.ResponsesResponseBlock
+	Content      strings.Builder
+	ArgumentsRaw strings.Builder
+}
+
+func buildResponsesResponseBlocksFromSSE(responseBody string) []model.ResponsesResponseBlock {
+	responseBody = strings.TrimSpace(responseBody)
+	if responseBody == "" {
+		return nil
+	}
+
+	states := make(map[string]*responsesResponseBlockState)
+	stateOrder := make([]string, 0)
+	itemKeysByItemID := make(map[string][]string)
+
+	upsertState := func(key string, initializer func(*responsesResponseBlockState)) *responsesResponseBlockState {
+		if key == "" {
+			return nil
+		}
+		if state, ok := states[key]; ok {
+			if initializer != nil {
+				initializer(state)
+			}
+			return state
+		}
+		state := &responsesResponseBlockState{}
+		if initializer != nil {
+			initializer(state)
+		}
+		states[key] = state
+		stateOrder = append(stateOrder, key)
+		if itemID := strings.TrimSpace(state.Block.ID); itemID != "" {
+			itemKeysByItemID[itemID] = append(itemKeysByItemID[itemID], key)
+		}
+		return state
+	}
+
+	lines := strings.Split(responseBody, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || line == "[DONE]" {
+			continue
+		}
+
+		var streamResp dto.ResponsesStreamResponse
+		if err := common.UnmarshalJsonStr(line, &streamResp); err != nil {
+			continue
+		}
+
+		switch streamResp.Type {
+		case "response.content_part.added":
+			if streamResp.Part == nil || strings.TrimSpace(streamResp.Part.Type) != "output_text" {
+				continue
+			}
+			key := buildResponsesTextBlockKey(streamResp.ItemID, streamResp.OutputIndex, streamResp.ContentIndex)
+			state := upsertState(key, func(state *responsesResponseBlockState) {
+				state.Block.ID = strings.TrimSpace(streamResp.ItemID)
+				state.Block.Type = "output_text"
+			})
+			if state != nil && strings.TrimSpace(streamResp.Part.Text) != "" {
+				state.Content.WriteString(streamResp.Part.Text)
+			}
+		case "response.output_text.delta":
+			key := buildResponsesTextBlockKey(streamResp.ItemID, streamResp.OutputIndex, streamResp.ContentIndex)
+			state := upsertState(key, func(state *responsesResponseBlockState) {
+				state.Block.ID = strings.TrimSpace(streamResp.ItemID)
+				state.Block.Type = "output_text"
+			})
+			if state != nil && streamResp.Delta != "" {
+				state.Content.WriteString(streamResp.Delta)
+			}
+		case "response.output_text.done":
+			key := buildResponsesTextBlockKey(streamResp.ItemID, streamResp.OutputIndex, streamResp.ContentIndex)
+			state := upsertState(key, func(state *responsesResponseBlockState) {
+				state.Block.ID = strings.TrimSpace(streamResp.ItemID)
+				state.Block.Type = "output_text"
+			})
+			if state != nil {
+				mergeResponsesText(&state.Content, streamResp.Text)
+			}
+		case "response.output_item.added", "response.output_item.done":
+			if streamResp.Item == nil {
+				continue
+			}
+			if strings.TrimSpace(streamResp.Item.Type) == "function_call" {
+				key := buildResponsesFunctionCallBlockKey(streamResp.Item.ID, streamResp.Item.CallId)
+				state := upsertState(key, func(state *responsesResponseBlockState) {
+					state.Block.ID = strings.TrimSpace(streamResp.Item.ID)
+					state.Block.Type = "function_call"
+					state.Block.CallID = strings.TrimSpace(streamResp.Item.CallId)
+					state.Block.Name = strings.TrimSpace(streamResp.Item.Name)
+				})
+				if state != nil {
+					if state.Block.CallID == "" {
+						state.Block.CallID = strings.TrimSpace(streamResp.Item.ID)
+					}
+					if state.Block.Name == "" {
+						state.Block.Name = strings.TrimSpace(streamResp.Item.Name)
+					}
+					mergeResponsesText(&state.ArgumentsRaw, streamResp.Item.Arguments)
+				}
+				continue
+			}
+
+			if strings.TrimSpace(streamResp.Item.Type) == "message" {
+				itemID := strings.TrimSpace(streamResp.Item.ID)
+				for _, key := range itemKeysByItemID[itemID] {
+					state := states[key]
+					if state == nil || state.Block.Type != "output_text" {
+						continue
+					}
+					for _, content := range streamResp.Item.Content {
+						if strings.TrimSpace(content.Type) != "output_text" {
+							continue
+						}
+						mergeResponsesText(&state.Content, content.Text)
+						break
+					}
+				}
+			}
+		case "response.function_call_arguments.delta":
+			key := buildResponsesFunctionCallBlockKey(streamResp.ItemID, "")
+			state := upsertState(key, func(state *responsesResponseBlockState) {
+				state.Block.ID = strings.TrimSpace(streamResp.ItemID)
+				state.Block.Type = "function_call"
+				state.Block.CallID = strings.TrimSpace(streamResp.ItemID)
+			})
+			if state != nil && streamResp.Delta != "" {
+				state.ArgumentsRaw.WriteString(streamResp.Delta)
+			}
+		case "response.function_call_arguments.done":
+			key := buildResponsesFunctionCallBlockKey(streamResp.ItemID, "")
+			state := upsertState(key, func(state *responsesResponseBlockState) {
+				state.Block.ID = strings.TrimSpace(streamResp.ItemID)
+				state.Block.Type = "function_call"
+				state.Block.CallID = strings.TrimSpace(streamResp.ItemID)
+			})
+			if state != nil {
+				mergeResponsesText(&state.ArgumentsRaw, streamResp.Arguments)
+			}
+		}
+	}
+
+	result := make([]model.ResponsesResponseBlock, 0, len(stateOrder))
+	for _, key := range stateOrder {
+		state := states[key]
+		if state == nil {
+			continue
+		}
+
+		block := state.Block
+		switch block.Type {
+		case "output_text":
+			block.Content = safeTruncateUTF8(state.Content.String(), maxCompletionLength)
+			if strings.TrimSpace(block.Content) == "" {
+				continue
+			}
+		case "function_call":
+			rawArguments := strings.TrimSpace(state.ArgumentsRaw.String())
+			if rawArguments != "" {
+				block.Arguments = sanitizeResponsesJSONLikeValue(rawArguments)
+			}
+			if strings.TrimSpace(block.CallID) == "" {
+				block.CallID = strings.TrimSpace(block.ID)
+			}
+			if strings.TrimSpace(block.Name) == "" && block.Arguments == nil && strings.TrimSpace(block.CallID) == "" {
+				continue
+			}
+		default:
+			continue
+		}
+
+		result = append(result, block)
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func buildResponsesTextBlockKey(itemID string, outputIndex, contentIndex *int) string {
+	key := strings.TrimSpace(itemID)
+	if key == "" {
+		key = "text"
+	}
+	if outputIndex != nil {
+		key += "|output:" + strconv.Itoa(*outputIndex)
+	}
+	if contentIndex != nil {
+		key += "|content:" + strconv.Itoa(*contentIndex)
+	}
+	return "text|" + key
+}
+
+func buildResponsesFunctionCallBlockKey(itemID, callID string) string {
+	callID = strings.TrimSpace(callID)
+	itemID = strings.TrimSpace(itemID)
+	if itemID == "" && callID == "" {
+		return ""
+	}
+	if itemID == "" {
+		itemID = callID
+	}
+	return "call|" + itemID
+}
+
+func mergeResponsesText(builder *strings.Builder, next string) {
+	if builder == nil {
+		return
+	}
+	if next == "" {
+		return
+	}
+	current := builder.String()
+	if current == "" {
+		builder.WriteString(next)
+		return
+	}
+	if strings.HasPrefix(next, current) {
+		builder.WriteString(next[len(current):])
+		return
+	}
+	if !strings.Contains(current, next) {
+		builder.WriteString(next)
+	}
+}
+
+func sanitizeResponsesJSONLikeValue(value any) any {
+	if value == nil {
+		return nil
+	}
+
+	switch typed := value.(type) {
+	case string:
+		trimmed := strings.TrimSpace(typed)
+		if trimmed == "" {
+			return nil
+		}
+		var parsed any
+		if err := common.UnmarshalJsonStr(trimmed, &parsed); err == nil {
+			return sanitizeToolLogValue(parsed)
+		}
+		return summarizeLongUTF8(trimmed, maxLoggedJSONValueLength)
+	default:
+		return sanitizeToolLogValue(value)
+	}
+}
+
+func buildResponsesToolInvokeRecordsFromBlocks(blocks []model.ResponsesResponseBlock) []model.LogToolInvokeRecord {
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	records := make([]model.LogToolInvokeRecord, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type != "function_call" {
+			continue
+		}
+		id := strings.TrimSpace(block.CallID)
+		if id == "" {
+			id = strings.TrimSpace(block.ID)
+		}
+		if id == "" && strings.TrimSpace(block.Name) == "" && block.Arguments == nil {
+			continue
+		}
+		records = append(records, model.LogToolInvokeRecord{
+			ID:    id,
+			Name:  block.Name,
+			Input: block.Arguments,
 		})
 	}
 	if len(records) == 0 {
@@ -705,23 +1012,309 @@ func buildPromptRecordFromGemini(req *dto.GeminiChatRequest) map[string]interfac
 }
 
 // buildPromptRecordFromResponses 从 OpenAI Responses API 格式请求中构建 prompt 记录
-// 只提取最后一个用户消息，避免存储全量上下文
+// 记录 input 的结构化内容，避免直接落完整原始上下文
 func buildPromptRecordFromResponses(req *dto.OpenAIResponsesRequest) map[string]interface{} {
 	if req == nil {
 		return nil
 	}
 
-	result := make(map[string]interface{})
+	recordData := parseResponsesInputForRecord(req.Input)
+	if len(recordData.PromptInput) == 0 && recordData.LastUserText == "" {
+		return nil
+	}
 
-	// 只提取最后一个用户消息，与其他格式保持一致
-	if text := extractLastUserMessageTextFromResponsesInput(req.Input); text != "" {
+	result := make(map[string]interface{}, 2)
+	if recordData.LastUserText != "" {
 		result["lastUserMessage"] = map[string]interface{}{
 			"role":    "user",
-			"content": text,
+			"content": recordData.LastUserText,
+		}
+	}
+	if len(recordData.PromptInput) > 0 {
+		result["input"] = recordData.PromptInput
+	}
+
+	return result
+}
+
+func buildResponsesRequestBlocks(req *dto.OpenAIResponsesRequest) []model.ResponsesRequestBlock {
+	if req == nil {
+		return nil
+	}
+	recordData := parseResponsesInputForRecord(req.Input)
+	if len(recordData.RequestBlocks) == 0 {
+		return nil
+	}
+	return recordData.RequestBlocks
+}
+
+func buildResponsesToolResponseBlocks(req *dto.OpenAIResponsesRequest) []model.ResponsesToolResponseBlock {
+	if req == nil {
+		return nil
+	}
+	recordData := parseResponsesInputForRecord(req.Input)
+	if len(recordData.ToolResponses) == 0 {
+		return nil
+	}
+	return recordData.ToolResponses
+}
+
+type responsesInputRecordData struct {
+	PromptInput   []map[string]interface{}
+	RequestBlocks []model.ResponsesRequestBlock
+	ToolResponses []model.ResponsesToolResponseBlock
+	LastUserText  string
+}
+
+type responsesInputSegmentItem struct {
+	Type      string
+	Role      string
+	Text      string
+	CallID    string
+	Name      string
+	Arguments any
+}
+
+func parseResponsesInputForRecord(input json.RawMessage) responsesInputRecordData {
+	result := responsesInputRecordData{}
+	if len(input) == 0 {
+		return result
+	}
+
+	if common.GetJsonType(input) == "string" {
+		var text string
+		_ = common.Unmarshal(input, &text)
+		text = safeTruncateUTF8(text, maxCompletionLength)
+		if strings.TrimSpace(text) == "" {
+			return result
+		}
+		result.PromptInput = append(result.PromptInput, map[string]interface{}{
+			"type": "input_text",
+			"text": text,
+		})
+		result.RequestBlocks = append(result.RequestBlocks, model.ResponsesRequestBlock{
+			Type: "input_text",
+			Text: text,
+		})
+		result.LastUserText = text
+		return result
+	}
+
+	if common.GetJsonType(input) != "array" {
+		return result
+	}
+
+	var items []map[string]interface{}
+	if err := common.Unmarshal(input, &items); err != nil {
+		return result
+	}
+
+	toolNameByCallID := make(map[string]string)
+	flatItems := make([]responsesInputSegmentItem, 0)
+
+	for _, item := range items {
+		itemType := strings.TrimSpace(common.Interface2String(item["type"]))
+		switch itemType {
+		case "message":
+			role := strings.TrimSpace(common.Interface2String(item["role"]))
+			flatItems = append(flatItems, buildResponsesPromptMessageContent(item["content"], role)...)
+		case "function_call":
+			callID := strings.TrimSpace(common.Interface2String(item["call_id"]))
+			name := strings.TrimSpace(common.Interface2String(item["name"]))
+			if callID != "" && name != "" {
+				toolNameByCallID[callID] = name
+			}
+			flatItems = append(flatItems, responsesInputSegmentItem{
+				Type:      "function_call",
+				CallID:    callID,
+				Name:      name,
+				Arguments: sanitizeResponsesJSONLikeValue(item["arguments"]),
+			})
+		case "function_call_output":
+			callID := strings.TrimSpace(common.Interface2String(item["call_id"]))
+			name := strings.TrimSpace(common.Interface2String(item["name"]))
+			if name == "" {
+				name = toolNameByCallID[callID]
+			}
+			flatItems = append(flatItems, responsesInputSegmentItem{
+				Type:   "function_call_output",
+				CallID: callID,
+				Name:   name,
+			})
+		case "input_text", "text", "output_text":
+			text := safeTruncateUTF8(common.Interface2String(item["text"]), maxCompletionLength)
+			if strings.TrimSpace(text) == "" {
+				continue
+			}
+			flatItems = append(flatItems, responsesInputSegmentItem{
+				Type: itemType,
+				Text: text,
+			})
+		case "reasoning":
+			continue
+		}
+	}
+
+	segmentItems := selectResponsesInputSegment(flatItems)
+	for _, item := range segmentItems {
+		switch item.Type {
+		case "input_text", "text", "output_text":
+			promptItem := map[string]interface{}{
+				"type": item.Type,
+				"text": item.Text,
+			}
+			if item.Role != "" {
+				promptItem["role"] = item.Role
+			}
+			result.PromptInput = append(result.PromptInput, promptItem)
+			if item.Type == "input_text" || item.Type == "text" {
+				result.RequestBlocks = append(result.RequestBlocks, model.ResponsesRequestBlock{
+					Type: item.Type,
+					Role: item.Role,
+					Text: item.Text,
+				})
+				result.LastUserText = item.Text
+			}
+		case "function_call":
+			promptItem := map[string]interface{}{
+				"type": "function_call",
+			}
+			if item.CallID != "" {
+				promptItem["call_id"] = item.CallID
+			}
+			if item.Name != "" {
+				promptItem["name"] = item.Name
+			}
+			if item.Arguments != nil {
+				promptItem["arguments"] = item.Arguments
+			}
+			result.PromptInput = append(result.PromptInput, promptItem)
+		case "function_call_output":
+			promptItem := map[string]interface{}{
+				"type": "function_call_output",
+			}
+			if item.CallID != "" {
+				promptItem["call_id"] = item.CallID
+			}
+			if item.Name != "" {
+				promptItem["name"] = item.Name
+			}
+			result.PromptInput = append(result.PromptInput, promptItem)
+			result.ToolResponses = append(result.ToolResponses, model.ResponsesToolResponseBlock{
+				CallID: item.CallID,
+				Name:   item.Name,
+				Type:   "function_call_output",
+			})
 		}
 	}
 
 	return result
+}
+
+func buildResponsesPromptMessageContent(content any, role string) []responsesInputSegmentItem {
+	switch typed := content.(type) {
+	case string:
+		text := safeTruncateUTF8(typed, maxCompletionLength)
+		if strings.TrimSpace(text) == "" {
+			return nil
+		}
+		return []responsesInputSegmentItem{
+			{
+				Type: "input_text",
+				Role: role,
+				Text: text,
+			},
+		}
+	case []interface{}:
+		records := make([]responsesInputSegmentItem, 0, len(typed))
+		for _, partAny := range typed {
+			part, ok := partAny.(map[string]interface{})
+			if !ok {
+				continue
+			}
+
+			partType := strings.TrimSpace(common.Interface2String(part["type"]))
+			if partType == "" {
+				partType = "input_text"
+			}
+			if partType != "input_text" && partType != "text" && partType != "output_text" {
+				continue
+			}
+
+			text := safeTruncateUTF8(common.Interface2String(part["text"]), maxCompletionLength)
+			if strings.TrimSpace(text) == "" {
+				continue
+			}
+
+			records = append(records, responsesInputSegmentItem{
+				Type: partType,
+				Role: role,
+				Text: text,
+			})
+		}
+		return records
+	default:
+		return nil
+	}
+}
+
+func selectResponsesInputSegment(items []responsesInputSegmentItem) []responsesInputSegmentItem {
+	if len(items) == 0 {
+		return nil
+	}
+
+	lastIndex := len(items) - 1
+	lastType := strings.TrimSpace(items[lastIndex].Type)
+	if lastType == "" {
+		return items
+	}
+
+	switch lastType {
+	case "output_text":
+		return selectResponsesItemsUntilBoundary(items, lastIndex, map[string]bool{
+			"function_call": true,
+			"input_text":    true,
+			"text":          true,
+		})
+	case "function_call_output":
+		return selectResponsesItemsUntilBoundary(items, lastIndex, map[string]bool{
+			"function_call": true,
+			"input_text":    true,
+			"text":          true,
+			"output_text":   true,
+		})
+	case "input_text", "text":
+		start := lastIndex
+		for start >= 0 {
+			itemType := strings.TrimSpace(items[start].Type)
+			if itemType != "input_text" && itemType != "text" {
+				break
+			}
+			start--
+		}
+		return append([]responsesInputSegmentItem(nil), items[start+1:lastIndex+1]...)
+	case "function_call":
+		return selectResponsesItemsUntilBoundary(items, lastIndex, map[string]bool{
+			"function_call_output": true,
+			"input_text":           true,
+			"text":                 true,
+			"output_text":          true,
+		})
+	default:
+		return append([]responsesInputSegmentItem(nil), items...)
+	}
+}
+
+func selectResponsesItemsUntilBoundary(items []responsesInputSegmentItem, lastIndex int, boundaries map[string]bool) []responsesInputSegmentItem {
+	start := lastIndex
+	for start >= 0 {
+		itemType := strings.TrimSpace(items[start].Type)
+		if start != lastIndex && boundaries[itemType] {
+			break
+		}
+		start--
+	}
+	return append([]responsesInputSegmentItem(nil), items[start+1:lastIndex+1]...)
 }
 
 // extractLastUserMessageTextFromResponsesInput 从 Responses API input 字段中提取最后一个用户消息的文本

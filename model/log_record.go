@@ -20,13 +20,16 @@ package model
 
 // LogDetailRecord 消费日志详细记录结构
 type LogDetailRecord struct {
-	Prompt               map[string]interface{}    `json:"prompt,omitempty"`
-	Completion           string                    `json:"completion,omitempty"`
-	Headers              map[string]string         `json:"headers,omitempty"`
-	ToolInvokes          []LogToolInvokeRecord     `json:"toolInvokes,omitempty"`
-	ClaudeRequestBlocks  []ClaudeRequestBlock      `json:"claudeRequestBlocks,omitempty"`
-	ClaudeToolResponses  []ClaudeToolResponseBlock `json:"claudeToolResponses,omitempty"`
-	ClaudeResponseBlocks []ClaudeResponseBlock     `json:"claudeResponseBlocks,omitempty"`
+	Prompt                  map[string]interface{}       `json:"prompt,omitempty"`
+	Completion              string                       `json:"completion,omitempty"`
+	Headers                 map[string]string            `json:"headers,omitempty"`
+	ToolInvokes             []LogToolInvokeRecord        `json:"toolInvokes,omitempty"`
+	ClaudeRequestBlocks     []ClaudeRequestBlock         `json:"claudeRequestBlocks,omitempty"`
+	ClaudeToolResponses     []ClaudeToolResponseBlock    `json:"claudeToolResponses,omitempty"`
+	ClaudeResponseBlocks    []ClaudeResponseBlock        `json:"claudeResponseBlocks,omitempty"`
+	ResponsesRequestBlocks  []ResponsesRequestBlock      `json:"responsesRequestBlocks,omitempty"`
+	ResponsesToolResponses  []ResponsesToolResponseBlock `json:"responsesToolResponses,omitempty"`
+	ResponsesResponseBlocks []ResponsesResponseBlock     `json:"responsesResponseBlocks,omitempty"`
 }
 
 type LogToolInvokeRecord struct {
@@ -58,6 +61,27 @@ type ClaudeToolResponseBlock struct {
 	Name      string `json:"name,omitempty"`
 	Type      string `json:"type,omitempty"`
 	Role      string `json:"role,omitempty"`
+}
+
+type ResponsesRequestBlock struct {
+	Type string `json:"type,omitempty"`
+	Role string `json:"role,omitempty"`
+	Text string `json:"text,omitempty"`
+}
+
+type ResponsesToolResponseBlock struct {
+	CallID string `json:"callId,omitempty"`
+	Name   string `json:"name,omitempty"`
+	Type   string `json:"type,omitempty"`
+}
+
+type ResponsesResponseBlock struct {
+	ID        string      `json:"id,omitempty"`
+	Type      string      `json:"type,omitempty"`
+	Content   string      `json:"content,omitempty"`
+	Name      string      `json:"name,omitempty"`
+	CallID    string      `json:"callId,omitempty"`
+	Arguments interface{} `json:"arguments,omitempty"`
 }
 
 type FullLogRecord struct {

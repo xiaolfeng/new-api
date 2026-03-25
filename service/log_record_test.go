@@ -1,6 +1,7 @@
 package service
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -231,6 +232,244 @@ func TestBuildLogRecordClaudeToolOnlyRequestDoesNotStorePromptContent(t *testing
 			Role:      "user",
 		},
 	}, record.ClaudeToolResponses)
+}
+
+func TestBuildResponsesResponseBlocksFromSSE(t *testing.T) {
+	responseBody := strings.Join([]string{
+		`{"type":"response.content_part.added","content_index":0,"item_id":"msg_1","output_index":1,"part":{"type":"output_text","text":""}}`,
+		`{"type":"response.output_text.delta","content_index":0,"item_id":"msg_1","output_index":1,"delta":"我"}`,
+		`{"type":"response.output_text.delta","content_index":0,"item_id":"msg_1","output_index":1,"delta":"先试一下"}`,
+		`{"type":"response.output_text.done","content_index":0,"item_id":"msg_1","output_index":1,"text":"我先试一下"}`,
+		`{"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","status":"in_progress","arguments":"","call_id":"call_1","name":"exec_command"},"output_index":2}`,
+		`{"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":2,"delta":"{\"cmd\":\"pwd\"}"}`,
+		`{"type":"response.function_call_arguments.done","item_id":"fc_1","output_index":2,"arguments":"{\"cmd\":\"pwd\"}"}`,
+		`{"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","status":"completed","arguments":"{\"cmd\":\"pwd\"}","call_id":"call_1","name":"exec_command"},"output_index":2}`,
+	}, "\n")
+
+	blocks := buildResponsesResponseBlocksFromSSE(responseBody)
+	require.Len(t, blocks, 2)
+
+	require.Equal(t, model.ResponsesResponseBlock{
+		ID:      "msg_1",
+		Type:    "output_text",
+		Content: "我先试一下",
+	}, blocks[0])
+	require.Equal(t, "fc_1", blocks[1].ID)
+	require.Equal(t, "function_call", blocks[1].Type)
+	require.Equal(t, "call_1", blocks[1].CallID)
+	require.Equal(t, "exec_command", blocks[1].Name)
+	require.Equal(t, map[string]any{"cmd": "pwd"}, blocks[1].Arguments)
+}
+
+func TestBuildLogRecordResponsesStructuredBlocks(t *testing.T) {
+	enableRecordConsumeLogDetailForTest(t)
+
+	relayInfo := &relaycommon.RelayInfo{
+		Request: &dto.OpenAIResponsesRequest{
+			Input: json.RawMessage(`[
+				{
+					"type":"message",
+					"role":"developer",
+					"content":[
+						{"type":"input_text","text":"<system-reminder>\n请遵循约束\n</system-reminder>"}
+					]
+				},
+				{
+					"type":"message",
+					"role":"user",
+					"content":[
+						{"type":"input_text","text":"第一段输入"},
+						{"type":"input_text","text":"第二段输入"}
+					]
+				},
+				{
+					"type":"function_call",
+					"call_id":"call_1",
+					"name":"exec_command",
+					"arguments":"{\"cmd\":\"pwd\"}"
+				},
+				{
+					"type":"function_call_output",
+					"call_id":"call_1",
+					"output":"should not store"
+				},
+				{
+					"type":"message",
+					"role":"assistant",
+					"content":[
+						{"type":"output_text","text":"上一轮输出"}
+					]
+				}
+			]`),
+		},
+		IsStream: true,
+		ResponseBody: strings.Join([]string{
+			`{"type":"response.content_part.added","content_index":0,"item_id":"msg_1","output_index":1,"part":{"type":"output_text","text":""}}`,
+			`{"type":"response.output_text.delta","content_index":0,"item_id":"msg_1","output_index":1,"delta":"开始处理"}`,
+			`{"type":"response.output_item.added","item":{"id":"fc_1","type":"function_call","status":"in_progress","arguments":"","call_id":"call_1","name":"exec_command"},"output_index":2}`,
+			`{"type":"response.function_call_arguments.delta","item_id":"fc_1","output_index":2,"delta":"{\"cmd\":\"pwd\"}"}`,
+			`{"type":"response.output_item.done","item":{"id":"fc_1","type":"function_call","status":"completed","arguments":"{\"cmd\":\"pwd\"}","call_id":"call_1","name":"exec_command"},"output_index":2}`,
+		}, "\n"),
+		CompletionText:          "开始处理",
+		FinalRequestRelayFormat: types.RelayFormatOpenAIResponses,
+	}
+
+	recordJSON := BuildLogRecord(relayInfo)
+	require.NotEmpty(t, recordJSON)
+	require.NotContains(t, recordJSON, "should not store")
+
+	var record model.LogDetailRecord
+	require.NoError(t, common.UnmarshalJsonStr(recordJSON, &record))
+	require.NotContains(t, record.Prompt, "lastUserMessage")
+	require.Equal(t, []interface{}{
+		map[string]interface{}{
+			"type":    "function_call_output",
+			"call_id": "call_1",
+			"name":    "exec_command",
+		},
+		map[string]interface{}{
+			"type": "output_text",
+			"text": "上一轮输出",
+			"role": "assistant",
+		},
+	}, record.Prompt["input"])
+	require.Empty(t, record.ResponsesRequestBlocks)
+	require.Equal(t, []model.ResponsesToolResponseBlock{
+		{
+			CallID: "call_1",
+			Name:   "exec_command",
+			Type:   "function_call_output",
+		},
+	}, record.ResponsesToolResponses)
+	require.Len(t, record.ResponsesResponseBlocks, 2)
+	require.Equal(t, model.ResponsesResponseBlock{
+		ID:      "msg_1",
+		Type:    "output_text",
+		Content: "开始处理",
+	}, record.ResponsesResponseBlocks[0])
+	require.Equal(t, "function_call", record.ResponsesResponseBlocks[1].Type)
+	require.Len(t, record.ToolInvokes, 1)
+	require.Equal(t, "call_1", record.ToolInvokes[0].ID)
+	require.Equal(t, "exec_command", record.ToolInvokes[0].Name)
+	require.Equal(t, map[string]any{"cmd": "pwd"}, record.ToolInvokes[0].Input)
+}
+
+func TestParseResponsesInputForRecordUsesOnlyLatestCallbackSegment(t *testing.T) {
+	recordData := parseResponsesInputForRecord(json.RawMessage(`[
+		{
+			"type":"message",
+			"role":"user",
+			"content":[
+				{"type":"input_text","text":"第一轮输入"}
+			]
+		},
+		{
+			"type":"function_call",
+			"call_id":"call_1",
+			"name":"exec_command",
+			"arguments":"{\"cmd\":\"pwd\"}"
+		},
+		{
+			"type":"function_call_output",
+			"call_id":"call_1",
+			"name":"exec_command",
+			"output":"tool output"
+		}
+	]`))
+
+	require.Equal(t, []map[string]interface{}{
+		{
+			"type":    "function_call_output",
+			"call_id": "call_1",
+			"name":    "exec_command",
+		},
+	}, recordData.PromptInput)
+	require.Empty(t, recordData.RequestBlocks)
+	require.Equal(t, []model.ResponsesToolResponseBlock{
+		{
+			CallID: "call_1",
+			Name:   "exec_command",
+			Type:   "function_call_output",
+		},
+	}, recordData.ToolResponses)
+	require.Empty(t, recordData.LastUserText)
+}
+
+func TestParseResponsesInputForRecordUsesOnlyLatestOutputSegment(t *testing.T) {
+	recordData := parseResponsesInputForRecord(json.RawMessage(`[
+		{
+			"type":"message",
+			"role":"user",
+			"content":[
+				{"type":"input_text","text":"第一轮输入"}
+			]
+		},
+		{
+			"type":"function_call",
+			"call_id":"call_1",
+			"name":"exec_command",
+			"arguments":"{\"cmd\":\"pwd\"}"
+		},
+		{
+			"type":"function_call_output",
+			"call_id":"call_1",
+			"name":"exec_command",
+			"output":"tool output"
+		},
+		{
+			"type":"message",
+			"role":"assistant",
+			"content":[
+				{"type":"output_text","text":"最终输出"}
+			]
+		}
+	]`))
+
+	require.Equal(t, []map[string]interface{}{
+		{
+			"type":    "function_call_output",
+			"call_id": "call_1",
+			"name":    "exec_command",
+		},
+		{
+			"type": "output_text",
+			"text": "最终输出",
+			"role": "assistant",
+		},
+	}, recordData.PromptInput)
+	require.Empty(t, recordData.RequestBlocks)
+	require.Equal(t, []model.ResponsesToolResponseBlock{
+		{
+			CallID: "call_1",
+			Name:   "exec_command",
+			Type:   "function_call_output",
+		},
+	}, recordData.ToolResponses)
+	require.Empty(t, recordData.LastUserText)
+}
+
+func TestBuildLogRecordNonResponsesSkipsStructuredBlocks(t *testing.T) {
+	enableRecordConsumeLogDetailForTest(t)
+
+	relayInfo := &relaycommon.RelayInfo{
+		Request: &dto.OpenAIResponsesRequest{
+			Input: json.RawMessage(`[{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}]`),
+		},
+		IsStream:                true,
+		ResponseBody:            `{"type":"response.output_text.delta","content_index":0,"item_id":"msg_1","output_index":1,"delta":"hi"}`,
+		CompletionText:          "hi",
+		FinalRequestRelayFormat: types.RelayFormatOpenAI,
+	}
+
+	recordJSON := BuildLogRecord(relayInfo)
+	require.NotEmpty(t, recordJSON)
+
+	var record model.LogDetailRecord
+	require.NoError(t, common.UnmarshalJsonStr(recordJSON, &record))
+	require.Empty(t, record.ResponsesRequestBlocks)
+	require.Empty(t, record.ResponsesToolResponses)
+	require.Empty(t, record.ResponsesResponseBlocks)
+	require.Equal(t, "hi", record.Completion)
 }
 
 func TestSanitizeToolLogValueTruncatesLongNestedStringValues(t *testing.T) {

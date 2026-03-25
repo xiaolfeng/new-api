@@ -581,6 +581,110 @@ function getSourceColor(source) {
  * @param {object|string} record - 日志记录对象
  * @returns {string|null} 类型名称，Codex 返回 null
  */
+function flattenResponsesPromptInputItems(input) {
+  if (!Array.isArray(input)) {
+    return [];
+  }
+
+  const items = [];
+  input.forEach((item) => {
+    if (!item || typeof item !== 'object') {
+      return;
+    }
+
+    if (item.type === 'message') {
+      const content = Array.isArray(item.content) ? item.content : [];
+      content.forEach((part) => {
+        if (!part || typeof part !== 'object') {
+          return;
+        }
+        if (!['input_text', 'text', 'output_text'].includes(part.type)) {
+          return;
+        }
+        items.push({
+          type: part.type,
+          role: item.role,
+          text: part.text,
+        });
+      });
+      return;
+    }
+
+    if (['function_call', 'function_call_output', 'input_text', 'text', 'output_text'].includes(item.type)) {
+      items.push(item);
+    }
+  });
+
+  return items;
+}
+
+function inferResponsesInteractionType(items) {
+  if (!Array.isArray(items) || items.length === 0) {
+    return null;
+  }
+
+  const meaningfulItems = items.filter((item) => item && typeof item === 'object' && item.type);
+  if (meaningfulItems.length === 0) {
+    return null;
+  }
+
+  const lastItem = meaningfulItems[meaningfulItems.length - 1];
+  if (lastItem.type === 'input_text' || lastItem.type === 'text') {
+    return '输入';
+  }
+
+  if (lastItem.type === 'function_call_output') {
+    return '回调';
+  }
+
+  if (lastItem.type === 'function_call') {
+    return '回调';
+  }
+
+  if (lastItem.type === 'output_text') {
+    for (let i = meaningfulItems.length - 2; i >= 0; i -= 1) {
+      if (meaningfulItems[i].type === 'function_call_output') {
+        return '输出';
+      }
+    }
+  }
+
+  return null;
+}
+
+function inferResponsesStructuredInteractionType({
+  responsesRequestBlocks,
+  responsesToolResponses,
+  responsesResponseBlocks,
+}) {
+  const requestBlocks = Array.isArray(responsesRequestBlocks) ? responsesRequestBlocks : [];
+  const toolResponses = Array.isArray(responsesToolResponses) ? responsesToolResponses : [];
+  const responseBlocks = Array.isArray(responsesResponseBlocks) ? responsesResponseBlocks : [];
+
+  const hasRequestInput = requestBlocks.some(
+    (block) => block && typeof block.text === 'string' && block.text.trim() !== '',
+  );
+  const hasToolResponse = toolResponses.length > 0;
+  const hasTextOutput = responseBlocks.some(
+    (block) => block?.type === 'output_text' && typeof block.content === 'string' && block.content.trim() !== '',
+  );
+  const hasToolUse = responseBlocks.some((block) => block?.type === 'function_call');
+
+  if (hasRequestInput) {
+    return '输入';
+  }
+
+  if (!hasRequestInput && hasTextOutput && !hasToolUse) {
+    return '输出';
+  }
+
+  if (hasToolResponse || hasToolUse || responseBlocks.length > 0) {
+    return '回调';
+  }
+
+  return null;
+}
+
 function parseInteractionType(record) {
   if (!record) return null;
 
@@ -600,6 +704,16 @@ function parseInteractionType(record) {
     const claudeResponseBlocks = Array.isArray(recordData?.claudeResponseBlocks)
       ? recordData.claudeResponseBlocks
       : [];
+    const responsesRequestBlocks = Array.isArray(recordData?.responsesRequestBlocks)
+      ? recordData.responsesRequestBlocks
+      : [];
+    const responsesToolResponses = Array.isArray(recordData?.responsesToolResponses)
+      ? recordData.responsesToolResponses
+      : [];
+    const responsesResponseBlocks = Array.isArray(recordData?.responsesResponseBlocks)
+      ? recordData.responsesResponseBlocks
+      : [];
+    const responsesPromptItems = flattenResponsesPromptInputItems(prompt?.input);
 
     // 检查 User-Agent 是否为 Codex
     const userAgent = Object.keys(headers).find(
@@ -612,31 +726,58 @@ function parseInteractionType(record) {
       }
     }
 
+    const responsesStructuredType = inferResponsesStructuredInteractionType({
+      responsesRequestBlocks,
+      responsesToolResponses,
+      responsesResponseBlocks,
+    });
+    if (responsesStructuredType) {
+      return responsesStructuredType;
+    }
+
+    const responsesType = inferResponsesInteractionType(responsesPromptItems);
+    if (responsesType) {
+      return responsesType;
+    }
+
     const lastUserMessage = prompt?.lastUserMessage || {};
     const legacyToolInvokes = Array.isArray(recordData?.toolInvokes)
       ? recordData.toolInvokes
       : [];
+    const hasPromptObjectContent =
+      typeof prompt === 'object' &&
+      prompt !== null &&
+      !Array.isArray(prompt) &&
+      Object.keys(prompt).some((key) => key !== 'input');
 
     const hasNonToolInput =
       (typeof prompt === 'string' && prompt.trim() !== '') ||
       (lastUserMessage.content && lastUserMessage.content.trim() !== '') ||
       claudeRequestBlocks.length > 0 ||
-      (typeof prompt === 'object' && !Array.isArray(prompt) && Object.keys(prompt).length > 0) ||
+      responsesRequestBlocks.length > 0 ||
+      hasPromptObjectContent ||
       (Array.isArray(prompt) && prompt.length > 0);
-    const hasToolInput = claudeToolResponses.length > 0;
+    const hasToolInput =
+      claudeToolResponses.length > 0 ||
+      responsesToolResponses.length > 0;
     const hasTextOutput =
       (typeof completion === 'string' && completion.trim() !== '') ||
       claudeResponseBlocks.some(
         (block) => block?.type === 'text' && typeof block.content === 'string' && block.content.trim() !== '',
+      ) ||
+      responsesResponseBlocks.some(
+        (block) => block?.type === 'output_text' && typeof block.content === 'string' && block.content.trim() !== '',
       );
     const hasAnyOutput =
       hasTextOutput ||
       (typeof completion === 'object' && completion !== null &&
         ((Array.isArray(completion) && completion.length > 0) ||
           (!Array.isArray(completion) && Object.keys(completion).length > 0))) ||
-      claudeResponseBlocks.length > 0;
+      claudeResponseBlocks.length > 0 ||
+      responsesResponseBlocks.length > 0;
     const hasToolUse =
       claudeResponseBlocks.some((block) => block?.type === 'tool_use') ||
+      responsesResponseBlocks.some((block) => block?.type === 'function_call') ||
       legacyToolInvokes.length > 0;
 
     if (hasNonToolInput) {

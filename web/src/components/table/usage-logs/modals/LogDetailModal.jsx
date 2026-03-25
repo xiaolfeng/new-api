@@ -69,11 +69,25 @@ const LogDetailModal = ({
   const claudeResponseBlocks = Array.isArray(record?.claudeResponseBlocks)
     ? record.claudeResponseBlocks
     : [];
+  const responsesRequestBlocks = Array.isArray(record?.responsesRequestBlocks)
+    ? record.responsesRequestBlocks
+    : [];
+  const responsesToolResponses = Array.isArray(record?.responsesToolResponses)
+    ? record.responsesToolResponses
+    : [];
+  const responsesResponseBlocks = Array.isArray(record?.responsesResponseBlocks)
+    ? record.responsesResponseBlocks
+    : [];
   const hasClaudeStructuredRecord =
     !isFullLogRecord &&
     (claudeRequestBlocks.length > 0 ||
       claudeToolResponses.length > 0 ||
       claudeResponseBlocks.length > 0);
+  const hasResponsesStructuredRecord =
+    !isFullLogRecord &&
+    (responsesRequestBlocks.length > 0 ||
+      responsesToolResponses.length > 0 ||
+      responsesResponseBlocks.length > 0);
   const claudeResponseSections = useMemo(() => {
     const thinkingParts = [];
     const answerParts = [];
@@ -110,6 +124,36 @@ const LogDetailModal = ({
       toolUses,
     };
   }, [claudeResponseBlocks]);
+  const responsesResponseSections = useMemo(() => {
+    const answerParts = [];
+    const toolUses = [];
+
+    responsesResponseBlocks.forEach((block, index) => {
+      if (!block || typeof block !== 'object') {
+        return;
+      }
+
+      if (block.type === 'output_text' && block.content) {
+        answerParts.push(block.content);
+        return;
+      }
+
+      if (block.type === 'function_call') {
+        toolUses.push({
+          order: toolUses.length + 1,
+          id: block.id || block.callId || `responses-tool-${index}`,
+          callId: block.callId || block.id,
+          name: block.name,
+          arguments: block.arguments,
+        });
+      }
+    });
+
+    return {
+      answer: answerParts.join('\n\n'),
+      toolUses,
+    };
+  }, [responsesResponseBlocks]);
 
   const renderSimpleTableValue = (value) => (
     <pre style={{
@@ -242,6 +286,121 @@ const LogDetailModal = ({
     const dataSource = toolUses.map((item, index) => ({
       ...item,
       rowKey: item.id || `${item.name || 'tool-use'}-${index}`,
+    }));
+
+    return (
+      <Table
+        columns={columns}
+        dataSource={dataSource}
+        pagination={false}
+        size='small'
+        bordered
+        rowKey='rowKey'
+        style={{ fontSize: 12 }}
+      />
+    );
+  };
+
+  const renderResponsesToolResponsesTable = () => {
+    if (responsesToolResponses.length === 0) {
+      return <Empty description={t('无工具响应记录')} style={{ padding: '20px 0' }} />;
+    }
+
+    const columns = [
+      {
+        title: t('顺序'),
+        dataIndex: 'order',
+        key: 'order',
+        width: 80,
+      },
+      {
+        title: t('工具'),
+        dataIndex: 'name',
+        key: 'name',
+        render: (text, row) => <Text strong>{text || row.callId || '-'}</Text>,
+      },
+      {
+        title: t('调用 ID'),
+        dataIndex: 'callId',
+        key: 'callId',
+        render: (text) => (
+          <Text
+            style={{
+              wordBreak: 'break-all',
+              maxWidth: 500,
+            }}
+          >
+            {text || '-'}
+          </Text>
+        ),
+      },
+    ];
+
+    const dataSource = responsesToolResponses.map((item, index) => ({
+      ...item,
+      order: index + 1,
+      rowKey: item.callId || `${item.name || 'responses-tool-response'}-${index}`,
+    }));
+
+    return (
+      <Table
+        columns={columns}
+        dataSource={dataSource}
+        pagination={false}
+        size='small'
+        bordered
+        rowKey='rowKey'
+        style={{ fontSize: 12 }}
+      />
+    );
+  };
+
+  const renderResponsesToolUsesTable = (toolUses) => {
+    if (toolUses.length === 0) {
+      return <Empty description={t('无工具调用记录')} style={{ padding: '20px 0' }} />;
+    }
+
+    const columns = [
+      {
+        title: t('顺序'),
+        dataIndex: 'order',
+        key: 'order',
+        width: 80,
+      },
+      {
+        title: t('工具'),
+        dataIndex: 'name',
+        key: 'name',
+        width: 180,
+        render: (text, row) => <Text strong>{text || row.callId || row.id || '-'}</Text>,
+      },
+      {
+        title: t('调用 ID'),
+        dataIndex: 'callId',
+        key: 'callId',
+        width: 220,
+        render: (text, row) => (
+          <Text
+            style={{
+              wordBreak: 'break-all',
+              maxWidth: 500,
+            }}
+          >
+            {text || row.id || '-'}
+          </Text>
+        ),
+      },
+      {
+        title: t('参数'),
+        dataIndex: 'arguments',
+        key: 'arguments',
+        render: renderHorizontalScrollableTableValue,
+      },
+    ];
+
+    const dataSource = toolUses.map((item, index) => ({
+      ...item,
+      rowKey: item.callId || item.id || `${item.name || 'responses-tool-use'}-${index}`,
     }));
 
     return (
@@ -461,6 +620,78 @@ const LogDetailModal = ({
       );
     }
 
+    if (hasResponsesStructuredRecord) {
+      if (responsesRequestBlocks.length === 0 && responsesToolResponses.length === 0) {
+        return <Empty description={t('无请求内容记录')} style={{ padding: '20px 0' }} />;
+      }
+
+      return (
+        <div style={{ padding: '8px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <Button
+              icon={<IconCopy />}
+              size='small'
+              theme='borderless'
+              onClick={() => copySection(t('请求内容'), {
+                requestBlocks: responsesRequestBlocks,
+                toolResponses: responsesToolResponses,
+              })}
+            >
+              {t('复制')}
+            </Button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <Text strong>{t('输入内容')}</Text>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {responsesRequestBlocks.length > 0 ? (
+                  responsesRequestBlocks.map((block, index) => (
+                    <div
+                      key={`${block.type || 'block'}-${block.role || 'role'}-${index}`}
+                      style={{
+                        border: '1px solid var(--semi-color-border)',
+                        borderRadius: 10,
+                        background: 'var(--semi-color-bg-1)',
+                        padding: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, gap: 12 }}>
+                        <Text strong>{t('输入片段')} #{index + 1}</Text>
+                        <Text type='tertiary' size='small'>
+                          {[block.role, block.type].filter(Boolean).join(' · ') || 'input_text'}
+                        </Text>
+                      </div>
+                      {block.text ? (
+                        renderClaudeRequestBlockContent(block.text)
+                      ) : (
+                        <Text type='tertiary'>{t('该输入片段无可展示文本')}</Text>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <Empty description={t('无输入片段记录')} style={{ padding: '20px 0' }} />
+                )}
+              </div>
+            </div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text strong>{t('工具响应')}</Text>
+                <Button
+                  icon={<IconCopy />}
+                  size='small'
+                  theme='borderless'
+                  onClick={() => copySection(t('工具响应'), responsesToolResponses)}
+                >
+                  {t('复制')}
+                </Button>
+              </div>
+              {renderResponsesToolResponsesTable()}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     if (hasClaudeStructuredRecord) {
       if (claudeRequestBlocks.length === 0 && claudeToolResponses.length === 0) {
         return <Empty description={t('无请求内容记录')} style={{ padding: '20px 0' }} />;
@@ -591,6 +822,67 @@ const LogDetailModal = ({
   };
 
   const renderCompletion = () => {
+    if (hasResponsesStructuredRecord) {
+      const { answer, toolUses } = responsesResponseSections;
+      const hasAnswer = answer.trim() !== '';
+      const hasToolUses = toolUses.length > 0;
+
+      if (!hasAnswer && !hasToolUses) {
+        return <Empty description={t('无响应内容记录')} style={{ padding: '20px 0' }} />;
+      }
+
+      return (
+        <div style={{ padding: '8px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <Button
+              icon={<IconCopy />}
+              size='small'
+              theme='borderless'
+              onClick={() =>
+                copySection(t('响应内容'), {
+                  answer,
+                  toolUses,
+                })
+              }
+            >
+              {t('复制')}
+            </Button>
+          </div>
+          <div
+            style={{
+              border: '1px solid var(--semi-color-border)',
+              borderRadius: 10,
+              background: 'var(--semi-color-bg-1)',
+              padding: 12,
+            }}
+          >
+            <Text strong>{t('回答内容')}</Text>
+            <div style={{ marginTop: 8 }}>
+              {hasAnswer ? (
+                renderContentBlock(answer)
+              ) : (
+                <Empty description={t('无回答内容记录')} style={{ padding: '28px 0' }} />
+              )}
+            </div>
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text strong>{t('工具调用顺序')}</Text>
+              <Button
+                icon={<IconCopy />}
+                size='small'
+                theme='borderless'
+                onClick={() => copySection(t('工具调用顺序'), toolUses)}
+              >
+                {t('复制')}
+              </Button>
+            </div>
+            {renderResponsesToolUsesTable(toolUses)}
+          </div>
+        </div>
+      );
+    }
+
     if (claudeResponseBlocks.length > 0) {
       const { thinking, answer, toolUses } = claudeResponseSections;
       const hasThinking = thinking.trim() !== '';
@@ -821,7 +1113,7 @@ const LogDetailModal = ({
       content: renderCompletion(),
       key: 'completion',
     },
-    ...(!hasClaudeStructuredRecord ? [{
+    ...(!(hasClaudeStructuredRecord || hasResponsesStructuredRecord) ? [{
       header: t('工具调用'),
       content: renderToolInvokes(),
       key: 'toolInvokes',
