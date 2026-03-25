@@ -28,6 +28,7 @@ import (
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/types"
 )
 
 const maxCompletionLength = 5000
@@ -53,6 +54,7 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	}
 
 	record := model.LogDetailRecord{}
+	isClaudeRecord := isClaudeStructuredRecord(relayInfo)
 
 	// 1. Prompt (从 relayInfo.Request 获取 messages)
 	if relayInfo != nil && relayInfo.Request != nil {
@@ -64,6 +66,10 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		case *dto.ClaudeRequest:
 			if req != nil {
 				record.Prompt = buildPromptRecordFromClaude(req)
+				if isClaudeRecord {
+					record.ClaudeRequestBlocks = buildClaudeRequestBlocks(req)
+					record.ClaudeToolResponses = buildClaudeToolResponseBlocks(req)
+				}
 			}
 		case *dto.GeminiChatRequest:
 			if req != nil {
@@ -81,18 +87,30 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		record.Completion = safeTruncateUTF8(relayInfo.CompletionText, maxCompletionLength)
 	}
 
+	if shouldRecordClaudeResponseBlocks(relayInfo) {
+		record.ClaudeResponseBlocks = buildClaudeResponseBlocksFromSSE(relayInfo.ResponseBody)
+	}
+
 	// 3. Headers (排除敏感信息)
 	if relayInfo != nil && relayInfo.RequestHeaders != nil {
 		record.Headers = filterSensitiveHeaders(relayInfo.RequestHeaders)
 	}
 
 	// 4. Tool invokes (Claude/Anthropic tool_use + tool_result)
-	if relayInfo != nil {
+	if len(record.ClaudeResponseBlocks) > 0 {
+		record.ToolInvokes = buildClaudeToolInvokeRecordsFromBlocks(record.ClaudeResponseBlocks)
+	} else if relayInfo != nil {
 		record.ToolInvokes = buildToolInvokeRecords(relayInfo)
 	}
 
 	// 如果所有字段都为空，返回空字符串
-	if len(record.Prompt) == 0 && record.Completion == "" && len(record.Headers) == 0 && len(record.ToolInvokes) == 0 {
+	if len(record.Prompt) == 0 &&
+		record.Completion == "" &&
+		len(record.Headers) == 0 &&
+		len(record.ToolInvokes) == 0 &&
+		len(record.ClaudeRequestBlocks) == 0 &&
+		len(record.ClaudeToolResponses) == 0 &&
+		len(record.ClaudeResponseBlocks) == 0 {
 		return ""
 	}
 
@@ -101,6 +119,210 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		return ""
 	}
 	return string(jsonBytes)
+}
+
+func isClaudeStructuredRecord(relayInfo *relaycommon.RelayInfo) bool {
+	if relayInfo == nil {
+		return false
+	}
+	return relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatClaude
+}
+
+func shouldRecordClaudeResponseBlocks(relayInfo *relaycommon.RelayInfo) bool {
+	if !isClaudeStructuredRecord(relayInfo) || relayInfo == nil || !relayInfo.IsStream || strings.TrimSpace(relayInfo.ResponseBody) == "" {
+		return false
+	}
+	return true
+}
+
+type claudeResponseBlockState struct {
+	Block        model.ClaudeResponseBlock
+	Content      strings.Builder
+	ToolInputRaw strings.Builder
+}
+
+func buildClaudeResponseBlocksFromSSE(responseBody string) []model.ClaudeResponseBlock {
+	responseBody = strings.TrimSpace(responseBody)
+	if responseBody == "" {
+		return nil
+	}
+
+	states := make(map[int]*claudeResponseBlockState)
+	stateOrder := make([]int, 0)
+	result := make([]model.ClaudeResponseBlock, 0)
+
+	upsertState := func(index int) *claudeResponseBlockState {
+		if state, ok := states[index]; ok {
+			return state
+		}
+		state := &claudeResponseBlockState{}
+		states[index] = state
+		stateOrder = append(stateOrder, index)
+		return state
+	}
+
+	flushState := func(index int) {
+		state, ok := states[index]
+		if !ok {
+			return
+		}
+		if block, ok := finalizeClaudeResponseBlock(state); ok {
+			result = append(result, block)
+		}
+		delete(states, index)
+	}
+
+	lines := strings.Split(responseBody, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || line == "[DONE]" {
+			continue
+		}
+
+		var claudeResponse dto.ClaudeResponse
+		if err := common.UnmarshalJsonStr(line, &claudeResponse); err != nil {
+			continue
+		}
+
+		index := claudeResponse.GetIndex()
+		switch claudeResponse.Type {
+		case "content_block_start":
+			flushState(index)
+			if claudeResponse.ContentBlock == nil {
+				continue
+			}
+			state := upsertState(index)
+			seedClaudeResponseBlockState(state, claudeResponse.ContentBlock)
+		case "content_block_delta":
+			if claudeResponse.Delta == nil {
+				continue
+			}
+			state := upsertState(index)
+			applyClaudeResponseDelta(state, claudeResponse.Delta)
+		case "content_block_stop":
+			flushState(index)
+		}
+	}
+
+	for _, index := range stateOrder {
+		flushState(index)
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func seedClaudeResponseBlockState(state *claudeResponseBlockState, contentBlock *dto.ClaudeMediaMessage) {
+	if state == nil || contentBlock == nil {
+		return
+	}
+
+	state.Block.ID = strings.TrimSpace(contentBlock.Id)
+	state.Block.Type = strings.TrimSpace(contentBlock.Type)
+
+	switch state.Block.Type {
+	case "thinking":
+		if contentBlock.Thinking != nil {
+			state.Content.WriteString(*contentBlock.Thinking)
+		}
+	case "text":
+		if contentBlock.Text != nil {
+			state.Content.WriteString(*contentBlock.Text)
+		}
+	case "tool_use":
+		state.Block.Name = strings.TrimSpace(contentBlock.Name)
+		if contentBlock.Input != nil {
+			state.Block.Input = sanitizeToolLogValue(contentBlock.Input)
+		}
+	}
+}
+
+func applyClaudeResponseDelta(state *claudeResponseBlockState, delta *dto.ClaudeMediaMessage) {
+	if state == nil || delta == nil {
+		return
+	}
+
+	switch delta.Type {
+	case "thinking_delta":
+		if state.Block.Type == "" {
+			state.Block.Type = "thinking"
+		}
+		if delta.Thinking != nil {
+			state.Content.WriteString(*delta.Thinking)
+		}
+	case "text_delta":
+		if state.Block.Type == "" {
+			state.Block.Type = "text"
+		}
+		if delta.Text != nil {
+			state.Content.WriteString(*delta.Text)
+		}
+	case "input_json_delta":
+		if state.Block.Type == "" {
+			state.Block.Type = "tool_use"
+		}
+		if delta.PartialJson != nil {
+			state.ToolInputRaw.WriteString(*delta.PartialJson)
+		}
+	}
+}
+
+func finalizeClaudeResponseBlock(state *claudeResponseBlockState) (model.ClaudeResponseBlock, bool) {
+	if state == nil {
+		return model.ClaudeResponseBlock{}, false
+	}
+
+	block := state.Block
+	switch block.Type {
+	case "thinking", "text":
+		block.Content = safeTruncateUTF8(state.Content.String(), maxCompletionLength)
+		if strings.TrimSpace(block.Content) == "" {
+			return model.ClaudeResponseBlock{}, false
+		}
+		return block, true
+	case "tool_use":
+		raw := strings.TrimSpace(state.ToolInputRaw.String())
+		if raw != "" {
+			var input any
+			if err := common.UnmarshalJsonStr(raw, &input); err != nil {
+				input = map[string]any{"_raw": raw}
+			}
+			block.Input = sanitizeToolLogValue(input)
+		}
+		if strings.TrimSpace(block.Name) == "" && block.Input == nil && strings.TrimSpace(block.ID) == "" {
+			return model.ClaudeResponseBlock{}, false
+		}
+		return block, true
+	default:
+		return model.ClaudeResponseBlock{}, false
+	}
+}
+
+func buildClaudeToolInvokeRecordsFromBlocks(blocks []model.ClaudeResponseBlock) []model.LogToolInvokeRecord {
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	records := make([]model.LogToolInvokeRecord, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type != "tool_use" {
+			continue
+		}
+		if strings.TrimSpace(block.Name) == "" && block.Input == nil && strings.TrimSpace(block.ID) == "" {
+			continue
+		}
+		records = append(records, model.LogToolInvokeRecord{
+			ID:    block.ID,
+			Name:  block.Name,
+			Input: block.Input,
+		})
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	return records
 }
 
 func BuildFullLogRecord(relayInfo *relaycommon.RelayInfo) string {
@@ -250,35 +472,181 @@ func buildPromptRecordFromClaude(req *dto.ClaudeRequest) map[string]interface{} 
 	}
 
 	result := make(map[string]interface{})
+	lastUserMessage, requestBlocks := extractLastClaudeUserPrompt(req)
+	if lastUserMessage == nil {
+		return nil
+	}
 
-	// 只提取最后一个用户消息
-	if len(req.Messages) > 0 {
-		// 从后向前查找最后一个用户消息
-		for i := len(req.Messages) - 1; i >= 0; i-- {
-			msg := req.Messages[i]
-			if msg.Role == "user" {
-				m := make(map[string]interface{})
-				m["role"] = msg.Role
-				if msg.IsStringContent() {
-					m["content"] = msg.GetStringContent()
-				} else if contents, _ := msg.ParseContent(); len(contents) > 0 {
-					textParts := make([]string, 0)
-					for _, c := range contents {
-						if c.Text != nil && *c.Text != "" {
-							textParts = append(textParts, *c.Text)
-						}
-					}
-					if len(textParts) > 0 {
-						m["content"] = strings.Join(textParts, "\n")
-					}
-				}
-				result["lastUserMessage"] = m
-				break
-			}
+	result["lastUserMessage"] = lastUserMessage
+	if len(requestBlocks) > 0 {
+		result["claudeRequestBlocks"] = requestBlocks
+	}
+	return result
+}
+
+func buildClaudeRequestBlocks(req *dto.ClaudeRequest) []model.ClaudeRequestBlock {
+	_, requestBlocks := extractLastClaudeUserPrompt(req)
+	if len(requestBlocks) == 0 {
+		return nil
+	}
+	return requestBlocks
+}
+
+func buildClaudeToolResponseBlocks(req *dto.ClaudeRequest) []model.ClaudeToolResponseBlock {
+	if req == nil || len(req.Messages) == 0 {
+		return nil
+	}
+
+	lastUserMessage := findLastClaudeUserMessage(req)
+	if lastUserMessage == nil || lastUserMessage.IsStringContent() {
+		return nil
+	}
+
+	toolNameMap := buildClaudeToolNameMap(req)
+	contents, err := lastUserMessage.ParseContent()
+	if err != nil || len(contents) == 0 {
+		return nil
+	}
+
+	blocks := make([]model.ClaudeToolResponseBlock, 0)
+	for _, content := range contents {
+		if strings.TrimSpace(content.Type) != "tool_result" {
+			continue
+		}
+		toolUseID := strings.TrimSpace(content.ToolUseId)
+		if toolUseID == "" {
+			continue
+		}
+		name := strings.TrimSpace(content.Name)
+		if name == "" {
+			name = toolNameMap[toolUseID]
+		}
+		blocks = append(blocks, model.ClaudeToolResponseBlock{
+			ToolUseID: toolUseID,
+			Name:      name,
+			Type:      "tool_result",
+			Role:      strings.TrimSpace(lastUserMessage.Role),
+		})
+	}
+
+	if len(blocks) == 0 {
+		return nil
+	}
+	return blocks
+}
+
+func extractLastClaudeUserPrompt(req *dto.ClaudeRequest) (map[string]interface{}, []model.ClaudeRequestBlock) {
+	lastUserMessage := findLastClaudeUserMessage(req)
+	if lastUserMessage == nil {
+		return nil, nil
+	}
+
+	requestBlocks := make([]model.ClaudeRequestBlock, 0)
+	messageRecord := map[string]interface{}{
+		"role": strings.TrimSpace(lastUserMessage.Role),
+	}
+
+	if lastUserMessage.IsStringContent() {
+		content := safeTruncateUTF8(lastUserMessage.GetStringContent(), maxCompletionLength)
+		if strings.TrimSpace(content) == "" {
+			return nil, nil
+		}
+		requestBlocks = append(requestBlocks, model.ClaudeRequestBlock{
+			Type: "text",
+			Text: content,
+		})
+		messageRecord["content"] = content
+		messageRecord["contentList"] = requestBlocks
+		return messageRecord, requestBlocks
+	}
+
+	contents, err := lastUserMessage.ParseContent()
+	if err != nil || len(contents) == 0 {
+		return nil, nil
+	}
+
+	textParts := make([]string, 0, len(contents))
+	for _, content := range contents {
+		block, ok := buildClaudeRequestBlock(content)
+		if !ok {
+			continue
+		}
+		requestBlocks = append(requestBlocks, block)
+		if strings.TrimSpace(block.Text) != "" {
+			textParts = append(textParts, block.Text)
 		}
 	}
 
-	return result
+	if len(requestBlocks) == 0 {
+		return nil, nil
+	}
+	if len(textParts) > 0 {
+		messageRecord["content"] = strings.Join(textParts, "\n")
+	}
+	messageRecord["contentList"] = requestBlocks
+	return messageRecord, requestBlocks
+}
+
+func buildClaudeRequestBlock(content dto.ClaudeMediaMessage) (model.ClaudeRequestBlock, bool) {
+	blockType := strings.TrimSpace(content.Type)
+	text := ""
+	if content.Text != nil {
+		text = safeTruncateUTF8(*content.Text, maxCompletionLength)
+	}
+	if blockType == "" {
+		blockType = "text"
+	}
+	if blockType == "tool_result" {
+		return model.ClaudeRequestBlock{}, false
+	}
+	if strings.TrimSpace(blockType) == "" {
+		return model.ClaudeRequestBlock{}, false
+	}
+	if blockType == "text" && strings.TrimSpace(text) == "" {
+		return model.ClaudeRequestBlock{}, false
+	}
+	return model.ClaudeRequestBlock{
+		Type: blockType,
+		Text: text,
+	}, true
+}
+
+func findLastClaudeUserMessage(req *dto.ClaudeRequest) *dto.ClaudeMessage {
+	if req == nil || len(req.Messages) == 0 {
+		return nil
+	}
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if req.Messages[i].Role == "user" {
+			return &req.Messages[i]
+		}
+	}
+	return nil
+}
+
+func buildClaudeToolNameMap(req *dto.ClaudeRequest) map[string]string {
+	if req == nil || len(req.Messages) == 0 {
+		return nil
+	}
+
+	toolNameMap := make(map[string]string)
+	for _, message := range req.Messages {
+		contents, err := message.ParseContent()
+		if err != nil || len(contents) == 0 {
+			continue
+		}
+		for _, content := range contents {
+			if strings.TrimSpace(content.Type) != "tool_use" {
+				continue
+			}
+			toolUseID := strings.TrimSpace(content.Id)
+			name := strings.TrimSpace(content.Name)
+			if toolUseID == "" || name == "" {
+				continue
+			}
+			toolNameMap[toolUseID] = name
+		}
+	}
+	return toolNameMap
 }
 
 // buildPromptRecordFromGemini 从 Gemini 格式请求中构建 prompt 记录

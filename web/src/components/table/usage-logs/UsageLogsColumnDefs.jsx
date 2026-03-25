@@ -589,6 +589,17 @@ function parseInteractionType(record) {
     const headers = recordData?.request?.headers || recordData?.headers || {};
     const prompt = recordData?.request?.body || recordData?.prompt || {};
     const completion = recordData?.response?.body || recordData?.completion || '';
+    const claudeRequestBlocks = Array.isArray(recordData?.claudeRequestBlocks)
+      ? recordData.claudeRequestBlocks
+      : Array.isArray(prompt?.claudeRequestBlocks)
+        ? prompt.claudeRequestBlocks
+        : [];
+    const claudeToolResponses = Array.isArray(recordData?.claudeToolResponses)
+      ? recordData.claudeToolResponses
+      : [];
+    const claudeResponseBlocks = Array.isArray(recordData?.claudeResponseBlocks)
+      ? recordData.claudeResponseBlocks
+      : [];
 
     // 检查 User-Agent 是否为 Codex
     const userAgent = Object.keys(headers).find(
@@ -606,10 +617,12 @@ function parseInteractionType(record) {
     const hasContent =
       (typeof prompt === 'string' && prompt.trim() !== '') ||
       (lastUserMessage.content && lastUserMessage.content.trim() !== '') ||
+      claudeRequestBlocks.length > 0 ||
       (typeof prompt === 'object' && !Array.isArray(prompt) && Object.keys(prompt).length > 0) ||
       (Array.isArray(prompt) && prompt.length > 0);
     const hasCompletion =
       (typeof completion === 'string' && completion.trim() !== '') ||
+      claudeResponseBlocks.length > 0 ||
       (typeof completion === 'object' && completion !== null &&
         ((Array.isArray(completion) && completion.length > 0) ||
           (!Array.isArray(completion) && Object.keys(completion).length > 0)));
@@ -623,6 +636,9 @@ function parseInteractionType(record) {
     }
     if (hasCompletion) {
       return '输出';
+    }
+    if (claudeToolResponses.length > 0) {
+      return '工具';
     }
     return '工具';
   } catch (e) {
