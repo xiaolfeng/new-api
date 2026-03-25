@@ -612,35 +612,46 @@ function parseInteractionType(record) {
       }
     }
 
-    // 获取最后一个用户消息的内容
     const lastUserMessage = prompt?.lastUserMessage || {};
-    const hasContent =
+    const legacyToolInvokes = Array.isArray(recordData?.toolInvokes)
+      ? recordData.toolInvokes
+      : [];
+
+    const hasNonToolInput =
       (typeof prompt === 'string' && prompt.trim() !== '') ||
       (lastUserMessage.content && lastUserMessage.content.trim() !== '') ||
       claudeRequestBlocks.length > 0 ||
       (typeof prompt === 'object' && !Array.isArray(prompt) && Object.keys(prompt).length > 0) ||
       (Array.isArray(prompt) && prompt.length > 0);
-    const hasCompletion =
+    const hasToolInput = claudeToolResponses.length > 0;
+    const hasTextOutput =
       (typeof completion === 'string' && completion.trim() !== '') ||
-      claudeResponseBlocks.length > 0 ||
+      claudeResponseBlocks.some(
+        (block) => block?.type === 'text' && typeof block.content === 'string' && block.content.trim() !== '',
+      );
+    const hasAnyOutput =
+      hasTextOutput ||
       (typeof completion === 'object' && completion !== null &&
         ((Array.isArray(completion) && completion.length > 0) ||
-          (!Array.isArray(completion) && Object.keys(completion).length > 0)));
+          (!Array.isArray(completion) && Object.keys(completion).length > 0))) ||
+      claudeResponseBlocks.length > 0;
+    const hasToolUse =
+      claudeResponseBlocks.some((block) => block?.type === 'tool_use') ||
+      legacyToolInvokes.length > 0;
 
-    // 判断逻辑：
-    // 1. 有请求内容 → "输入"（不管是否有响应）
-    // 2. 无请求内容 + 有响应 → "输出"
-    // 3. 无请求内容 + 无响应 → "工具"
-    if (hasContent) {
+    if (hasNonToolInput) {
       return '输入';
     }
-    if (hasCompletion) {
+
+    if (!hasNonToolInput && hasTextOutput && !hasToolUse) {
       return '输出';
     }
-    if (claudeToolResponses.length > 0) {
-      return '工具';
+
+    if (hasToolInput || hasToolUse || hasAnyOutput) {
+      return '回调';
     }
-    return '工具';
+
+    return null;
   } catch (e) {
     return null;
   }
@@ -1031,7 +1042,7 @@ export const getLogsColumns = ({
         if (!interactionType) return null;
 
         const colorMap = {
-          工具: 'purple',
+          回调: 'purple',
           输入: 'cyan',
           输出: 'green',
         };

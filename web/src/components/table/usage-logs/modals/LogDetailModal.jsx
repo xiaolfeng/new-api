@@ -76,7 +76,8 @@ const LogDetailModal = ({
       claudeResponseBlocks.length > 0);
   const claudeResponseSections = useMemo(() => {
     const thinkingParts = [];
-    const answerBlocks = [];
+    const answerParts = [];
+    const toolUses = [];
 
     claudeResponseBlocks.forEach((block, index) => {
       if (!block || typeof block !== 'object') {
@@ -89,18 +90,14 @@ const LogDetailModal = ({
       }
 
       if (block.type === 'text' && block.content) {
-        answerBlocks.push({
-          id: block.id || `claude-text-${index}`,
-          type: 'text',
-          content: block.content,
-        });
+        answerParts.push(block.content);
         return;
       }
 
       if (block.type === 'tool_use') {
-        answerBlocks.push({
+        toolUses.push({
+          order: toolUses.length + 1,
           id: block.id || `claude-tool-${index}`,
-          type: 'tool_use',
           name: block.name,
           input: block.input,
         });
@@ -109,9 +106,136 @@ const LogDetailModal = ({
 
     return {
       thinking: thinkingParts.join('\n\n'),
-      answerBlocks,
+      answer: answerParts.join('\n\n'),
+      toolUses,
     };
   }, [claudeResponseBlocks]);
+
+  const renderSimpleTableValue = (value) => (
+    <pre style={{
+      margin: 0,
+      whiteSpace: 'pre-wrap',
+      wordBreak: 'break-word',
+      fontSize: 12,
+    }}>
+      {value == null ? '-' : JSON.stringify(value, null, 2)}
+    </pre>
+  );
+
+  const renderClaudeToolResponsesTable = () => {
+    if (claudeToolResponses.length === 0) {
+      return <Empty description={t('无工具响应记录')} style={{ padding: '20px 0' }} />;
+    }
+
+    const columns = [
+      {
+        title: t('顺序'),
+        dataIndex: 'order',
+        key: 'order',
+        width: 80,
+      },
+      {
+        title: t('工具'),
+        dataIndex: 'name',
+        key: 'name',
+        render: (text, row) => <Text strong>{text || row.toolUseId || '-'}</Text>,
+      },
+      {
+        title: t('调用 ID'),
+        dataIndex: 'toolUseId',
+        key: 'toolUseId',
+        render: (text) => (
+          <Text
+            style={{
+              wordBreak: 'break-all',
+              maxWidth: 500,
+            }}
+          >
+            {text || '-'}
+          </Text>
+        ),
+      },
+    ];
+
+    const dataSource = claudeToolResponses.map((item, index) => ({
+      ...item,
+      order: index + 1,
+      rowKey: item.toolUseId || `${item.name || 'tool-response'}-${index}`,
+    }));
+
+    return (
+      <Table
+        columns={columns}
+        dataSource={dataSource}
+        pagination={false}
+        size='small'
+        bordered
+        rowKey='rowKey'
+        style={{ fontSize: 12 }}
+      />
+    );
+  };
+
+  const renderClaudeToolUsesTable = (toolUses) => {
+    if (toolUses.length === 0) {
+      return <Empty description={t('无工具调用记录')} style={{ padding: '20px 0' }} />;
+    }
+
+    const columns = [
+      {
+        title: t('顺序'),
+        dataIndex: 'order',
+        key: 'order',
+        width: 80,
+      },
+      {
+        title: t('工具'),
+        dataIndex: 'name',
+        key: 'name',
+        width: 180,
+        render: (text, row) => <Text strong>{text || row.id || '-'}</Text>,
+      },
+      {
+        title: t('调用 ID'),
+        dataIndex: 'id',
+        key: 'id',
+        width: 220,
+        render: (text) => (
+          <Text
+            style={{
+              wordBreak: 'break-all',
+              maxWidth: 500,
+            }}
+          >
+            {text || '-'}
+          </Text>
+        ),
+      },
+      {
+        title: t('参数'),
+        dataIndex: 'input',
+        key: 'input',
+        render: renderSimpleTableValue,
+      },
+    ];
+
+    const dataSource = toolUses.map((item, index) => ({
+      ...item,
+      rowKey: item.id || `${item.name || 'tool-use'}-${index}`,
+    }));
+
+    return (
+      <Table
+        columns={columns}
+        dataSource={dataSource}
+        pagination={false}
+        size='small'
+        bordered
+        rowKey='rowKey'
+        style={{ fontSize: 12 }}
+      />
+    );
+  };
 
   const copySection = async (section, content) => {
     const text = typeof content === 'object' ? JSON.stringify(content, null, 2) : String(content);
@@ -120,6 +244,41 @@ const LogDetailModal = ({
     } else {
       showError(t('无法复制到剪贴板，请手动复制'));
     }
+  };
+
+  const parseCollapsibleTaggedContent = (content) => {
+    if (typeof content !== 'string') {
+      return null;
+    }
+
+    const lines = content.split('\n');
+    let startIndex = 0;
+    let endIndex = lines.length - 1;
+
+    while (startIndex <= endIndex && lines[startIndex].trim() === '') {
+      startIndex += 1;
+    }
+    while (endIndex >= startIndex && lines[endIndex].trim() === '') {
+      endIndex -= 1;
+    }
+
+    if (startIndex >= endIndex) {
+      return null;
+    }
+
+    const startLine = lines[startIndex].trim();
+    const endLine = lines[endIndex].trim();
+    const startMatch = startLine.match(/^<([A-Za-z][\w-]*)(?:\s[^>]*)?>$/);
+    const endMatch = endLine.match(/^<\/([A-Za-z][\w-]*)>$/);
+
+    if (!startMatch || !endMatch || startMatch[1] !== endMatch[1]) {
+      return null;
+    }
+
+    return {
+      label: startMatch[1],
+      content: lines.slice(startIndex + 1, endIndex).join('\n').trim(),
+    };
   };
 
   const renderContentBlock = (content) => {
@@ -157,6 +316,39 @@ const LogDetailModal = ({
       >
         {JSON.stringify(content, null, 2)}
       </pre>
+    );
+  };
+
+  const renderClaudeRequestBlockContent = (content) => {
+    const collapsibleContent = parseCollapsibleTaggedContent(content);
+    if (!collapsibleContent) {
+      return renderContentBlock(content);
+    }
+
+    return (
+      <details
+        style={{
+          background: 'var(--semi-color-fill-0)',
+          borderRadius: 8,
+          padding: 12,
+        }}
+      >
+        <summary
+          style={{
+            cursor: 'pointer',
+            fontSize: 13,
+            fontWeight: 600,
+            userSelect: 'none',
+          }}
+        >
+          {`<${collapsibleContent.label}>`}
+        </summary>
+        <div style={{ marginTop: 12 }}>
+          {collapsibleContent.content
+            ? renderContentBlock(collapsibleContent.content)
+            : <Text type='tertiary'>{t('该折叠片段无可展示内容')}</Text>}
+        </div>
+      </details>
     );
   };
 
@@ -250,7 +442,7 @@ const LogDetailModal = ({
     }
 
     if (hasClaudeStructuredRecord) {
-      if (claudeRequestBlocks.length === 0) {
+      if (claudeRequestBlocks.length === 0 && claudeToolResponses.length === 0) {
         return <Empty description={t('无请求内容记录')} style={{ padding: '20px 0' }} />;
       }
 
@@ -261,33 +453,59 @@ const LogDetailModal = ({
               icon={<IconCopy />}
               size='small'
               theme='borderless'
-              onClick={() => copySection(t('请求内容'), claudeRequestBlocks)}
+              onClick={() => copySection(t('请求内容'), {
+                requestBlocks: claudeRequestBlocks,
+                toolResponses: claudeToolResponses,
+              })}
             >
               {t('复制')}
             </Button>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {claudeRequestBlocks.map((block, index) => (
-              <div
-                key={`${block.type || 'block'}-${index}`}
-                style={{
-                  border: '1px solid var(--semi-color-border)',
-                  borderRadius: 10,
-                  background: 'var(--semi-color-bg-1)',
-                  padding: 12,
-                }}
-              >
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text strong>{t('输入片段')} #{index + 1}</Text>
-                  <Text type='tertiary' size='small'>{block.type || 'text'}</Text>
-                </div>
-                {block.text ? (
-                  renderContentBlock(block.text)
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <Text strong>{t('输入内容')}</Text>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {claudeRequestBlocks.length > 0 ? (
+                  claudeRequestBlocks.map((block, index) => (
+                    <div
+                      key={`${block.type || 'block'}-${index}`}
+                      style={{
+                        border: '1px solid var(--semi-color-border)',
+                        borderRadius: 10,
+                        background: 'var(--semi-color-bg-1)',
+                        padding: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                        <Text strong>{t('输入片段')} #{index + 1}</Text>
+                        <Text type='tertiary' size='small'>{block.type || 'text'}</Text>
+                      </div>
+                      {block.text ? (
+                        renderClaudeRequestBlockContent(block.text)
+                      ) : (
+                        <Text type='tertiary'>{t('该输入片段无可展示文本')}</Text>
+                      )}
+                    </div>
+                  ))
                 ) : (
-                  <Text type='tertiary'>{t('该输入片段无可展示文本')}</Text>
+                  <Empty description={t('无输入片段记录')} style={{ padding: '20px 0' }} />
                 )}
               </div>
-            ))}
+            </div>
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <Text strong>{t('工具响应')}</Text>
+                <Button
+                  icon={<IconCopy />}
+                  size='small'
+                  theme='borderless'
+                  onClick={() => copySection(t('工具响应'), claudeToolResponses)}
+                >
+                  {t('复制')}
+                </Button>
+              </div>
+              {renderClaudeToolResponsesTable()}
+            </div>
           </div>
         </div>
       );
@@ -354,11 +572,12 @@ const LogDetailModal = ({
 
   const renderCompletion = () => {
     if (claudeResponseBlocks.length > 0) {
-      const { thinking, answerBlocks } = claudeResponseSections;
+      const { thinking, answer, toolUses } = claudeResponseSections;
       const hasThinking = thinking.trim() !== '';
-      const hasAnswer = answerBlocks.length > 0;
+      const hasAnswer = answer.trim() !== '';
+      const hasToolUses = toolUses.length > 0;
 
-      if (!hasThinking && !hasAnswer) {
+      if (!hasThinking && !hasAnswer && !hasToolUses) {
         return <Empty description={t('无响应内容记录')} style={{ padding: '20px 0' }} />;
       }
 
@@ -381,7 +600,8 @@ const LogDetailModal = ({
               onClick={() =>
                 copySection(t('响应内容'), {
                   thinking,
-                  answerBlocks,
+                  answer,
+                  toolUses,
                 })
               }
             >
@@ -403,46 +623,26 @@ const LogDetailModal = ({
               <Text strong>{t('回答内容')}</Text>
               <div style={{ marginTop: 8 }}>
                 {hasAnswer ? (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                    {answerBlocks.map((block, index) => (
-                      <div
-                        key={block.id || `claude-answer-${index}`}
-                        style={{
-                          border: '1px solid var(--semi-color-border)',
-                          borderRadius: 8,
-                          padding: 12,
-                          background: 'var(--semi-color-fill-0)',
-                        }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                          <Text strong>
-                            {block.type === 'tool_use' ? t('工具调用') : t('回答片段')} #{index + 1}
-                          </Text>
-                          <Text type='tertiary' size='small'>
-                            {block.type === 'tool_use' ? 'tool_use' : 'text'}
-                          </Text>
-                        </div>
-                        {block.type === 'tool_use' ? (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            <Text>{t('工具')}: {block.name || block.id || '-'}</Text>
-                            <Text type='tertiary' size='small'>{t('参数')}</Text>
-                            {block.input == null ? (
-                              <Text type='tertiary'>{t('无参数记录')}</Text>
-                            ) : (
-                              renderContentBlock(block.input)
-                            )}
-                          </div>
-                        ) : (
-                          renderContentBlock(block.content)
-                        )}
-                      </div>
-                    ))}
-                  </div>
+                  renderContentBlock(answer)
                 ) : (
                   <Empty description={t('无回答内容记录')} style={{ padding: '28px 0' }} />
                 )}
               </div>
             </div>
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text strong>{t('工具调用顺序')}</Text>
+              <Button
+                icon={<IconCopy />}
+                size='small'
+                theme='borderless'
+                onClick={() => copySection(t('工具调用顺序'), toolUses)}
+              >
+                {t('复制')}
+              </Button>
+            </div>
+            {renderClaudeToolUsesTable(toolUses)}
           </div>
         </div>
       );
@@ -505,65 +705,6 @@ const LogDetailModal = ({
   };
 
   const renderToolInvokes = () => {
-    if (hasClaudeStructuredRecord) {
-      if (claudeToolResponses.length === 0) {
-        return <Empty description={t('无工具响应记录')} style={{ padding: '20px 0' }} />;
-      }
-
-      const columns = [
-        {
-          title: t('工具'),
-          dataIndex: 'name',
-          key: 'name',
-          render: (text, row) => <Text strong>{text || row.toolUseId || '-'}</Text>,
-        },
-        {
-          title: t('调用 ID'),
-          dataIndex: 'toolUseId',
-          key: 'toolUseId',
-          render: (text) => (
-            <Text
-              style={{
-                wordBreak: 'break-all',
-                maxWidth: 500,
-              }}
-            >
-              {text || '-'}
-            </Text>
-          ),
-        },
-      ];
-
-      const dataSource = claudeToolResponses.map((item, index) => ({
-        ...item,
-        rowKey: item.toolUseId || `${item.name || 'tool-response'}-${index}`,
-      }));
-
-      return (
-        <div style={{ padding: '8px 0' }}>
-          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
-            <Button
-              icon={<IconCopy />}
-              size='small'
-              theme='borderless'
-              onClick={() => copySection(t('工具响应'), claudeToolResponses)}
-            >
-              {t('复制')}
-            </Button>
-          </div>
-          <Table
-            columns={columns}
-            dataSource={dataSource}
-            pagination={false}
-            size='small'
-            bordered
-            rowKey='rowKey'
-            style={{ fontSize: 12 }}
-          />
-        </div>
-      );
-    }
-
     const toolInvokes = Array.isArray(record?.toolInvokes)
       ? record.toolInvokes
       : [];
@@ -583,16 +724,7 @@ const LogDetailModal = ({
         title: t('参数'),
         dataIndex: 'input',
         key: 'input',
-        render: (value) => (
-          <pre style={{
-            margin: 0,
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            fontSize: 12,
-          }}>
-            {value == null ? '-' : JSON.stringify(value, null, 2)}
-          </pre>
-        ),
+        render: renderSimpleTableValue,
       },
     ];
 
@@ -669,11 +801,11 @@ const LogDetailModal = ({
       content: renderCompletion(),
       key: 'completion',
     },
-    {
-      header: hasClaudeStructuredRecord ? t('工具响应') : t('工具调用'),
+    ...(!hasClaudeStructuredRecord ? [{
+      header: t('工具调用'),
       content: renderToolInvokes(),
       key: 'toolInvokes',
-    },
+    }] : []),
     {
       header: t('元信息'),
       content: renderMeta(),
