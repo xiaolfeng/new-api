@@ -42,17 +42,17 @@ const formatAvgTps = (avgTps) => {
 const getCellStyle = (cell, maxTokens) => {
   const ratio =
     maxTokens > 0 && cell.total_tokens > 0 ? cell.total_tokens / maxTokens : 0;
-  const backgroundAlpha = ratio > 0 ? 0.12 + ratio * 0.72 : 0.04;
+  const backgroundAlpha = ratio > 0 ? 0.18 + ratio * 0.72 : 0.08;
 
   return {
     background:
       cell.total_tokens > 0
-        ? `rgba(15, 118, 110, ${backgroundAlpha})`
-        : 'var(--semi-color-fill-0)',
+        ? `rgba(59, 130, 246, ${backgroundAlpha})`
+        : 'rgba(219, 234, 254, 0.35)',
     border: cell.is_current
-      ? '2px solid var(--semi-color-primary)'
-      : '1px solid var(--semi-color-border)',
-    color: ratio >= 0.55 ? '#ffffff' : 'var(--semi-color-text-0)',
+      ? '2px solid #2563eb'
+      : '1px solid #bfdbfe',
+    color: ratio >= 0.55 ? '#ffffff' : '#1d4ed8',
   };
 };
 
@@ -88,6 +88,21 @@ const buildSummaryTooltip = (item, t) => (
     </div>
   </div>
 );
+
+const buildHeaderStats = (item, t) => [
+  {
+    label: t('输出 Token'),
+    value: renderNumber(item.summary.total_tokens || 0),
+  },
+  {
+    label: t('成功请求'),
+    value: renderNumber(item.summary.request_count || 0),
+  },
+  {
+    label: t('平均 TPS'),
+    value: formatAvgTps(item.summary.avg_tps),
+  },
+];
 
 const ModelLogBoard = () => {
   const { t, loading, refreshing, items, lastUpdatedAt, refreshData } =
@@ -134,9 +149,9 @@ const ModelLogBoard = () => {
         </div>
       ) : (
         <div className='space-y-4 pb-2'>
-          <div className='rounded-2xl border border-dashed border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] p-3'>
+          <div className='rounded-2xl border border-dashed border-[#bfdbfe] bg-[#eff6ff] p-3'>
             <div className='text-sm font-semibold'>{t('模型')}</div>
-            <div className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
+            <div className='mt-1 text-xs text-[#1e40af]/70'>
               {t(
                 '每个模型显示最近 24 小时的 24 个格子，颜色越深表示该小时输出 Token 用量越高。',
               )}
@@ -151,48 +166,65 @@ const ModelLogBoard = () => {
               );
 
               return (
-                <div
+                <Tooltip
                   key={item.model_name}
-                  className='flex flex-col gap-3 lg:flex-row lg:items-start'
+                  content={buildSummaryTooltip(item, t)}
+                  position='top'
                 >
-                  <Tooltip
-                    content={buildSummaryTooltip(item, t)}
-                    position='top'
+                  <Card
+                    className='w-full !rounded-2xl border-[#bfdbfe] bg-gradient-to-br from-[#f8fbff] to-[#eef6ff]'
+                    bordered
+                    bodyStyle={{ padding: 12 }}
                   >
-                    <Card
-                      className='w-full lg:w-[168px] lg:shrink-0 !rounded-2xl'
-                      bordered
-                      bodyStyle={{ padding: 12 }}
-                    >
-                      <div className='break-all text-sm font-semibold leading-5'>
-                        {item.model_name}
+                    <div className='flex flex-col gap-3'>
+                      <div className='flex flex-wrap items-start justify-between gap-2'>
+                        <div className='min-w-0 flex-1'>
+                          <div className='break-all text-sm font-semibold leading-5 text-[#0f3a8f]'>
+                            {item.model_name}
+                          </div>
+                          <div className='mt-1 text-xs text-[#1e40af]/65'>
+                            {t('悬浮查看完整统计')}
+                          </div>
+                        </div>
+                        <div className='flex flex-wrap items-center justify-end gap-2 text-right'>
+                          {buildHeaderStats(item, t).map((stat) => (
+                            <div
+                              key={`${item.model_name}-${stat.label}`}
+                              className='rounded-lg border border-[#bfdbfe] bg-[#dbeafe]/55 px-2 py-1'
+                            >
+                              <div className='text-[11px] leading-4 text-[#1d4ed8]/80'>
+                                {stat.label}
+                              </div>
+                              <div className='text-xs font-semibold leading-4 text-[#1e3a8a]'>
+                                {stat.value}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <div className='mt-2 text-xs text-[var(--semi-color-text-2)]'>
-                        {t('悬浮查看统计')}
-                      </div>
-                    </Card>
-                  </Tooltip>
 
-                  <div className='flex flex-1 flex-wrap gap-2'>
-                    {item.cells.map((cell) => {
-                      const cellStyle = getCellStyle(cell, rowMaxTokens);
-                      return (
-                        <Tooltip
-                          key={`${item.model_name}-${cell.bucket_start_at}`}
-                          content={buildCellTooltip(cell)}
-                          position='top'
-                        >
-                          <button
-                            type='button'
-                            aria-label={getCellAriaLabel(cell)}
-                            className='h-8 w-8 shrink-0 rounded-lg transition-transform hover:-translate-y-0.5 sm:h-9 sm:w-9 md:h-10 md:w-10'
-                            style={cellStyle}
-                          ></button>
-                        </Tooltip>
-                      );
-                    })}
-                  </div>
-                </div>
+                      <div className='flex flex-wrap gap-1.5 sm:gap-2'>
+                        {item.cells.map((cell) => {
+                          const cellStyle = getCellStyle(cell, rowMaxTokens);
+                          return (
+                            <Tooltip
+                              key={`${item.model_name}-${cell.bucket_start_at}`}
+                              content={buildCellTooltip(cell)}
+                              position='top'
+                            >
+                              <button
+                                type='button'
+                                aria-label={getCellAriaLabel(cell)}
+                                className='h-4 w-4 shrink-0 rounded-[5px] transition-transform hover:-translate-y-0.5 sm:h-[18px] sm:w-[18px] md:h-5 md:w-5'
+                                style={cellStyle}
+                              ></button>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </Card>
+                </Tooltip>
               );
             })}
           </div>
