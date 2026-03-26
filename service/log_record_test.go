@@ -448,6 +448,131 @@ func TestParseResponsesInputForRecordUsesOnlyLatestOutputSegment(t *testing.T) {
 	require.Empty(t, recordData.LastUserText)
 }
 
+func TestParseResponsesInputForRecordUsesLatestInputSegment(t *testing.T) {
+	recordData := parseResponsesInputForRecord(json.RawMessage(`[
+		{
+			"type":"message",
+			"role":"user",
+			"content":[
+				{"type":"input_text","text":"第一轮输入"}
+			]
+		},
+		{
+			"type":"function_call",
+			"call_id":"call_1",
+			"name":"exec_command",
+			"arguments":"{\"cmd\":\"pwd\"}"
+		},
+		{
+			"type":"function_call_output",
+			"call_id":"call_1",
+			"name":"exec_command",
+			"output":"tool output"
+		},
+		{
+			"type":"message",
+			"role":"assistant",
+			"content":[
+				{"type":"output_text","text":"上一轮输出"}
+			]
+		},
+		{
+			"type":"message",
+			"role":"user",
+			"content":[
+				{"type":"input_text","text":"最后输入"}
+			]
+		}
+	]`))
+
+	require.Equal(t, []map[string]interface{}{
+		{
+			"type": "input_text",
+			"text": "最后输入",
+			"role": "user",
+		},
+	}, recordData.PromptInput)
+	require.Equal(t, []model.ResponsesRequestBlock{
+		{
+			Type: "input_text",
+			Role: "user",
+			Text: "最后输入",
+		},
+	}, recordData.RequestBlocks)
+	require.Empty(t, recordData.ToolResponses)
+	require.Equal(t, "最后输入", recordData.LastUserText)
+}
+
+func TestBuildLogRecordResponsesLatestInputShowsRequestContent(t *testing.T) {
+	enableRecordConsumeLogDetailForTest(t)
+
+	relayInfo := &relaycommon.RelayInfo{
+		Request: &dto.OpenAIResponsesRequest{
+			Input: json.RawMessage(`[
+				{
+					"type":"message",
+					"role":"user",
+					"content":[
+						{"type":"input_text","text":"第一轮输入"}
+					]
+				},
+				{
+					"type":"function_call",
+					"call_id":"call_1",
+					"name":"exec_command",
+					"arguments":"{\"cmd\":\"pwd\"}"
+				},
+				{
+					"type":"function_call_output",
+					"call_id":"call_1",
+					"name":"exec_command",
+					"output":"tool output"
+				},
+				{
+					"type":"message",
+					"role":"assistant",
+					"content":[
+						{"type":"output_text","text":"上一轮输出"}
+					]
+				},
+				{
+					"type":"message",
+					"role":"user",
+					"content":[
+						{"type":"input_text","text":"最后输入"}
+					]
+				}
+			]`),
+		},
+		FinalRequestRelayFormat: types.RelayFormatOpenAIResponses,
+	}
+
+	recordJSON := BuildLogRecord(relayInfo)
+	require.NotEmpty(t, recordJSON)
+
+	var record model.LogDetailRecord
+	require.NoError(t, common.UnmarshalJsonStr(recordJSON, &record))
+	require.Equal(t, map[string]interface{}{
+		"role":    "user",
+		"content": "最后输入",
+	}, record.Prompt["lastUserMessage"])
+	require.Equal(t, []interface{}{
+		map[string]interface{}{
+			"type": "input_text",
+			"text": "最后输入",
+			"role": "user",
+		},
+	}, record.Prompt["input"])
+	require.Equal(t, []model.ResponsesRequestBlock{
+		{
+			Type: "input_text",
+			Role: "user",
+			Text: "最后输入",
+		},
+	}, record.ResponsesRequestBlocks)
+	require.Empty(t, record.ResponsesToolResponses)
+}
+
 func TestBuildLogRecordNonResponsesSkipsStructuredBlocks(t *testing.T) {
 	enableRecordConsumeLogDetailForTest(t)
 

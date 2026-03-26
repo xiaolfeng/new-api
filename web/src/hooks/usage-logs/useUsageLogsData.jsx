@@ -41,6 +41,9 @@ import { ITEMS_PER_PAGE } from '../../constants';
 import { useTableCompactMode } from '../common/useTableCompactMode';
 import ParamOverrideEntry from '../../components/table/usage-logs/components/ParamOverrideEntry';
 
+const AUTO_REFRESH_INTERVAL_SECONDS = 30;
+const AUTO_REFRESH_PAGE_SIZE = 20;
+
 export const useLogsData = () => {
   const { t } = useTranslation();
 
@@ -76,6 +79,9 @@ export const useLogsData = () => {
   const [pageSize, setPageSize] = useState(ITEMS_PER_PAGE);
   const [logType, setLogType] = useState(0);
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [autoRefreshCountdown, setAutoRefreshCountdown] = useState(
+    AUTO_REFRESH_INTERVAL_SECONDS,
+  );
   const autoRefreshRef = useRef(false);
 
   // User and admin
@@ -810,8 +816,9 @@ export const useLogsData = () => {
   const refresh = async () => {
     setActivePage(1);
     handleEyeClick();
-    // 自动刷新时限制最大每页条数为 50
-    const effectivePageSize = autoRefreshRef.current ? Math.min(pageSize, 50) : pageSize;
+    const effectivePageSize = autoRefreshRef.current
+      ? AUTO_REFRESH_PAGE_SIZE
+      : pageSize;
     await loadLogs(1, effectivePageSize);
   };
 
@@ -820,25 +827,38 @@ export const useLogsData = () => {
     autoRefreshRef.current = autoRefresh;
 
     if (!autoRefresh) {
+      setAutoRefreshCountdown(AUTO_REFRESH_INTERVAL_SECONDS);
       return;
     }
 
-    // 开启自动刷新时，如果当前 pageSize > 50，则调整为 50
-    if (pageSize > 50) {
-      setPageSize(50);
-      localStorage.setItem('page-size', '50');
+    setAutoRefreshCountdown(AUTO_REFRESH_INTERVAL_SECONDS);
+
+    if (pageSize !== AUTO_REFRESH_PAGE_SIZE) {
+      setPageSize(AUTO_REFRESH_PAGE_SIZE);
+      localStorage.setItem('page-size', String(AUTO_REFRESH_PAGE_SIZE));
     }
 
-    const intervalId = setInterval(() => {
-      loadLogs(1, 50).then(() => {
+    const refreshIntervalId = setInterval(() => {
+      loadLogs(1, AUTO_REFRESH_PAGE_SIZE).then(() => {
         handleEyeClick();
       });
-    }, 10000);
+      setAutoRefreshCountdown(AUTO_REFRESH_INTERVAL_SECONDS);
+    }, AUTO_REFRESH_INTERVAL_SECONDS * 1000);
+
+    const countdownIntervalId = setInterval(() => {
+      setAutoRefreshCountdown((prev) => {
+        if (prev <= 1) {
+          return AUTO_REFRESH_INTERVAL_SECONDS;
+        }
+        return prev - 1;
+      });
+    }, 1000);
 
     return () => {
-      clearInterval(intervalId);
+      clearInterval(refreshIntervalId);
+      clearInterval(countdownIntervalId);
     };
-  }, [autoRefresh]);
+  }, [autoRefresh, pageSize]);
 
   // Copy text function
   const copyText = async (e, text) => {
@@ -853,7 +873,7 @@ export const useLogsData = () => {
   // Initialize data
   useEffect(() => {
     const localPageSize =
-      parseInt(localStorage.getItem('page-size')) || ITEMS_PER_PAGE;
+      parseInt(localStorage.getItem('page-size')) || AUTO_REFRESH_PAGE_SIZE;
     setPageSize(localPageSize);
     loadLogs(activePage, localPageSize)
       .then()
@@ -948,6 +968,7 @@ export const useLogsData = () => {
     // Auto refresh
     autoRefresh,
     setAutoRefresh,
+    autoRefreshCountdown,
 
     // Translation
     t,

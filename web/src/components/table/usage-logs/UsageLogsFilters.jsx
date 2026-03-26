@@ -34,6 +34,7 @@ const LogsFilters = ({
   isAdminUser,
   autoRefresh,
   setAutoRefresh,
+  autoRefreshCountdown,
   t,
 }) => {
   return (
@@ -192,6 +193,11 @@ const LogsFilters = ({
                 onChange={setAutoRefresh}
               />
               <span className='text-xs text-gray-500'>{t('自动刷新')}</span>
+              {autoRefresh ? (
+                <span className='text-xs text-gray-400'>
+                  {t('剩余')} {autoRefreshCountdown}s
+                </span>
+              ) : null}
             </Space>
           </div>
         </div>
