@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/types"
 
@@ -53,38 +55,57 @@ const (
 	LogTypeRefund  = 6
 )
 
-func formatUserLogs(logs []*Log, startIdx int) {
+func formatUserLogs(logs []*Log, startIdx int, userSetting *dto.UserSetting) {
 	for i := range logs {
 		logs[i].ChannelName = ""
-		// Record 字段保留，用于前端解析来源和类型
-		// 敏感头信息已在 filterSensitiveHeaders() 中过滤
+		sourceFromRecord, interactionFromRecord := ExtractLogDetailSummaries(logs[i].Record)
 
-		// 空字符串直接跳过处理
-		if logs[i].Other == "" {
-			logs[i].Id = startIdx + i + 1
-			continue
+		otherMap := map[string]interface{}{}
+		otherParsed := false
+		originalOther := logs[i].Other
+		if logs[i].Other != "" {
+			parsedOtherMap, err := common.StrToMap(logs[i].Other)
+			if err != nil {
+				logger.LogWarn(context.TODO(), fmt.Sprintf("formatUserLogs: failed to parse other field: %v", err))
+			} else {
+				otherMap = parsedOtherMap
+				otherParsed = true
+			}
 		}
 
-		otherMap, err := common.StrToMap(logs[i].Other)
-		if err != nil {
-			// 解析失败时保留原始值，不覆盖为 "null"
-			// 这样可以避免丢失 Claude 等格式的日志信息
-			logger.LogWarn(context.TODO(), fmt.Sprintf("formatUserLogs: failed to parse other field: %v", err))
-			logs[i].Id = startIdx + i + 1
-			continue
+		if sourceFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherClientSourceKey])) == "" {
+			otherMap[LogOtherClientSourceKey] = sourceFromRecord
+		}
+		if interactionFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherInteractionTypeKey])) == "" {
+			otherMap[LogOtherInteractionTypeKey] = interactionFromRecord
 		}
 
-		// Remove admin-only debug fields.
-		delete(otherMap, "admin_info")
-		delete(otherMap, "reject_reason")
-		logs[i].Other = common.MapToJsonStr(otherMap)
+		if otherParsed || len(otherMap) > 0 {
+			delete(otherMap, "admin_info")
+			delete(otherMap, "reject_reason")
+			logs[i].Other = common.MapToJsonStr(otherMap)
+		} else {
+			logs[i].Other = originalOther
+		}
+
+		if userSetting != nil {
+			summarySource := strings.TrimSpace(common.Interface2String(otherMap[LogOtherClientSourceKey]))
+			if summarySource == "" {
+				summarySource = sourceFromRecord
+			}
+			if !userSetting.DeveloperToolLogEnabled || !IsDeveloperToolLogSource(summarySource) {
+				logs[i].Record = ""
+			}
+			logs[i].FullLog = ""
+		}
+
 		logs[i].Id = startIdx + i + 1
 	}
 }
 
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
-	formatUserLogs(logs, 0)
+	formatUserLogs(logs, 0, nil)
 	return logs, err
 }
 
@@ -170,6 +191,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
+	params.Other = AppendLogDetailSummaries(params.Other, params.Record)
 	otherStr := common.MapToJsonStr(params.Other)
 	// IP 记录永久开启，忽略用户设置
 	needRecordIp := true
@@ -382,7 +404,13 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		return nil, 0, errors.New("查询日志失败")
 	}
 
-	formatUserLogs(logs, startIdx)
+	var userSetting *dto.UserSetting
+	if setting, settingErr := GetUserSetting(userId, false); settingErr == nil {
+		userSetting = &setting
+	} else {
+		common.SysError("failed to load user setting when formatting logs: " + settingErr.Error())
+	}
+	formatUserLogs(logs, startIdx, userSetting)
 	return logs, total, err
 }
 

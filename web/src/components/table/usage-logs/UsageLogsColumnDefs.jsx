@@ -576,6 +576,14 @@ function getSourceColor(source) {
   return colors[index];
 }
 
+function getLogOtherSummaryValue(other, key) {
+  if (!other || typeof other !== 'object') {
+    return '';
+  }
+  const value = other[key];
+  return typeof value === 'string' ? value.trim() : '';
+}
+
 /**
  * 判断交互类型
  * @param {object|string} record - 日志记录对象
@@ -1135,6 +1143,16 @@ export const getLogsColumns = ({
         }
 
         try {
+          const other = getLogOther(record.other);
+          const sourceSummary = getLogOtherSummaryValue(other, 'client_source');
+          if (sourceSummary) {
+            return (
+              <Tag color={getSourceColor(sourceSummary)} shape="circle">
+                {sourceSummary}
+              </Tag>
+            );
+          }
+
           const detailData = record.record;
           const recordData = detailData
             ? typeof detailData === 'string'
@@ -1168,7 +1186,13 @@ export const getLogsColumns = ({
           return null;
         }
 
-        const interactionType = parseInteractionType(record.record);
+        const other = getLogOther(record.other);
+        const interactionTypeSummary = getLogOtherSummaryValue(
+          other,
+          'interaction_type',
+        );
+        const interactionType =
+          interactionTypeSummary || parseInteractionType(record.record);
         if (!interactionType) return null;
 
         const colorMap = {

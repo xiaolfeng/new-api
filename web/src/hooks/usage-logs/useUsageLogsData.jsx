@@ -486,8 +486,8 @@ export const useLogsData = () => {
                 billingDisplayMode,
               ),
         });
-        // 查看详细记录按钮（仅管理员可见）
-        if (isAdminUser && logs[i].record) {
+        // 查看详细记录按钮（普通用户依赖后端权限裁剪，管理员始终可见）
+        if (logs[i].record) {
           expandDataLocal.push({
             key: t('详细记录'),
             value: (
