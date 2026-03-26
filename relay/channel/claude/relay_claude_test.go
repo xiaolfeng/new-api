@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 )
 
@@ -253,5 +254,80 @@ func TestBuildOpenAIStyleUsageFromClaudeUsagePreservesCacheCreationRemainder(t *
 				t.Fatalf("InputTokens = %d, want %d", openAIUsage.InputTokens, tt.expectedTotalInputToken)
 			}
 		})
+	}
+}
+
+func TestResponseClaude2OpenAIAggregatesNonStreamBlocks(t *testing.T) {
+	thinking1 := "先想第一步。"
+	thinking2 := "再想第二步。"
+	text1 := "这是第一段文本，"
+	text2 := "这是第二段文本。"
+	claudeResponse := &dto.ClaudeResponse{
+		Id:         "msg_aggregate",
+		Model:      "claude-3-7-sonnet",
+		StopReason: "tool_use",
+		Content: []dto.ClaudeMediaMessage{
+			{Type: "thinking", Thinking: &thinking1},
+			{Type: "text", Text: &text1},
+			{
+				Type:  "tool_use",
+				Id:    "call_1",
+				Name:  "write_file",
+				Input: map[string]any{"path": "/tmp/a.txt"},
+			},
+			{Type: "text", Text: &text2},
+			{
+				Type:  "tool_use",
+				Id:    "call_2",
+				Name:  "run_shell",
+				Input: map[string]any{"cmd": "pwd"},
+			},
+			{Type: "thinking", Thinking: &thinking2},
+		},
+	}
+
+	resp := ResponseClaude2OpenAI(claudeResponse)
+	if resp == nil {
+		t.Fatal("expected non-nil response")
+	}
+	if len(resp.Choices) != 1 {
+		t.Fatalf("choices len = %d, want 1", len(resp.Choices))
+	}
+
+	choice := resp.Choices[0]
+	if got := choice.Message.StringContent(); got != text1+text2 {
+		t.Fatalf("content = %q, want %q", got, text1+text2)
+	}
+	if got := choice.Message.ReasoningContent; got != thinking1+thinking2 {
+		t.Fatalf("reasoning_content = %q, want %q", got, thinking1+thinking2)
+	}
+	if got := choice.FinishReason; got != "tool_calls" {
+		t.Fatalf("finish_reason = %q, want %q", got, "tool_calls")
+	}
+
+	toolCalls := choice.Message.ParseToolCalls()
+	if len(toolCalls) != 2 {
+		t.Fatalf("tool calls len = %d, want 2", len(toolCalls))
+	}
+	if toolCalls[0].ID != "call_1" || toolCalls[0].Function.Name != "write_file" {
+		t.Fatalf("unexpected first tool call: id=%q name=%q", toolCalls[0].ID, toolCalls[0].Function.Name)
+	}
+	var input1 map[string]any
+	if err := common.UnmarshalJsonStr(toolCalls[0].Function.Arguments, &input1); err != nil {
+		t.Fatalf("failed to parse first tool args: %v", err)
+	}
+	if input1["path"] != "/tmp/a.txt" {
+		t.Fatalf("first tool args path = %v, want /tmp/a.txt", input1["path"])
+	}
+
+	if toolCalls[1].ID != "call_2" || toolCalls[1].Function.Name != "run_shell" {
+		t.Fatalf("unexpected second tool call: id=%q name=%q", toolCalls[1].ID, toolCalls[1].Function.Name)
+	}
+	var input2 map[string]any
+	if err := common.UnmarshalJsonStr(toolCalls[1].Function.Arguments, &input2); err != nil {
+		t.Fatalf("failed to parse second tool args: %v", err)
+	}
+	if input2["cmd"] != "pwd" {
+		t.Fatalf("second tool args cmd = %v, want pwd", input2["cmd"])
 	}
 }

@@ -111,7 +111,7 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	}
 
 	if shouldRecordClaudeResponseBlocks(relayInfo) {
-		record.ClaudeResponseBlocks = buildClaudeResponseBlocksFromSSE(relayInfo.ResponseBody)
+		record.ClaudeResponseBlocks = buildClaudeResponseBlocks(relayInfo)
 	}
 	if shouldRecordResponsesResponseBlocks(relayInfo) {
 		record.ResponsesResponseBlocks = buildResponsesResponseBlocksFromSSE(relayInfo.ResponseBody)
@@ -167,7 +167,7 @@ func isResponsesStructuredRecord(relayInfo *relaycommon.RelayInfo) bool {
 }
 
 func shouldRecordClaudeResponseBlocks(relayInfo *relaycommon.RelayInfo) bool {
-	if !isClaudeStructuredRecord(relayInfo) || relayInfo == nil || !relayInfo.IsStream || strings.TrimSpace(relayInfo.ResponseBody) == "" {
+	if !isClaudeStructuredRecord(relayInfo) || relayInfo == nil || strings.TrimSpace(relayInfo.ResponseBody) == "" {
 		return false
 	}
 	return true
@@ -184,6 +184,79 @@ type claudeResponseBlockState struct {
 	Block        model.ClaudeResponseBlock
 	Content      strings.Builder
 	ToolInputRaw strings.Builder
+}
+
+func buildClaudeResponseBlocks(relayInfo *relaycommon.RelayInfo) []model.ClaudeResponseBlock {
+	if relayInfo == nil {
+		return nil
+	}
+	responseBody := strings.TrimSpace(relayInfo.ResponseBody)
+	if responseBody == "" {
+		return nil
+	}
+	if relayInfo.IsStream {
+		return buildClaudeResponseBlocksFromSSE(responseBody)
+	}
+	return buildClaudeResponseBlocksFromMessageBody(responseBody)
+}
+
+func buildClaudeResponseBlocksFromMessageBody(responseBody string) []model.ClaudeResponseBlock {
+	responseBody = strings.TrimSpace(responseBody)
+	if responseBody == "" {
+		return nil
+	}
+
+	var claudeResponse dto.ClaudeResponse
+	if err := common.UnmarshalJsonStr(responseBody, &claudeResponse); err != nil {
+		return nil
+	}
+	if len(claudeResponse.Content) == 0 {
+		return nil
+	}
+
+	result := make([]model.ClaudeResponseBlock, 0, len(claudeResponse.Content))
+	for _, content := range claudeResponse.Content {
+		switch strings.TrimSpace(content.Type) {
+		case "thinking":
+			if content.Thinking == nil {
+				continue
+			}
+			thinkingText := safeTruncateUTF8(*content.Thinking, maxCompletionLength)
+			if strings.TrimSpace(thinkingText) == "" {
+				continue
+			}
+			result = append(result, model.ClaudeResponseBlock{
+				Type:    "thinking",
+				Content: thinkingText,
+			})
+		case "text":
+			text := safeTruncateUTF8(content.GetText(), maxCompletionLength)
+			if strings.TrimSpace(text) == "" {
+				continue
+			}
+			result = append(result, model.ClaudeResponseBlock{
+				Type:    "text",
+				Content: text,
+			})
+		case "tool_use":
+			toolID := strings.TrimSpace(content.Id)
+			toolName := strings.TrimSpace(content.Name)
+			if toolID == "" && toolName == "" && content.Input == nil {
+				continue
+			}
+			result = append(result, model.ClaudeResponseBlock{
+				ID:    toolID,
+				Type:  "tool_use",
+				Name:  toolName,
+				Input: sanitizeToolLogValue(content.Input),
+			})
+		}
+	}
+
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func buildClaudeResponseBlocksFromSSE(responseBody string) []model.ClaudeResponseBlock {

@@ -493,22 +493,15 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 		Object:  "chat.completion",
 		Created: common.GetTimestamp(),
 	}
-	var responseText string
-	var responseThinking string
-	if len(claudeResponse.Content) > 0 {
-		responseText = claudeResponse.Content[0].GetText()
-		if claudeResponse.Content[0].Thinking != nil {
-			responseThinking = *claudeResponse.Content[0].Thinking
-		}
-	}
 	tools := make([]dto.ToolCallResponse, 0)
-	thinkingContent := ""
+	textBuilder := strings.Builder{}
+	thinkingBuilder := strings.Builder{}
 
 	fullTextResponse.Id = claudeResponse.Id
 	for _, message := range claudeResponse.Content {
 		switch message.Type {
 		case "tool_use":
-			args, _ := json.Marshal(message.Input)
+			args, _ := common.Marshal(message.Input)
 			tools = append(tools, dto.ToolCallResponse{
 				ID:   message.Id,
 				Type: "function", // compatible with other OpenAI derivative applications
@@ -520,12 +513,17 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 		case "thinking":
 			// 加密的不管， 只输出明文的推理过程
 			if message.Thinking != nil {
-				thinkingContent = *message.Thinking
+				thinkingBuilder.WriteString(*message.Thinking)
 			}
 		case "text":
-			responseText = message.GetText()
+			textBuilder.WriteString(message.GetText())
 		}
 	}
+	responseText := textBuilder.String()
+	if responseText == "" {
+		responseText = claudeResponse.Completion
+	}
+	responseThinking := thinkingBuilder.String()
 	choice := dto.OpenAITextResponseChoice{
 		Index: 0,
 		Message: dto.Message{
@@ -534,13 +532,10 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 		FinishReason: stopReasonClaude2OpenAI(claudeResponse.StopReason),
 	}
 	choice.SetStringContent(responseText)
-	if len(responseThinking) > 0 {
-		choice.ReasoningContent = responseThinking
-	}
 	if len(tools) > 0 {
 		choice.Message.SetToolCalls(tools)
 	}
-	choice.Message.ReasoningContent = thinkingContent
+	choice.Message.ReasoningContent = responseThinking
 	fullTextResponse.Model = claudeResponse.Model
 	choices = append(choices, choice)
 	fullTextResponse.Choices = choices

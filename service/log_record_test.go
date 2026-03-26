@@ -181,6 +181,53 @@ func TestBuildLogRecordNonClaudeStreamSkipsStructuredBlocks(t *testing.T) {
 	require.Equal(t, "plain completion", record.Completion)
 }
 
+func TestBuildLogRecordClaudeNonStreamUsesStructuredBlocks(t *testing.T) {
+	enableRecordConsumeLogDetailForTest(t)
+
+	relayInfo := &relaycommon.RelayInfo{
+		IsStream: false,
+		ResponseBody: `{
+			"id":"msg_non_stream",
+			"type":"message",
+			"role":"assistant",
+			"model":"glm-5",
+			"content":[
+				{"type":"thinking","thinking":"先分析需求。","signature":"abc"},
+				{"type":"text","text":"开始处理。"},
+				{"type":"tool_use","id":"call_1","name":"Write","input":{"file_path":"/tmp/a.ts","content":"hello"}}
+			]
+		}`,
+		CompletionText:          "先分析需求。开始处理。",
+		FinalRequestRelayFormat: types.RelayFormatClaude,
+	}
+
+	recordJSON := BuildLogRecord(relayInfo)
+	require.NotEmpty(t, recordJSON)
+
+	var record model.LogDetailRecord
+	require.NoError(t, common.UnmarshalJsonStr(recordJSON, &record))
+	require.Len(t, record.ClaudeResponseBlocks, 3)
+	require.Equal(t, "thinking", record.ClaudeResponseBlocks[0].Type)
+	require.Equal(t, "先分析需求。", record.ClaudeResponseBlocks[0].Content)
+	require.Equal(t, "text", record.ClaudeResponseBlocks[1].Type)
+	require.Equal(t, "开始处理。", record.ClaudeResponseBlocks[1].Content)
+	require.Equal(t, "tool_use", record.ClaudeResponseBlocks[2].Type)
+	require.Equal(t, "call_1", record.ClaudeResponseBlocks[2].ID)
+	require.Equal(t, "Write", record.ClaudeResponseBlocks[2].Name)
+	require.Equal(t, map[string]any{
+		"file_path": "/tmp/a.ts",
+		"content":   "hello",
+	}, record.ClaudeResponseBlocks[2].Input)
+
+	require.Len(t, record.ToolInvokes, 1)
+	require.Equal(t, "call_1", record.ToolInvokes[0].ID)
+	require.Equal(t, "Write", record.ToolInvokes[0].Name)
+	require.Equal(t, map[string]any{
+		"file_path": "/tmp/a.ts",
+		"content":   "hello",
+	}, record.ToolInvokes[0].Input)
+}
+
 func TestBuildLogRecordClaudeToolOnlyRequestDoesNotStorePromptContent(t *testing.T) {
 	enableRecordConsumeLogDetailForTest(t)
 
