@@ -42,6 +42,7 @@ import Midjourney from './pages/Midjourney';
 import Pricing from './pages/Pricing';
 import Task from './pages/Task';
 import ModelPage from './pages/Model';
+import ModelLog from './pages/ModelLog';
 import ModelDeploymentPage from './pages/ModelDeployment';
 import Playground from './pages/Playground';
 import Subscription from './pages/Subscription';
@@ -144,6 +145,14 @@ function App() {
           element={
             <PrivateRoute>
               <Token />
+            </PrivateRoute>
+          }
+        />
+        <Route
+          path='/console/model-log'
+          element={
+            <PrivateRoute>
+              <ModelLog />
             </PrivateRoute>
           }
         />

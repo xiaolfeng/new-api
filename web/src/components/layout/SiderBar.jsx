@@ -34,6 +34,7 @@ const routerMap = {
   home: '/',
   channel: '/console/channel',
   token: '/console/token',
+  model_log: '/console/model-log',
   redemption: '/console/redemption',
   topup: '/console/topup',
   user: '/console/user',
@@ -88,6 +89,11 @@ const SiderBar = ({ onNavigate = () => {} }) => {
         text: t('使用日志'),
         itemKey: 'log',
         to: '/log',
+      },
+      {
+        text: t('模型日志'),
+        itemKey: 'model_log',
+        to: '/model-log',
       },
       {
         text: t('绘图日志'),
