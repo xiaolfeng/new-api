@@ -32,6 +32,71 @@ import { MarkdownSourceHighlighter } from '../../../common/markdown/MarkdownSour
 
 const { Text } = Typography;
 
+const deriveResponsesRequestDataFromPromptInput = (promptInput) => {
+  if (!Array.isArray(promptInput)) {
+    return {
+      requestBlocks: [],
+      toolResponses: [],
+    };
+  }
+
+  const requestBlocks = [];
+  const toolResponses = [];
+
+  promptInput.forEach((item) => {
+    if (!item || typeof item !== 'object') {
+      return;
+    }
+
+    if (item.type === 'message') {
+      const role = typeof item.role === 'string' ? item.role : '';
+      const content = Array.isArray(item.content) ? item.content : [];
+      content.forEach((part) => {
+        if (!part || typeof part !== 'object') {
+          return;
+        }
+        if (!['input_text', 'text'].includes(part.type)) {
+          return;
+        }
+        if (typeof part.text !== 'string' || part.text.trim() === '') {
+          return;
+        }
+        requestBlocks.push({
+          type: part.type,
+          role,
+          text: part.text,
+        });
+      });
+      return;
+    }
+
+    if (['input_text', 'text'].includes(item.type)) {
+      if (typeof item.text !== 'string' || item.text.trim() === '') {
+        return;
+      }
+      requestBlocks.push({
+        type: item.type,
+        role: typeof item.role === 'string' ? item.role : '',
+        text: item.text,
+      });
+      return;
+    }
+
+    if (item.type === 'function_call_output') {
+      toolResponses.push({
+        callId: item.call_id || item.callId || '',
+        name: item.name || '',
+        type: 'function_call_output',
+      });
+    }
+  });
+
+  return {
+    requestBlocks,
+    toolResponses,
+  };
+};
+
 const LogDetailModal = ({
   showLogDetailModal,
   setShowLogDetailModal,
@@ -58,10 +123,15 @@ const LogDetailModal = ({
   );
   const isFullLogRecord = logDetailMode === 'full_log';
   const record = isFullLogRecord ? fullLogRecord : legacyRecord;
+  const prompt = record?.prompt || {};
+  const fallbackResponsesRequestData = useMemo(
+    () => deriveResponsesRequestDataFromPromptInput(prompt?.input),
+    [prompt?.input],
+  );
   const claudeRequestBlocks = Array.isArray(record?.claudeRequestBlocks)
     ? record.claudeRequestBlocks
-    : Array.isArray(record?.prompt?.claudeRequestBlocks)
-      ? record.prompt.claudeRequestBlocks
+    : Array.isArray(prompt?.claudeRequestBlocks)
+      ? prompt.claudeRequestBlocks
       : [];
   const claudeToolResponses = Array.isArray(record?.claudeToolResponses)
     ? record.claudeToolResponses
@@ -69,12 +139,14 @@ const LogDetailModal = ({
   const claudeResponseBlocks = Array.isArray(record?.claudeResponseBlocks)
     ? record.claudeResponseBlocks
     : [];
-  const responsesRequestBlocks = Array.isArray(record?.responsesRequestBlocks)
-    ? record.responsesRequestBlocks
-    : [];
-  const responsesToolResponses = Array.isArray(record?.responsesToolResponses)
-    ? record.responsesToolResponses
-    : [];
+  const responsesRequestBlocks =
+    Array.isArray(record?.responsesRequestBlocks) && record.responsesRequestBlocks.length > 0
+      ? record.responsesRequestBlocks
+      : fallbackResponsesRequestData.requestBlocks;
+  const responsesToolResponses =
+    Array.isArray(record?.responsesToolResponses) && record.responsesToolResponses.length > 0
+      ? record.responsesToolResponses
+      : fallbackResponsesRequestData.toolResponses;
   const responsesResponseBlocks = Array.isArray(record?.responsesResponseBlocks)
     ? record.responsesResponseBlocks
     : [];
@@ -762,7 +834,6 @@ const LogDetailModal = ({
       );
     }
 
-    const prompt = record?.prompt || {};
     const lastUserMessage = prompt?.lastUserMessage;
     const input = prompt?.input;
     const instructions = prompt?.instructions;
