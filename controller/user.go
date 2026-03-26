@@ -464,6 +464,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 		"detail":     true,
 		"token":      true,
 		"log":        true,
+		"model_log":  true,
 		"midjourney": true,
 		"task":       true,
 	}
@@ -548,6 +549,10 @@ func UpdateUser(c *gin.Context) {
 	}
 	if err := common.Validate.Struct(&updatedUser); err != nil {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
+		return
+	}
+	if !common.IsValidateRole(updatedUser.Role) {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
 		return
 	}
 	originUser, err := model.GetUserById(updatedUser.Id, false)
@@ -811,6 +816,10 @@ func CreateUser(c *gin.Context) {
 		common.ApiErrorI18n(c, i18n.MsgUserInputInvalid, map[string]any{"Error": err.Error()})
 		return
 	}
+	if !common.IsValidateRole(user.Role) {
+		common.ApiErrorI18n(c, i18n.MsgInvalidParams)
+		return
+	}
 	if user.DisplayName == "" {
 		user.DisplayName = user.Username
 	}
@@ -1044,7 +1053,6 @@ type UpdateUserSettingRequest struct {
 	UpstreamModelUpdateNotifyEnabled *bool   `json:"upstream_model_update_notify_enabled,omitempty"`
 	AcceptUnsetModelRatioModel       bool    `json:"accept_unset_model_ratio_model"`
 	RecordIpLog                      bool    `json:"record_ip_log"`
-	DeveloperToolLogEnabled          bool    `json:"developer_tool_log_enabled"`
 }
 
 func UpdateUserSetting(c *gin.Context) {
@@ -1147,7 +1155,6 @@ func UpdateUserSetting(c *gin.Context) {
 	settings.UpstreamModelUpdateNotifyEnabled = upstreamModelUpdateNotifyEnabled
 	settings.AcceptUnsetRatioModel = req.AcceptUnsetModelRatioModel
 	settings.RecordIpLog = req.RecordIpLog
-	settings.DeveloperToolLogEnabled = req.DeveloperToolLogEnabled
 	settings.WebhookUrl = ""
 	settings.WebhookSecret = ""
 	settings.NotificationEmail = ""

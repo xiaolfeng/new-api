@@ -21,6 +21,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   API,
+  isRoot,
   showError,
   showSuccess,
   renderQuota,
@@ -77,6 +78,7 @@ const EditUserModal = (props) => {
     username: '',
     display_name: '',
     password: '',
+    role: 1,
     github_id: '',
     oidc_id: '',
     discord_id: '',
@@ -88,6 +90,12 @@ const EditUserModal = (props) => {
     group: 'default',
     remark: '',
   });
+
+  const roleOptions = [
+    { label: t('普通用户'), value: 1 },
+    { label: t('代码用户'), value: 2 },
+    ...(isRoot() ? [{ label: t('管理员'), value: 10 }] : []),
+  ];
 
   const fetchGroups = async () => {
     try {
@@ -255,6 +263,15 @@ const EditUserModal = (props) => {
                         label={t('显示名称')}
                         placeholder={t('请输入新的显示名称')}
                         showClear
+                      />
+                    </Col>
+
+                    <Col span={24}>
+                      <Form.Select
+                        field='role'
+                        label={t('角色')}
+                        optionList={roleOptions}
+                        rules={[{ required: true, message: t('请选择角色') }]}
                       />
                     </Col>
 

@@ -802,22 +802,6 @@ const NotificationSettings = ({
                   disabled={true}
                   extraText={t('此功能已由管理员强制开启，不可关闭')}
                 />
-                {!isAdminOrRoot && (
-                  <div className='mt-4'>
-                    <Form.Switch
-                      field='developerToolLogEnabled'
-                      label={t('开发工具日志记录功能')}
-                      checkedText={t('开')}
-                      uncheckedText={t('关')}
-                      onChange={(value) =>
-                        handleFormChange('developerToolLogEnabled', value)
-                      }
-                      extraText={t(
-                        '开启后，您可以查看来源为 Claude Code 与 Codex 的详细日志记录；关闭后仅保留基础日志信息',
-                      )}
-                    />
-                  </div>
-                )}
               </div>
             </TabPane>
 

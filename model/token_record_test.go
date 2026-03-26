@@ -61,9 +61,9 @@ func TestRecordTokenRecordAccumulatesWithinSameHour(t *testing.T) {
 	require.EqualValues(t, baseTimestamp+3599, record.BucketEndAt)
 	require.Equal(t, "gpt-5", record.ModelName)
 	require.EqualValues(t, 2, record.RequestCount)
-	require.EqualValues(t, 13, record.PromptTokens)
+	require.EqualValues(t, 0, record.PromptTokens)
 	require.EqualValues(t, 27, record.CompletionTokens)
-	require.EqualValues(t, 40, record.TotalTokens)
+	require.EqualValues(t, 27, record.TotalTokens)
 	require.EqualValues(t, 7, record.TotalUseTime)
 	require.EqualValues(t, baseTimestamp, record.FirstUsedAt)
 	require.EqualValues(t, baseTimestamp+300, record.LastUsedAt)
@@ -110,11 +110,11 @@ func TestGetRecentTokenRecordSnapshotBackfillsHours(t *testing.T) {
 	}
 	require.NotNil(t, claudeItem)
 	require.Len(t, claudeItem.Cells, 24)
-	require.EqualValues(t, 150, claudeItem.Cells[0].TotalTokens)
-	require.EqualValues(t, 50, claudeItem.Cells[23].TotalTokens)
-	require.EqualValues(t, 200, claudeItem.Summary.TotalTokens)
+	require.EqualValues(t, 50, claudeItem.Cells[0].TotalTokens)
+	require.EqualValues(t, 10, claudeItem.Cells[23].TotalTokens)
+	require.EqualValues(t, 60, claudeItem.Summary.TotalTokens)
 	require.EqualValues(t, 15, claudeItem.Summary.TotalUseTime)
-	require.EqualValues(t, 13.33, claudeItem.Summary.AvgTPS)
+	require.EqualValues(t, 4, claudeItem.Summary.AvgTPS)
 
 	var gptItem *TokenRecordRecentItem
 	for i := range snapshot.Items {
@@ -124,6 +124,6 @@ func TestGetRecentTokenRecordSnapshotBackfillsHours(t *testing.T) {
 		}
 	}
 	require.NotNil(t, gptItem)
-	require.EqualValues(t, 100, gptItem.Cells[23].TotalTokens)
+	require.EqualValues(t, 30, gptItem.Cells[23].TotalTokens)
 	require.EqualValues(t, 0, gptItem.Cells[23].AvgTPS)
 }

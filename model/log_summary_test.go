@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/stretchr/testify/require"
 )
 
@@ -27,7 +26,7 @@ func TestExtractLogDetailSummaries(t *testing.T) {
 	require.Equal(t, "输入", interactionType)
 }
 
-func TestFormatUserLogsHidesDetailWhenFeatureDisabled(t *testing.T) {
+func TestFormatUserLogsHidesDetailForCommonUser(t *testing.T) {
 	recordBytes, err := common.Marshal(LogDetailRecord{
 		Headers: map[string]string{
 			"User-Agent": "claude-cli/1.0.0",
@@ -48,8 +47,7 @@ func TestFormatUserLogsHidesDetailWhenFeatureDisabled(t *testing.T) {
 		},
 	}
 
-	setting := &dto.UserSetting{DeveloperToolLogEnabled: false}
-	formatUserLogs(logs, 0, setting)
+	formatUserLogs(logs, 0, &User{Role: common.RoleCommonUser})
 
 	require.Empty(t, logs[0].Record)
 	require.Empty(t, logs[0].FullLog)
@@ -60,10 +58,10 @@ func TestFormatUserLogsHidesDetailWhenFeatureDisabled(t *testing.T) {
 	require.Equal(t, "输入", otherMap[LogOtherInteractionTypeKey])
 }
 
-func TestFormatUserLogsKeepsDeveloperToolRecordWhenFeatureEnabled(t *testing.T) {
+func TestFormatUserLogsKeepsDeveloperToolLogsForCodeUser(t *testing.T) {
 	recordBytes, err := common.Marshal(LogDetailRecord{
 		Headers: map[string]string{
-			"User-Agent": "codex-cli-rs/0.1.0",
+			"User-Agent": "opencode/0.1.0",
 		},
 		ResponsesRequestBlocks: []ResponsesRequestBlock{
 			{
@@ -83,14 +81,13 @@ func TestFormatUserLogsKeepsDeveloperToolRecordWhenFeatureEnabled(t *testing.T) 
 		},
 	}
 
-	setting := &dto.UserSetting{DeveloperToolLogEnabled: true}
-	formatUserLogs(logs, 0, setting)
+	formatUserLogs(logs, 0, &User{Role: common.RoleCodeUser})
 
 	require.NotEmpty(t, logs[0].Record)
-	require.Empty(t, logs[0].FullLog)
+	require.NotEmpty(t, logs[0].FullLog)
 
 	otherMap, err := common.StrToMap(logs[0].Other)
 	require.NoError(t, err)
-	require.Equal(t, "Codex", otherMap[LogOtherClientSourceKey])
+	require.Equal(t, "OpenCode", otherMap[LogOtherClientSourceKey])
 	require.Equal(t, "输入", otherMap[LogOtherInteractionTypeKey])
 }

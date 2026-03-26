@@ -105,7 +105,7 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 
 	modelName = normalizeTokenRecordModelName(modelName)
 	bucketStartAt, bucketEndAt := getTokenRecordHourBucket(createdAt)
-	totalTokens := int64(promptTokens + completionTokens)
+	outputTokens := int64(completionTokens)
 	totalUseTime := int64(useTimeSeconds)
 	if totalUseTime < 0 {
 		totalUseTime = 0
@@ -116,9 +116,9 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 		BucketEndAt:      bucketEndAt,
 		ModelName:        modelName,
 		RequestCount:     1,
-		PromptTokens:     int64(promptTokens),
-		CompletionTokens: int64(completionTokens),
-		TotalTokens:      totalTokens,
+		PromptTokens:     0,
+		CompletionTokens: outputTokens,
+		TotalTokens:      outputTokens,
 		TotalUseTime:     totalUseTime,
 		FirstUsedAt:      createdAt,
 		LastUsedAt:       createdAt,
@@ -134,9 +134,9 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"bucket_end_at":     bucketEndAt,
 			"request_count":     buildTokenRecordIncrementExpr("request_count", 1),
-			"prompt_tokens":     buildTokenRecordIncrementExpr("prompt_tokens", promptTokens),
-			"completion_tokens": buildTokenRecordIncrementExpr("completion_tokens", completionTokens),
-			"total_tokens":      buildTokenRecordIncrementExpr("total_tokens", totalTokens),
+			"prompt_tokens":     buildTokenRecordIncrementExpr("prompt_tokens", 0),
+			"completion_tokens": buildTokenRecordIncrementExpr("completion_tokens", outputTokens),
+			"total_tokens":      buildTokenRecordIncrementExpr("total_tokens", outputTokens),
 			"total_use_time":    buildTokenRecordIncrementExpr("total_use_time", totalUseTime),
 			"last_used_at":      createdAt,
 			"updated_at":        createdAt,

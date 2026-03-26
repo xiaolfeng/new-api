@@ -56,13 +56,14 @@ const getCellStyle = (cell, maxTokens) => {
   };
 };
 
+const getCellAriaLabel = (cell) =>
+  `hour-${cell.bucket_start_at}-tokens-${cell.total_tokens || 0}`;
+
 const buildCellTooltip = (cell) => (
   <div className='min-w-[220px] space-y-1 text-sm'>
     <div className='font-semibold'>
       {formatHourRange(cell.bucket_start_at, cell.bucket_end_at)}
     </div>
-    <div>总 Token：{renderNumber(cell.total_tokens || 0)}</div>
-    <div>输入 Token：{renderNumber(cell.prompt_tokens || 0)}</div>
     <div>输出 Token：{renderNumber(cell.completion_tokens || 0)}</div>
     <div>成功请求：{renderNumber(cell.request_count || 0)}</div>
     <div>累计耗时：{renderNumber(cell.total_use_time || 0)} 秒</div>
@@ -71,7 +72,7 @@ const buildCellTooltip = (cell) => (
 );
 
 const ModelLogBoard = () => {
-  const { t, loading, refreshing, hours, items, lastUpdatedAt, refreshData } =
+  const { t, loading, refreshing, items, lastUpdatedAt, refreshData } =
     useModelLogData();
 
   return (
@@ -83,7 +84,7 @@ const ModelLogBoard = () => {
             <div className='text-lg font-semibold'>{t('模型日志')}</div>
             <Text type='secondary'>
               {t(
-                '展示最近 24 小时各模型的成功请求 Token 聚合、累计耗时与平均 TPS。',
+                '展示最近 24 小时各模型的成功请求输出 Token 聚合、累计耗时与平均 TPS。',
               )}
             </Text>
             {lastUpdatedAt > 0 && (
@@ -119,7 +120,7 @@ const ModelLogBoard = () => {
             <div className='text-sm font-semibold'>{t('模型')}</div>
             <div className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
               {t(
-                '每个模型显示最近 24 小时的 24 个格子，颜色越深表示该小时 Token 用量越高。',
+                '每个模型显示最近 24 小时的 24 个格子，颜色越深表示该小时输出 Token 用量越高。',
               )}
             </div>
           </div>
@@ -134,27 +135,27 @@ const ModelLogBoard = () => {
               return (
                 <div
                   key={item.model_name}
-                  className='flex flex-col gap-3 xl:flex-row'
+                  className='flex flex-col gap-3 lg:flex-row lg:items-start'
                 >
                   <Card
-                    className='w-full xl:w-[280px] xl:shrink-0 !rounded-2xl'
+                    className='w-full lg:w-[220px] lg:shrink-0 !rounded-2xl'
                     bordered
-                    bodyStyle={{ padding: 14 }}
+                    bodyStyle={{ padding: 12 }}
                   >
-                    <div className='space-y-3'>
-                      <div className='break-all text-sm font-semibold'>
+                    <div className='space-y-2.5'>
+                      <div className='break-all text-sm font-semibold leading-5'>
                         {item.model_name}
                       </div>
-                      <div className='grid grid-cols-2 gap-2 text-xs'>
-                        <div className='rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
+                      <div className='flex flex-wrap gap-2 text-xs'>
+                        <div className='min-w-[92px] flex-1 rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
                           <div className='text-[var(--semi-color-text-2)]'>
-                            {t('总 Token')}
+                            {t('输出 Token')}
                           </div>
                           <div className='mt-1 text-sm font-semibold'>
                             {renderNumber(item.summary.total_tokens || 0)}
                           </div>
                         </div>
-                        <div className='rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
+                        <div className='min-w-[92px] flex-1 rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
                           <div className='text-[var(--semi-color-text-2)]'>
                             {t('成功请求')}
                           </div>
@@ -162,7 +163,7 @@ const ModelLogBoard = () => {
                             {renderNumber(item.summary.request_count || 0)}
                           </div>
                         </div>
-                        <div className='rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
+                        <div className='min-w-[92px] flex-1 rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
                           <div className='text-[var(--semi-color-text-2)]'>
                             {t('平均 TPS')}
                           </div>
@@ -170,7 +171,7 @@ const ModelLogBoard = () => {
                             {formatAvgTps(item.summary.avg_tps)}
                           </div>
                         </div>
-                        <div className='rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
+                        <div className='min-w-[92px] flex-1 rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
                           <div className='text-[var(--semi-color-text-2)]'>
                             {t('累计耗时')}
                           </div>
@@ -182,13 +183,7 @@ const ModelLogBoard = () => {
                     </div>
                   </Card>
 
-                  <div
-                    className='grid flex-1 gap-2'
-                    style={{
-                      gridTemplateColumns:
-                        'repeat(auto-fit, minmax(44px, 1fr))',
-                    }}
-                  >
+                  <div className='flex flex-1 flex-wrap gap-2'>
                     {item.cells.map((cell) => {
                       const cellStyle = getCellStyle(cell, rowMaxTokens);
                       return (
@@ -199,15 +194,10 @@ const ModelLogBoard = () => {
                         >
                           <button
                             type='button'
-                            className='flex h-14 min-w-[44px] flex-col items-center justify-center rounded-xl px-1 text-[11px] font-semibold transition-transform hover:-translate-y-0.5'
+                            aria-label={getCellAriaLabel(cell)}
+                            className='h-8 w-8 shrink-0 rounded-lg transition-transform hover:-translate-y-0.5 sm:h-9 sm:w-9 md:h-10 md:w-10'
                             style={cellStyle}
-                          >
-                            <span>
-                              {cell.total_tokens > 0
-                                ? renderNumber(cell.total_tokens)
-                                : '-'}
-                            </span>
-                          </button>
+                          ></button>
                         </Tooltip>
                       );
                     })}

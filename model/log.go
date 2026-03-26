@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/types"
 
@@ -39,8 +38,8 @@ type Log struct {
 	Ip               string  `json:"ip" gorm:"index;default:''"`
 	RequestId        string  `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
 	Other            string  `json:"other"`
-	Record           string  `json:"record" gorm:"type:text"`                 // 消费日志详细记录（仅管理员可见）
-	FullLog          string  `json:"full_log" gorm:"type:text"`               // 完整消费日志记录（仅管理员可见）
+	Record           string  `json:"record" gorm:"type:text"`                 // 消费日志详细记录（管理员/代码用户可见，仍受来源限制）
+	FullLog          string  `json:"full_log" gorm:"type:text"`               // 完整消费日志记录（管理员/代码用户可见，仍受来源限制）
 	Tps              float64 `json:"tps" gorm:"type:decimal(10,2);default:0"` // Tokens Per Second
 }
 
@@ -55,7 +54,7 @@ const (
 	LogTypeRefund  = 6
 )
 
-func formatUserLogs(logs []*Log, startIdx int, userSetting *dto.UserSetting) {
+func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 	for i := range logs {
 		logs[i].ChannelName = ""
 		sourceFromRecord, interactionFromRecord := ExtractLogDetailSummaries(logs[i].Record)
@@ -88,15 +87,15 @@ func formatUserLogs(logs []*Log, startIdx int, userSetting *dto.UserSetting) {
 			logs[i].Other = originalOther
 		}
 
-		if userSetting != nil {
+		if viewer != nil {
 			summarySource := strings.TrimSpace(common.Interface2String(otherMap[LogOtherClientSourceKey]))
 			if summarySource == "" {
 				summarySource = sourceFromRecord
 			}
-			if !userSetting.DeveloperToolLogEnabled || !IsDeveloperToolLogSource(summarySource) {
+			if !CanViewDeveloperToolLogDetail(viewer.Role) || !IsDeveloperToolLogSource(summarySource) {
 				logs[i].Record = ""
+				logs[i].FullLog = ""
 			}
-			logs[i].FullLog = ""
 		}
 
 		logs[i].Id = startIdx + i + 1
@@ -105,7 +104,16 @@ func formatUserLogs(logs []*Log, startIdx int, userSetting *dto.UserSetting) {
 
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
 	err = LOG_DB.Model(&Log{}).Where("token_id = ?", tokenId).Order("id desc").Limit(common.MaxRecentItems).Find(&logs).Error
-	formatUserLogs(logs, 0, nil)
+	if err != nil {
+		return logs, err
+	}
+	viewer := &User{Role: common.RoleCommonUser}
+	if token, tokenErr := GetTokenById(tokenId); tokenErr == nil {
+		if user, userErr := GetUserById(token.UserId, false); userErr == nil {
+			viewer = user
+		}
+	}
+	formatUserLogs(logs, 0, viewer)
 	return logs, err
 }
 
@@ -410,13 +418,13 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		return nil, 0, errors.New("查询日志失败")
 	}
 
-	var userSetting *dto.UserSetting
-	if setting, settingErr := GetUserSetting(userId, false); settingErr == nil {
-		userSetting = &setting
+	viewer := &User{Role: common.RoleCommonUser}
+	if user, userErr := GetUserById(userId, false); userErr == nil {
+		viewer = user
 	} else {
-		common.SysError("failed to load user setting when formatting logs: " + settingErr.Error())
+		common.SysError("failed to load user when formatting logs: " + userErr.Error())
 	}
-	formatUserLogs(logs, startIdx, userSetting)
+	formatUserLogs(logs, startIdx, viewer)
 	return logs, total, err
 }
 

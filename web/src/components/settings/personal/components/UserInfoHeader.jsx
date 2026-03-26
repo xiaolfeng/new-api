@@ -96,6 +96,14 @@ const UserInfoHeader = ({ t, userState }) => {
                       >
                         {t('管理员')}
                       </Tag>
+                    ) : userState?.user?.role === 2 ? (
+                      <Tag
+                        size='large'
+                        shape='circle'
+                        style={{ color: 'white' }}
+                      >
+                        {t('代码用户')}
+                      </Tag>
                     ) : (
                       <Tag
                         size='large'

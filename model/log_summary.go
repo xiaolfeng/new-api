@@ -47,11 +47,15 @@ func ExtractLogDetailSummaries(record string) (string, string) {
 
 func IsDeveloperToolLogSource(source string) bool {
 	switch strings.TrimSpace(source) {
-	case "Claude Code", "Codex":
+	case "Claude Code", "Codex", "OpenCode":
 		return true
 	default:
 		return false
 	}
+}
+
+func CanViewDeveloperToolLogDetail(userRole int) bool {
+	return userRole == common.RoleCodeUser || userRole >= common.RoleAdminUser
 }
 
 func parseClientSourceFromHeaders(headers map[string]string) string {
