@@ -114,38 +114,17 @@ const ModelLogBoard = () => {
           <Empty description={t('最近 24 小时暂无模型日志数据')} />
         </div>
       ) : (
-        <div className='overflow-x-auto pb-2'>
-          <div className='min-w-[1360px] space-y-4'>
-            <div className='flex gap-3'>
-              <div className='w-[280px] shrink-0 rounded-2xl border border-dashed border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] p-3'>
-                <div className='text-sm font-semibold'>{t('模型')}</div>
-                <div className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
-                  {t('左侧显示 24 小时汇总，右侧 24 格代表最近 24 个小时。')}
-                </div>
-              </div>
-              <div className='flex gap-2'>
-                {hours.map((hour) => (
-                  <div
-                    key={hour.bucket_start_at}
-                    className='flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border text-xs font-medium'
-                    style={{
-                      borderColor: hour.is_current
-                        ? 'var(--semi-color-primary)'
-                        : 'var(--semi-color-border)',
-                      color: hour.is_current
-                        ? 'var(--semi-color-primary)'
-                        : 'var(--semi-color-text-1)',
-                      background: hour.is_current
-                        ? 'rgba(34, 197, 94, 0.08)'
-                        : 'var(--semi-color-fill-0)',
-                    }}
-                  >
-                    {hour.label}
-                  </div>
-                ))}
-              </div>
+        <div className='space-y-4 pb-2'>
+          <div className='rounded-2xl border border-dashed border-[var(--semi-color-border)] bg-[var(--semi-color-fill-0)] p-3'>
+            <div className='text-sm font-semibold'>{t('模型')}</div>
+            <div className='mt-1 text-xs text-[var(--semi-color-text-2)]'>
+              {t(
+                '每个模型显示最近 24 小时的 24 个格子，颜色越深表示该小时 Token 用量越高。',
+              )}
             </div>
+          </div>
 
+          <div className='space-y-4'>
             {items.map((item) => {
               const rowMaxTokens = Math.max(
                 ...item.cells.map((cell) => cell.total_tokens || 0),
@@ -153,9 +132,12 @@ const ModelLogBoard = () => {
               );
 
               return (
-                <div key={item.model_name} className='flex gap-3'>
+                <div
+                  key={item.model_name}
+                  className='flex flex-col gap-3 xl:flex-row'
+                >
                   <Card
-                    className='w-[280px] shrink-0 !rounded-2xl'
+                    className='w-full xl:w-[280px] xl:shrink-0 !rounded-2xl'
                     bordered
                     bodyStyle={{ padding: 14 }}
                   >
@@ -200,7 +182,13 @@ const ModelLogBoard = () => {
                     </div>
                   </Card>
 
-                  <div className='flex gap-2'>
+                  <div
+                    className='grid flex-1 gap-2'
+                    style={{
+                      gridTemplateColumns:
+                        'repeat(auto-fit, minmax(44px, 1fr))',
+                    }}
+                  >
                     {item.cells.map((cell) => {
                       const cellStyle = getCellStyle(cell, rowMaxTokens);
                       return (
@@ -211,7 +199,7 @@ const ModelLogBoard = () => {
                         >
                           <button
                             type='button'
-                            className='flex h-14 w-12 shrink-0 flex-col items-center justify-center rounded-xl text-[11px] font-semibold transition-transform hover:-translate-y-0.5'
+                            className='flex h-14 min-w-[44px] flex-col items-center justify-center rounded-xl px-1 text-[11px] font-semibold transition-transform hover:-translate-y-0.5'
                             style={cellStyle}
                           >
                             <span>
