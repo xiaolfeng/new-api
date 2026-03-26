@@ -71,6 +71,24 @@ const buildCellTooltip = (cell) => (
   </div>
 );
 
+const buildSummaryTooltip = (item, t) => (
+  <div className='min-w-[220px] space-y-1 text-sm'>
+    <div className='font-semibold break-all'>{item.model_name}</div>
+    <div>
+      {t('输出 Token')}：{renderNumber(item.summary.total_tokens || 0)}
+    </div>
+    <div>
+      {t('成功请求')}：{renderNumber(item.summary.request_count || 0)}
+    </div>
+    <div>
+      {t('平均 TPS')}：{formatAvgTps(item.summary.avg_tps)}
+    </div>
+    <div>
+      {t('累计耗时')}：{renderNumber(item.summary.total_use_time || 0)}s
+    </div>
+  </div>
+);
+
 const ModelLogBoard = () => {
   const { t, loading, refreshing, items, lastUpdatedAt, refreshData } =
     useModelLogData();
@@ -137,51 +155,23 @@ const ModelLogBoard = () => {
                   key={item.model_name}
                   className='flex flex-col gap-3 lg:flex-row lg:items-start'
                 >
-                  <Card
-                    className='w-full lg:w-[220px] lg:shrink-0 !rounded-2xl'
-                    bordered
-                    bodyStyle={{ padding: 12 }}
+                  <Tooltip
+                    content={buildSummaryTooltip(item, t)}
+                    position='top'
                   >
-                    <div className='space-y-2.5'>
+                    <Card
+                      className='w-full lg:w-[168px] lg:shrink-0 !rounded-2xl'
+                      bordered
+                      bodyStyle={{ padding: 12 }}
+                    >
                       <div className='break-all text-sm font-semibold leading-5'>
                         {item.model_name}
                       </div>
-                      <div className='flex flex-wrap gap-2 text-xs'>
-                        <div className='min-w-[92px] flex-1 rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
-                          <div className='text-[var(--semi-color-text-2)]'>
-                            {t('输出 Token')}
-                          </div>
-                          <div className='mt-1 text-sm font-semibold'>
-                            {renderNumber(item.summary.total_tokens || 0)}
-                          </div>
-                        </div>
-                        <div className='min-w-[92px] flex-1 rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
-                          <div className='text-[var(--semi-color-text-2)]'>
-                            {t('成功请求')}
-                          </div>
-                          <div className='mt-1 text-sm font-semibold'>
-                            {renderNumber(item.summary.request_count || 0)}
-                          </div>
-                        </div>
-                        <div className='min-w-[92px] flex-1 rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
-                          <div className='text-[var(--semi-color-text-2)]'>
-                            {t('平均 TPS')}
-                          </div>
-                          <div className='mt-1 text-sm font-semibold'>
-                            {formatAvgTps(item.summary.avg_tps)}
-                          </div>
-                        </div>
-                        <div className='min-w-[92px] flex-1 rounded-xl bg-[var(--semi-color-fill-0)] p-2'>
-                          <div className='text-[var(--semi-color-text-2)]'>
-                            {t('累计耗时')}
-                          </div>
-                          <div className='mt-1 text-sm font-semibold'>
-                            {renderNumber(item.summary.total_use_time || 0)}s
-                          </div>
-                        </div>
+                      <div className='mt-2 text-xs text-[var(--semi-color-text-2)]'>
+                        {t('悬浮查看统计')}
                       </div>
-                    </div>
-                  </Card>
+                    </Card>
+                  </Tooltip>
 
                   <div className='flex flex-1 flex-wrap gap-2'>
                     {item.cells.map((cell) => {
