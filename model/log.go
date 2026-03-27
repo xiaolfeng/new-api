@@ -192,6 +192,17 @@ type RecordConsumeLogParams struct {
 	Tps              float64                `json:"tps"` // Tokens Per Second
 }
 
+func resolveTokenRecordModelName(recordModelName string, other map[string]interface{}) string {
+	if other == nil {
+		return recordModelName
+	}
+	upstreamModelName := strings.TrimSpace(common.Interface2String(other["upstream_model_name"]))
+	if upstreamModelName == "" {
+		return recordModelName
+	}
+	return upstreamModelName
+}
+
 func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams) {
 	if !common.LogConsumeEnabled {
 		return
@@ -237,7 +248,8 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 		logger.LogError(c, "failed to record log: "+err.Error())
 		return
 	}
-	err = RecordTokenRecord(params.ModelName, params.PromptTokens, params.CompletionTokens, params.UseTimeSeconds, createdAt)
+	tokenRecordModelName := resolveTokenRecordModelName(params.ModelName, params.Other)
+	err = RecordTokenRecord(tokenRecordModelName, params.PromptTokens, params.CompletionTokens, params.UseTimeSeconds, createdAt)
 	if err != nil {
 		logger.LogError(c, "failed to record token record: "+err.Error())
 	}
