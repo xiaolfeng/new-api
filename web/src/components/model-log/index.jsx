@@ -56,6 +56,22 @@ const getCellStyle = (cell, maxTokens) => {
   };
 };
 
+const getCellStyleForTps = (cell, maxTps) => {
+  const ratio = maxTps > 0 && cell.avg_tps > 0 ? cell.avg_tps / maxTps : 0;
+  const backgroundAlpha = ratio > 0 ? 0.18 + ratio * 0.72 : 0.08;
+
+  return {
+    background:
+      cell.avg_tps > 0
+        ? `rgba(34, 197, 94, ${backgroundAlpha})`
+        : 'var(--semi-color-fill-1)',
+    border: cell.is_current
+      ? '2px solid var(--semi-color-success)'
+      : '1px solid var(--semi-color-border)',
+    color: ratio >= 0.55 ? '#ffffff' : 'var(--semi-color-text-0)',
+  };
+};
+
 const getCellAriaLabel = (cell) =>
   `hour-${cell.bucket_start_at}-tokens-${cell.total_tokens || 0}`;
 
@@ -68,6 +84,17 @@ const buildCellTooltip = (cell) => (
     <div>成功请求：{renderNumber(cell.request_count || 0)}</div>
     <div>累计耗时：{renderNumber(cell.total_use_time || 0)} 秒</div>
     <div>平均 TPS：{formatAvgTps(cell.avg_tps)}</div>
+  </div>
+);
+
+const buildTpsCellTooltip = (cell) => (
+  <div className='min-w-[220px] space-y-1 text-sm'>
+    <div className='font-semibold'>
+      {formatHourRange(cell.bucket_start_at, cell.bucket_end_at)}
+    </div>
+    <div>平均 TPS：{formatAvgTps(cell.avg_tps)}</div>
+    <div>输出 Token：{renderNumber(cell.completion_tokens || 0)}</div>
+    <div>成功请求：{renderNumber(cell.request_count || 0)}</div>
   </div>
 );
 
@@ -144,10 +171,14 @@ const ModelLogBoard = () => {
             </div>
           </div>
 
-          <div className='space-y-5'>
+          <div className='space-y-1'>
             {items.map((item) => {
               const rowMaxTokens = Math.max(
                 ...item.cells.map((cell) => cell.total_tokens || 0),
+                0,
+              );
+              const rowMaxTps = Math.max(
+                ...item.cells.map((cell) => cell.avg_tps || 0),
                 0,
               );
 
@@ -194,6 +225,26 @@ const ModelLogBoard = () => {
                             <button
                               type='button'
                               aria-label={getCellAriaLabel(cell)}
+                              className='h-4 w-4 shrink-0 rounded-[5px] transition-transform hover:-translate-y-0.5 sm:h-[18px] sm:w-[18px] md:h-5 md:w-5'
+                              style={cellStyle}
+                            ></button>
+                          </Tooltip>
+                        );
+                      })}
+                    </div>
+
+                    <div className='flex flex-wrap gap-1.5 sm:gap-2'>
+                      {item.cells.map((cell) => {
+                        const cellStyle = getCellStyleForTps(cell, rowMaxTps);
+                        return (
+                          <Tooltip
+                            key={`tps-${item.model_name}-${cell.bucket_start_at}`}
+                            content={buildTpsCellTooltip(cell)}
+                            position='top'
+                          >
+                            <button
+                              type='button'
+                              aria-label={`tps-${cell.bucket_start_at}-${cell.avg_tps || 0}`}
                               className='h-4 w-4 shrink-0 rounded-[5px] transition-transform hover:-translate-y-0.5 sm:h-[18px] sm:w-[18px] md:h-5 md:w-5'
                               style={cellStyle}
                             ></button>

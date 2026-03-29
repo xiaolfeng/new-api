@@ -213,13 +213,16 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 	hasToolInput := len(detailRecord.ClaudeToolResponses) > 0 || len(detailRecord.ResponsesToolResponses) > 0
 	hasTextOutput := strings.TrimSpace(detailRecord.Completion) != "" ||
 		hasClaudeTextResponseBlocks(detailRecord.ClaudeResponseBlocks) ||
-		hasResponsesTextOutputBlocks(detailRecord.ResponsesResponseBlocks)
+		hasResponsesTextOutputBlocks(detailRecord.ResponsesResponseBlocks) ||
+		hasOpenAITextResponseBlocks(detailRecord.OpenAIResponseBlocks)
 	hasToolUse := hasClaudeToolUseBlocks(detailRecord.ClaudeResponseBlocks) ||
 		hasResponsesFunctionCallBlocks(detailRecord.ResponsesResponseBlocks) ||
+		hasOpenAIToolCallBlocks(detailRecord.OpenAIResponseBlocks) ||
 		len(detailRecord.ToolInvokes) > 0
 	hasAnyOutput := hasTextOutput ||
 		len(detailRecord.ClaudeResponseBlocks) > 0 ||
-		len(detailRecord.ResponsesResponseBlocks) > 0
+		len(detailRecord.ResponsesResponseBlocks) > 0 ||
+		len(detailRecord.OpenAIResponseBlocks) > 0
 
 	switch {
 	case hasNonToolInput:
@@ -372,6 +375,24 @@ func hasResponsesTextOutputBlocks(blocks []ResponsesResponseBlock) bool {
 func hasResponsesFunctionCallBlocks(blocks []ResponsesResponseBlock) bool {
 	for _, block := range blocks {
 		if block.Type == "function_call" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasOpenAITextResponseBlocks(blocks []OpenAIResponseBlock) bool {
+	for _, block := range blocks {
+		if (block.Type == "content" || block.Type == "reasoning") && strings.TrimSpace(block.Content) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasOpenAIToolCallBlocks(blocks []OpenAIResponseBlock) bool {
+	for _, block := range blocks {
+		if block.Type == "tool_call" {
 			return true
 		}
 	}

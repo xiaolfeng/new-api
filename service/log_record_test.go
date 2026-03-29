@@ -644,6 +644,102 @@ func TestBuildLogRecordNonResponsesSkipsStructuredBlocks(t *testing.T) {
 	require.Equal(t, "hi", record.Completion)
 }
 
+func TestBuildLogRecordOpenAIStreamStructuredBlocks(t *testing.T) {
+	enableRecordConsumeLogDetailForTest(t)
+
+	relayInfo := &relaycommon.RelayInfo{
+		IsStream: true,
+		ResponseBody: strings.Join([]string{
+			`{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1774726048,"model":"glm-5","choices":[{"index":0,"delta":{"role":"assistant","reasoning_content":"用户"}}]}`,
+			`{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1774726048,"model":"glm-5","choices":[{"index":0,"delta":{"reasoning_content":"想"}}]}`,
+			`{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1774726048,"model":"glm-5","choices":[{"index":0,"delta":{"tool_calls":[{"id":"call_1","index":0,"type":"function","function":{"name":"fetch_fetch","arguments":""}}]}}]}`,
+			`{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1774726048,"model":"glm-5","choices":[{"index":0,"delta":{"tool_calls":[{"index":0,"type":"function","function":{"arguments":"{\"url\":\"https://httpbin.org/get\"}"}}]}}]}`,
+			`{"id":"chatcmpl-1","object":"chat.completion.chunk","created":1774726048,"model":"glm-5","choices":[{"index":0,"delta":{"content":"嘿呀~"}}]}`,
+		}, "\n"),
+		CompletionText:          "用户想嘿呀~",
+		FinalRequestRelayFormat: types.RelayFormatOpenAI,
+	}
+
+	recordJSON := BuildLogRecord(relayInfo)
+	require.NotEmpty(t, recordJSON)
+
+	var record model.LogDetailRecord
+	require.NoError(t, common.UnmarshalJsonStr(recordJSON, &record))
+	require.Len(t, record.OpenAIResponseBlocks, 4)
+	require.Equal(t, "reasoning", record.OpenAIResponseBlocks[0].Type)
+	require.Equal(t, "用户", record.OpenAIResponseBlocks[0].Content)
+	require.Equal(t, "reasoning", record.OpenAIResponseBlocks[1].Type)
+	require.Equal(t, "想", record.OpenAIResponseBlocks[1].Content)
+	require.Equal(t, "tool_call", record.OpenAIResponseBlocks[2].Type)
+	require.Equal(t, "call_1", record.OpenAIResponseBlocks[2].ID)
+	require.Equal(t, "fetch_fetch", record.OpenAIResponseBlocks[2].Name)
+	require.Equal(t, map[string]any{"url": "https://httpbin.org/get"}, record.OpenAIResponseBlocks[2].Arguments)
+	require.Equal(t, "content", record.OpenAIResponseBlocks[3].Type)
+	require.Equal(t, "嘿呀~", record.OpenAIResponseBlocks[3].Content)
+
+	require.Len(t, record.ToolInvokes, 1)
+	require.Equal(t, "call_1", record.ToolInvokes[0].ID)
+	require.Equal(t, "fetch_fetch", record.ToolInvokes[0].Name)
+	require.Equal(t, map[string]any{"url": "https://httpbin.org/get"}, record.ToolInvokes[0].Input)
+}
+
+func TestBuildLogRecordOpenAINonStreamStructuredBlocks(t *testing.T) {
+	enableRecordConsumeLogDetailForTest(t)
+
+	relayInfo := &relaycommon.RelayInfo{
+		IsStream: false,
+		ResponseBody: `{
+			"id":"chatcmpl-2",
+			"model":"glm-5",
+			"object":"chat.completion",
+			"created":1774726048,
+			"choices":[
+				{
+					"index":0,
+					"message":{
+						"role":"assistant",
+						"reasoning_content":"先分析。",
+						"content":"再回答。",
+						"tool_calls":[
+							{
+								"id":"call_2",
+								"type":"function",
+								"function":{
+									"name":"exec_command",
+									"arguments":"{\"cmd\":\"pwd\"}"
+								}
+							}
+						]
+					},
+					"finish_reason":"tool_calls"
+				}
+			]
+		}`,
+		CompletionText:          "先分析。再回答。",
+		FinalRequestRelayFormat: types.RelayFormatOpenAI,
+	}
+
+	recordJSON := BuildLogRecord(relayInfo)
+	require.NotEmpty(t, recordJSON)
+
+	var record model.LogDetailRecord
+	require.NoError(t, common.UnmarshalJsonStr(recordJSON, &record))
+	require.Len(t, record.OpenAIResponseBlocks, 3)
+	require.Equal(t, "reasoning", record.OpenAIResponseBlocks[0].Type)
+	require.Equal(t, "先分析。", record.OpenAIResponseBlocks[0].Content)
+	require.Equal(t, "content", record.OpenAIResponseBlocks[1].Type)
+	require.Equal(t, "再回答。", record.OpenAIResponseBlocks[1].Content)
+	require.Equal(t, "tool_call", record.OpenAIResponseBlocks[2].Type)
+	require.Equal(t, "call_2", record.OpenAIResponseBlocks[2].ID)
+	require.Equal(t, "exec_command", record.OpenAIResponseBlocks[2].Name)
+	require.Equal(t, map[string]any{"cmd": "pwd"}, record.OpenAIResponseBlocks[2].Arguments)
+
+	require.Len(t, record.ToolInvokes, 1)
+	require.Equal(t, "call_2", record.ToolInvokes[0].ID)
+	require.Equal(t, "exec_command", record.ToolInvokes[0].Name)
+	require.Equal(t, map[string]any{"cmd": "pwd"}, record.ToolInvokes[0].Input)
+}
+
 func TestSanitizeToolLogValueTruncatesLongNestedStringValues(t *testing.T) {
 	longValue := strings.Repeat("你好", 120)
 

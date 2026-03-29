@@ -24,6 +24,7 @@ type LogDetailRecord struct {
 	Completion              string                       `json:"completion,omitempty"`
 	Headers                 map[string]string            `json:"headers,omitempty"`
 	ToolInvokes             []LogToolInvokeRecord        `json:"toolInvokes,omitempty"`
+	OpenAIResponseBlocks    []OpenAIResponseBlock        `json:"openaiResponseBlocks,omitempty"`
 	ClaudeRequestBlocks     []ClaudeRequestBlock         `json:"claudeRequestBlocks,omitempty"`
 	ClaudeToolResponses     []ClaudeToolResponseBlock    `json:"claudeToolResponses,omitempty"`
 	ClaudeResponseBlocks    []ClaudeResponseBlock        `json:"claudeResponseBlocks,omitempty"`
@@ -81,6 +82,16 @@ type ResponsesResponseBlock struct {
 	Content   string      `json:"content,omitempty"`
 	Name      string      `json:"name,omitempty"`
 	CallID    string      `json:"callId,omitempty"`
+	Arguments interface{} `json:"arguments,omitempty"`
+}
+
+type OpenAIResponseBlock struct {
+	ID        string      `json:"id,omitempty"`
+	Type      string      `json:"type,omitempty"`
+	Role      string      `json:"role,omitempty"`
+	Content   string      `json:"content,omitempty"`
+	Name      string      `json:"name,omitempty"`
+	CallIndex *int        `json:"callIndex,omitempty"`
 	Arguments interface{} `json:"arguments,omitempty"`
 }
 

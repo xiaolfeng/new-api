@@ -113,6 +113,9 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	if shouldRecordClaudeResponseBlocks(relayInfo) {
 		record.ClaudeResponseBlocks = buildClaudeResponseBlocks(relayInfo)
 	}
+	if shouldRecordOpenAIResponseBlocks(relayInfo) {
+		record.OpenAIResponseBlocks = buildOpenAIResponseBlocks(relayInfo)
+	}
 	if shouldRecordResponsesResponseBlocks(relayInfo) {
 		record.ResponsesResponseBlocks = buildResponsesResponseBlocksFromSSE(relayInfo.ResponseBody)
 	}
@@ -123,7 +126,9 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	}
 
 	// 4. Tool invokes (Claude/Anthropic tool_use + tool_result)
-	if len(record.ClaudeResponseBlocks) > 0 {
+	if len(record.OpenAIResponseBlocks) > 0 {
+		record.ToolInvokes = buildOpenAIToolInvokeRecordsFromBlocks(record.OpenAIResponseBlocks)
+	} else if len(record.ClaudeResponseBlocks) > 0 {
 		record.ToolInvokes = buildClaudeToolInvokeRecordsFromBlocks(record.ClaudeResponseBlocks)
 	} else if len(record.ResponsesResponseBlocks) > 0 {
 		record.ToolInvokes = buildResponsesToolInvokeRecordsFromBlocks(record.ResponsesResponseBlocks)
@@ -136,6 +141,7 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		record.Completion == "" &&
 		len(record.Headers) == 0 &&
 		len(record.ToolInvokes) == 0 &&
+		len(record.OpenAIResponseBlocks) == 0 &&
 		len(record.ClaudeRequestBlocks) == 0 &&
 		len(record.ClaudeToolResponses) == 0 &&
 		len(record.ClaudeResponseBlocks) == 0 &&
@@ -150,6 +156,13 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		return ""
 	}
 	return string(jsonBytes)
+}
+
+func isOpenAIStructuredRecord(relayInfo *relaycommon.RelayInfo) bool {
+	if relayInfo == nil {
+		return false
+	}
+	return relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatOpenAI
 }
 
 func isClaudeStructuredRecord(relayInfo *relaycommon.RelayInfo) bool {
@@ -173,11 +186,264 @@ func shouldRecordClaudeResponseBlocks(relayInfo *relaycommon.RelayInfo) bool {
 	return true
 }
 
+func shouldRecordOpenAIResponseBlocks(relayInfo *relaycommon.RelayInfo) bool {
+	if !isOpenAIStructuredRecord(relayInfo) || relayInfo == nil || strings.TrimSpace(relayInfo.ResponseBody) == "" {
+		return false
+	}
+	return true
+}
+
 func shouldRecordResponsesResponseBlocks(relayInfo *relaycommon.RelayInfo) bool {
 	if !isResponsesStructuredRecord(relayInfo) || relayInfo == nil || !relayInfo.IsStream || strings.TrimSpace(relayInfo.ResponseBody) == "" {
 		return false
 	}
 	return true
+}
+
+type openAIResponseToolCallState struct {
+	BlockIndex   int
+	ID           string
+	Name         string
+	CallIndex    *int
+	ArgumentsRaw strings.Builder
+}
+
+func buildOpenAIResponseBlocks(relayInfo *relaycommon.RelayInfo) []model.OpenAIResponseBlock {
+	if relayInfo == nil {
+		return nil
+	}
+	responseBody := strings.TrimSpace(relayInfo.ResponseBody)
+	if responseBody == "" {
+		return nil
+	}
+	if relayInfo.IsStream {
+		return buildOpenAIResponseBlocksFromSSE(responseBody)
+	}
+	return buildOpenAIResponseBlocksFromChatBody(responseBody)
+}
+
+func buildOpenAIResponseBlocksFromSSE(responseBody string) []model.OpenAIResponseBlock {
+	responseBody = strings.TrimSpace(responseBody)
+	if responseBody == "" {
+		return nil
+	}
+
+	result := make([]model.OpenAIResponseBlock, 0)
+	toolStates := make(map[string]*openAIResponseToolCallState)
+	toolOrder := make([]string, 0)
+
+	upsertToolState := func(call dto.ToolCallResponse) *openAIResponseToolCallState {
+		key := ""
+		if call.Index != nil {
+			key = "index:" + strconv.Itoa(*call.Index)
+		}
+		if key == "" && strings.TrimSpace(call.ID) != "" {
+			key = "id:" + strings.TrimSpace(call.ID)
+		}
+		if key == "" {
+			key = "anonymous:" + strconv.Itoa(len(toolOrder))
+		}
+
+		if state, ok := toolStates[key]; ok {
+			return state
+		}
+
+		block := model.OpenAIResponseBlock{
+			Type: "tool_call",
+			ID:   strings.TrimSpace(call.ID),
+			Name: strings.TrimSpace(call.Function.Name),
+		}
+		if call.Index != nil {
+			index := *call.Index
+			block.CallIndex = &index
+		}
+		result = append(result, block)
+
+		state := &openAIResponseToolCallState{
+			BlockIndex: len(result) - 1,
+			ID:         block.ID,
+			Name:       block.Name,
+			CallIndex:  block.CallIndex,
+		}
+		toolStates[key] = state
+		toolOrder = append(toolOrder, key)
+		return state
+	}
+
+	lines := strings.Split(responseBody, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || line == "[DONE]" {
+			continue
+		}
+
+		var streamResponse dto.ChatCompletionsStreamResponse
+		if err := common.UnmarshalJsonStr(line, &streamResponse); err != nil {
+			continue
+		}
+
+		for _, choice := range streamResponse.Choices {
+			delta := choice.Delta
+			role := strings.TrimSpace(delta.Role)
+
+			if reasoningContent := delta.GetReasoningContent(); reasoningContent != "" {
+				result = append(result, model.OpenAIResponseBlock{
+					Type:    "reasoning",
+					Role:    role,
+					Content: safeTruncateUTF8(reasoningContent, maxCompletionLength),
+				})
+			}
+
+			if textContent := delta.GetContentString(); textContent != "" {
+				result = append(result, model.OpenAIResponseBlock{
+					Type:    "content",
+					Role:    role,
+					Content: safeTruncateUTF8(textContent, maxCompletionLength),
+				})
+			}
+
+			for _, toolCall := range delta.ToolCalls {
+				state := upsertToolState(toolCall)
+				if state == nil {
+					continue
+				}
+				if strings.TrimSpace(toolCall.ID) != "" {
+					state.ID = strings.TrimSpace(toolCall.ID)
+				}
+				if strings.TrimSpace(toolCall.Function.Name) != "" {
+					state.Name = strings.TrimSpace(toolCall.Function.Name)
+				}
+				if toolCall.Index != nil {
+					index := *toolCall.Index
+					state.CallIndex = &index
+				}
+				if toolCall.Function.Arguments != "" {
+					state.ArgumentsRaw.WriteString(toolCall.Function.Arguments)
+				}
+			}
+		}
+	}
+
+	for _, key := range toolOrder {
+		state := toolStates[key]
+		if state == nil || state.BlockIndex < 0 || state.BlockIndex >= len(result) {
+			continue
+		}
+		block := &result[state.BlockIndex]
+		block.ID = state.ID
+		block.Name = state.Name
+		block.CallIndex = state.CallIndex
+		if raw := strings.TrimSpace(state.ArgumentsRaw.String()); raw != "" {
+			block.Arguments = sanitizeResponsesJSONLikeValue(raw)
+		}
+	}
+
+	return compactOpenAIResponseBlocks(result)
+}
+
+func buildOpenAIResponseBlocksFromChatBody(responseBody string) []model.OpenAIResponseBlock {
+	responseBody = strings.TrimSpace(responseBody)
+	if responseBody == "" {
+		return nil
+	}
+
+	var openAIResponse dto.OpenAITextResponse
+	if err := common.UnmarshalJsonStr(responseBody, &openAIResponse); err != nil {
+		return nil
+	}
+	if len(openAIResponse.Choices) == 0 {
+		return nil
+	}
+
+	result := make([]model.OpenAIResponseBlock, 0, len(openAIResponse.Choices))
+	for _, choice := range openAIResponse.Choices {
+		role := strings.TrimSpace(choice.Message.Role)
+		if reasoningContent := strings.TrimSpace(choice.Message.ReasoningContent); reasoningContent != "" {
+			result = append(result, model.OpenAIResponseBlock{
+				Type:    "reasoning",
+				Role:    role,
+				Content: safeTruncateUTF8(choice.Message.ReasoningContent, maxCompletionLength),
+			})
+		}
+		if reasoning := strings.TrimSpace(choice.Message.Reasoning); reasoning != "" {
+			result = append(result, model.OpenAIResponseBlock{
+				Type:    "reasoning",
+				Role:    role,
+				Content: safeTruncateUTF8(choice.Message.Reasoning, maxCompletionLength),
+			})
+		}
+		if content := choice.Message.StringContent(); strings.TrimSpace(content) != "" {
+			result = append(result, model.OpenAIResponseBlock{
+				Type:    "content",
+				Role:    role,
+				Content: safeTruncateUTF8(content, maxCompletionLength),
+			})
+		}
+
+		for _, toolCall := range choice.Message.ParseToolCalls() {
+			block := model.OpenAIResponseBlock{
+				Type: "tool_call",
+				ID:   strings.TrimSpace(toolCall.ID),
+				Name: strings.TrimSpace(toolCall.Function.Name),
+			}
+			if strings.TrimSpace(toolCall.Function.Arguments) != "" {
+				block.Arguments = sanitizeResponsesJSONLikeValue(toolCall.Function.Arguments)
+			}
+			result = append(result, block)
+		}
+	}
+
+	return compactOpenAIResponseBlocks(result)
+}
+
+func compactOpenAIResponseBlocks(blocks []model.OpenAIResponseBlock) []model.OpenAIResponseBlock {
+	if len(blocks) == 0 {
+		return nil
+	}
+	result := make([]model.OpenAIResponseBlock, 0, len(blocks))
+	for _, block := range blocks {
+		switch block.Type {
+		case "reasoning", "content":
+			if block.Content == "" {
+				continue
+			}
+		case "tool_call":
+			if strings.TrimSpace(block.ID) == "" && strings.TrimSpace(block.Name) == "" && block.Arguments == nil {
+				continue
+			}
+		default:
+			continue
+		}
+		result = append(result, block)
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+func buildOpenAIToolInvokeRecordsFromBlocks(blocks []model.OpenAIResponseBlock) []model.LogToolInvokeRecord {
+	if len(blocks) == 0 {
+		return nil
+	}
+	records := make([]model.LogToolInvokeRecord, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type != "tool_call" {
+			continue
+		}
+		if strings.TrimSpace(block.ID) == "" && strings.TrimSpace(block.Name) == "" && block.Arguments == nil {
+			continue
+		}
+		records = append(records, model.LogToolInvokeRecord{
+			ID:    strings.TrimSpace(block.ID),
+			Name:  strings.TrimSpace(block.Name),
+			Input: block.Arguments,
+		})
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	return records
 }
 
 type claudeResponseBlockState struct {

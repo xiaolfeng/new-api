@@ -150,6 +150,9 @@ const LogDetailModal = ({
   const responsesResponseBlocks = Array.isArray(record?.responsesResponseBlocks)
     ? record.responsesResponseBlocks
     : [];
+  const openAIResponseBlocks = Array.isArray(record?.openaiResponseBlocks)
+    ? record.openaiResponseBlocks
+    : [];
   const hasClaudeStructuredRecord =
     !isFullLogRecord &&
     (claudeRequestBlocks.length > 0 ||
@@ -160,6 +163,9 @@ const LogDetailModal = ({
     (responsesRequestBlocks.length > 0 ||
       responsesToolResponses.length > 0 ||
       responsesResponseBlocks.length > 0);
+  const hasOpenAIStructuredRecord =
+    !isFullLogRecord &&
+    openAIResponseBlocks.length > 0;
   const claudeResponseSections = useMemo(() => {
     const thinkingParts = [];
     const answerParts = [];
@@ -226,6 +232,44 @@ const LogDetailModal = ({
       toolUses,
     };
   }, [responsesResponseBlocks]);
+  const openAIResponseSections = useMemo(() => {
+    const thinkingParts = [];
+    const answerParts = [];
+    const toolUses = [];
+
+    openAIResponseBlocks.forEach((block, index) => {
+      if (!block || typeof block !== 'object') {
+        return;
+      }
+
+      if (block.type === 'reasoning' && block.content) {
+        thinkingParts.push(block.content);
+        return;
+      }
+
+      if (block.type === 'content' && block.content) {
+        answerParts.push(block.content);
+        return;
+      }
+
+      if (block.type === 'tool_call') {
+        toolUses.push({
+          order: toolUses.length + 1,
+          id: block.id || `openai-tool-${index}`,
+          callId: block.id,
+          callIndex: block.callIndex,
+          name: block.name,
+          arguments: block.arguments,
+        });
+      }
+    });
+
+    return {
+      thinking: thinkingParts.join('\n\n'),
+      answer: answerParts.join('\n\n'),
+      toolUses,
+    };
+  }, [openAIResponseBlocks]);
 
   const renderSimpleTableValue = (value) => (
     <pre style={{
@@ -473,6 +517,74 @@ const LogDetailModal = ({
     const dataSource = toolUses.map((item, index) => ({
       ...item,
       rowKey: item.callId || item.id || `${item.name || 'responses-tool-use'}-${index}`,
+    }));
+
+    return (
+      <Table
+        columns={columns}
+        dataSource={dataSource}
+        pagination={false}
+        size='small'
+        bordered
+        rowKey='rowKey'
+        style={{ fontSize: 12 }}
+      />
+    );
+  };
+
+  const renderOpenAIToolUsesTable = (toolUses) => {
+    if (toolUses.length === 0) {
+      return <Empty description={t('无工具调用记录')} style={{ padding: '20px 0' }} />;
+    }
+
+    const columns = [
+      {
+        title: t('顺序'),
+        dataIndex: 'order',
+        key: 'order',
+        width: 80,
+      },
+      {
+        title: t('工具'),
+        dataIndex: 'name',
+        key: 'name',
+        width: 180,
+        render: (text, row) => <Text strong>{text || row.callId || row.id || '-'}</Text>,
+      },
+      {
+        title: t('调用 ID'),
+        dataIndex: 'callId',
+        key: 'callId',
+        width: 220,
+        render: (text, row) => (
+          <Text
+            style={{
+              wordBreak: 'break-all',
+              maxWidth: 500,
+            }}
+          >
+            {text || row.id || '-'}
+          </Text>
+        ),
+      },
+      {
+        title: t('调用序号'),
+        dataIndex: 'callIndex',
+        key: 'callIndex',
+        width: 100,
+        render: (value) => (typeof value === 'number' ? value : '-'),
+      },
+      {
+        title: t('参数'),
+        dataIndex: 'arguments',
+        key: 'arguments',
+        render: renderHorizontalScrollableTableValue,
+      },
+    ];
+
+    const dataSource = toolUses.map((item, index) => ({
+      ...item,
+      rowKey: item.callId || item.id || `${item.name || 'openai-tool-use'}-${index}`,
     }));
 
     return (
@@ -893,6 +1005,83 @@ const LogDetailModal = ({
   };
 
   const renderCompletion = () => {
+    if (hasOpenAIStructuredRecord) {
+      const { thinking, answer, toolUses } = openAIResponseSections;
+      const hasThinking = thinking.trim() !== '';
+      const hasAnswer = answer.trim() !== '';
+      const hasToolUses = toolUses.length > 0;
+
+      if (!hasThinking && !hasAnswer && !hasToolUses) {
+        return <Empty description={t('无响应内容记录')} style={{ padding: '20px 0' }} />;
+      }
+
+      const cardStyle = {
+        flex: '1 1 320px',
+        minWidth: 0,
+        border: '1px solid var(--semi-color-border)',
+        borderRadius: 10,
+        background: 'var(--semi-color-bg-1)',
+        padding: 12,
+      };
+
+      return (
+        <div style={{ padding: '8px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <Button
+              icon={<IconCopy />}
+              size='small'
+              theme='borderless'
+              onClick={() =>
+                copySection(t('响应内容'), {
+                  thinking,
+                  answer,
+                  toolUses,
+                })
+              }
+            >
+              {t('复制')}
+            </Button>
+          </div>
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+            <div style={cardStyle}>
+              <Text strong>{t('thinking')}</Text>
+              <div style={{ marginTop: 8 }}>
+                {hasThinking ? (
+                  renderContentBlock(thinking)
+                ) : (
+                  <Empty description={t('无 thinking 记录')} style={{ padding: '28px 0' }} />
+                )}
+              </div>
+            </div>
+            <div style={cardStyle}>
+              <Text strong>{t('回答内容')}</Text>
+              <div style={{ marginTop: 8 }}>
+                {hasAnswer ? (
+                  renderContentBlock(answer)
+                ) : (
+                  <Empty description={t('无回答内容记录')} style={{ padding: '28px 0' }} />
+                )}
+              </div>
+            </div>
+          </div>
+          <div style={{ marginTop: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <Text strong>{t('工具调用顺序')}</Text>
+              <Button
+                icon={<IconCopy />}
+                size='small'
+                theme='borderless'
+                onClick={() => copySection(t('工具调用顺序'), toolUses)}
+              >
+                {t('复制')}
+              </Button>
+            </div>
+            {renderOpenAIToolUsesTable(toolUses)}
+          </div>
+        </div>
+      );
+    }
+
     if (hasResponsesStructuredRecord) {
       const { answer, toolUses } = responsesResponseSections;
       const hasAnswer = answer.trim() !== '';
@@ -1184,7 +1373,7 @@ const LogDetailModal = ({
       content: renderCompletion(),
       key: 'completion',
     },
-    ...(!(hasClaudeStructuredRecord || hasResponsesStructuredRecord) ? [{
+    ...(!(hasClaudeStructuredRecord || hasResponsesStructuredRecord || hasOpenAIStructuredRecord) ? [{
       header: t('工具调用'),
       content: renderToolInvokes(),
       key: 'toolInvokes',

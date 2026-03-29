@@ -721,6 +721,9 @@ function parseInteractionType(record) {
     const responsesResponseBlocks = Array.isArray(recordData?.responsesResponseBlocks)
       ? recordData.responsesResponseBlocks
       : [];
+    const openAIResponseBlocks = Array.isArray(recordData?.openaiResponseBlocks)
+      ? recordData.openaiResponseBlocks
+      : [];
     const responsesPromptItems = flattenResponsesPromptInputItems(prompt?.input);
 
     const responsesStructuredType = inferResponsesStructuredInteractionType({
@@ -764,6 +767,12 @@ function parseInteractionType(record) {
       ) ||
       responsesResponseBlocks.some(
         (block) => block?.type === 'output_text' && typeof block.content === 'string' && block.content.trim() !== '',
+      ) ||
+      openAIResponseBlocks.some(
+        (block) =>
+          (block?.type === 'content' || block?.type === 'reasoning') &&
+          typeof block.content === 'string' &&
+          block.content.trim() !== '',
       );
     const hasAnyOutput =
       hasTextOutput ||
@@ -771,10 +780,12 @@ function parseInteractionType(record) {
         ((Array.isArray(completion) && completion.length > 0) ||
           (!Array.isArray(completion) && Object.keys(completion).length > 0))) ||
       claudeResponseBlocks.length > 0 ||
-      responsesResponseBlocks.length > 0;
+      responsesResponseBlocks.length > 0 ||
+      openAIResponseBlocks.length > 0;
     const hasToolUse =
       claudeResponseBlocks.some((block) => block?.type === 'tool_use') ||
       responsesResponseBlocks.some((block) => block?.type === 'function_call') ||
+      openAIResponseBlocks.some((block) => block?.type === 'tool_call') ||
       legacyToolInvokes.length > 0;
 
     if (hasNonToolInput) {
