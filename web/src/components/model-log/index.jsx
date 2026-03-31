@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Button,
   Card,
@@ -7,7 +7,9 @@ import {
   Tag,
   Tooltip,
   Typography,
+  Select,
 } from '@douyinfe/semi-ui';
+import { IconAscend, IconDescend } from '@douyinfe/semi-icons';
 import CardPro from '../common/ui/CardPro';
 import { renderNumber } from '../../helpers';
 import { useModelLogData } from '../../hooks/model-log/useModelLogData';
@@ -72,54 +74,149 @@ const getCellStyleForTps = (cell, maxTps) => {
   };
 };
 
-const getCellAriaLabel = (cell) =>
-  `hour-${cell.bucket_start_at}-tokens-${cell.total_tokens || 0}`;
+const getCellStyleForFailure = (cell, maxFailure) => {
+  const ratio =
+    maxFailure > 0 && cell.failed_count > 0 ? cell.failed_count / maxFailure : 0;
+  const backgroundAlpha = ratio > 0 ? 0.18 + ratio * 0.72 : 0.08;
 
-const buildCellTooltip = (cell) => (
-  <div className='min-w-[220px] space-y-1 text-sm'>
+  return {
+    background:
+      cell.failed_count > 0
+        ? `rgba(239, 68, 68, ${backgroundAlpha})`
+        : 'var(--semi-color-fill-1)',
+    border: cell.is_current
+      ? '2px solid var(--semi-color-danger)'
+      : '1px solid var(--semi-color-border)',
+    color: ratio >= 0.55 ? '#ffffff' : 'var(--semi-color-text-0)',
+  };
+};
+
+const buildTokenCellTooltip = (cell) => (
+  <div className='min-w-[160px] space-y-1 text-sm'>
     <div className='font-semibold'>
       {formatHourRange(cell.bucket_start_at, cell.bucket_end_at)}
     </div>
-    <div>输出 Token：{renderNumber(cell.completion_tokens || 0)}</div>
-    <div>成功请求：{renderNumber(cell.request_count || 0)}</div>
-    <div>累计耗时：{renderNumber(cell.total_use_time || 0)} 秒</div>
-    <div>平均 TPS：{formatAvgTps(cell.avg_tps)}</div>
+    <div>Token：{renderNumber(cell.completion_tokens || 0)}</div>
   </div>
 );
 
 const buildTpsCellTooltip = (cell) => (
-  <div className='min-w-[220px] space-y-1 text-sm'>
+  <div className='min-w-[160px] space-y-1 text-sm'>
     <div className='font-semibold'>
       {formatHourRange(cell.bucket_start_at, cell.bucket_end_at)}
     </div>
-    <div>平均 TPS：{formatAvgTps(cell.avg_tps)}</div>
-    <div>输出 Token：{renderNumber(cell.completion_tokens || 0)}</div>
-    <div>成功请求：{renderNumber(cell.request_count || 0)}</div>
+    <div>TPS：{formatAvgTps(cell.avg_tps)}</div>
   </div>
 );
 
-const buildHeaderStats = (item, t) => [
-  {
-    label: t('输出 Token'),
-    value: renderNumber(item.summary.total_tokens || 0),
-  },
-  {
-    label: t('成功请求'),
-    value: renderNumber(item.summary.request_count || 0),
-  },
-  {
-    label: t('平均 TPS'),
-    value: formatAvgTps(item.summary.avg_tps),
-  },
-  {
-    label: t('累计耗时'),
-    value: `${renderNumber(item.summary.total_use_time || 0)}s`,
-  },
-];
+const buildFailureCellTooltip = (cell) => {
+  const detail = cell.failed_detail || {};
+  const entries = Object.entries(detail).sort((a, b) => b[1] - a[1]);
+
+  return (
+    <div className='min-w-[180px] space-y-1 text-sm'>
+      <div className='font-semibold'>
+        {formatHourRange(cell.bucket_start_at, cell.bucket_end_at)}
+      </div>
+      <div>失败次数：{renderNumber(cell.failed_count || 0)}</div>
+      {entries.length > 0 && (
+        <div className='mt-1 border-t border-[var(--semi-color-border)] pt-1'>
+          {entries.map(([code, count]) => (
+            <div key={code} className='flex justify-between gap-4'>
+              <span>HTTP {code}：</span>
+              <span className='font-medium'>{count}次</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const buildHeaderStats = (item, t) => {
+  const stats = [
+    {
+      label: t('输出 Token'),
+      value: renderNumber(item.summary.total_tokens || 0),
+    },
+    {
+      label: t('成功请求'),
+      value: renderNumber(item.summary.request_count || 0),
+    },
+    {
+      label: t('平均 TPS'),
+      value: formatAvgTps(item.summary.avg_tps),
+    },
+    {
+      label: t('累计耗时'),
+      value: `${renderNumber(item.summary.total_use_time || 0)}s`,
+    },
+  ];
+
+  if (item.summary.failed_count > 0) {
+    stats.push({
+      label: t('失败率'),
+      value: `${item.summary.failed_rate}%`,
+      isFailure: true,
+    });
+  }
+
+  return stats;
+};
+
+const sortItems = (items, sortField, sortDirection) => {
+  const sorted = [...items];
+  const multiplier = sortDirection === 'asc' ? 1 : -1;
+
+  sorted.sort((a, b) => {
+    let aVal, bVal;
+
+    switch (sortField) {
+      case 'total_tokens':
+        aVal = a.summary.total_tokens || 0;
+        bVal = b.summary.total_tokens || 0;
+        break;
+      case 'failed_rate':
+        aVal = a.summary.failed_rate || 0;
+        bVal = b.summary.failed_rate || 0;
+        break;
+      case 'avg_tps':
+        aVal = a.summary.avg_tps || 0;
+        bVal = b.summary.avg_tps || 0;
+        break;
+      default:
+        return 0;
+    }
+
+    if (aVal === bVal) {
+      return a.model_name.localeCompare(b.model_name) * multiplier;
+    }
+    return (aVal - bVal) * multiplier;
+  });
+
+  return sorted;
+};
 
 const ModelLogBoard = () => {
   const { t, loading, refreshing, items, lastUpdatedAt, refreshData } =
     useModelLogData();
+
+  const [sortField, setSortField] = useState('total_tokens');
+  const [sortDirection, setSortDirection] = useState('desc');
+
+  const sortedItems = useMemo(
+    () => sortItems(items, sortField, sortDirection),
+    [items, sortField, sortDirection]
+  );
+
+  const handleSort = (field) => {
+    if (field === sortField) {
+      setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortField(field);
+      setSortDirection('desc');
+    }
+  };
 
   return (
     <CardPro
@@ -141,6 +238,30 @@ const ModelLogBoard = () => {
             )}
           </div>
           <div className='flex items-center gap-2'>
+            <Select
+              value={sortField}
+              onChange={(val) => handleSort(val)}
+              size='small'
+              style={{ width: 120 }}
+            >
+              <Select.Option value='total_tokens'>{t('总 Token')}</Select.Option>
+              <Select.Option value='failed_rate'>{t('失败率')}</Select.Option>
+              <Select.Option value='avg_tps'>{t('TPS')}</Select.Option>
+            </Select>
+            <Button
+              size='small'
+              icon={
+                sortDirection === 'asc' ? (
+                  <IconAscend />
+                ) : (
+                  <IconDescend />
+                )
+              }
+              onClick={() =>
+                setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
+              }
+              theme={sortDirection === 'asc' ? 'light' : 'dark'}
+            />
             <Tag color='blue' shape='circle'>
               {t('模型数')} {items.length}
             </Tag>
@@ -163,16 +284,24 @@ const ModelLogBoard = () => {
       ) : (
         <div className='space-y-5 pb-2'>
           <div className='space-y-1 rounded-2xl border border-dashed border-sky-200/80 bg-sky-50/70 p-3 dark:border-sky-500/35 dark:bg-sky-950/25'>
-            <div className='text-sm font-semibold'>{t('模型')}</div>
-            <div className='text-xs text-sky-700/80 dark:text-sky-300/70'>
-              {t(
-                '每个模型显示最近 24 小时的 24 个格子，颜色越深表示该小时输出 Token 用量越高。',
-              )}
+            <div className='flex flex-wrap items-center gap-4 text-xs text-sky-700/80 dark:text-sky-300/70'>
+              <span className='flex items-center gap-1'>
+                <span className='inline-block h-2 w-2 rounded-sm bg-[rgba(59,130,246,0.5)]'></span>
+                {t('Token 用量')}
+              </span>
+              <span className='flex items-center gap-1'>
+                <span className='inline-block h-2 w-2 rounded-sm bg-[rgba(34,197,94,0.5)]'></span>
+                {t('TPS')}
+              </span>
+              <span className='flex items-center gap-1'>
+                <span className='inline-block h-2 w-2 rounded-sm bg-[rgba(239,68,68,0.5)]'></span>
+                {t('失败率')}
+              </span>
             </div>
           </div>
 
           <div className='space-y-1'>
-            {items.map((item) => {
+            {sortedItems.map((item) => {
               const rowMaxTokens = Math.max(
                 ...item.cells.map((cell) => cell.total_tokens || 0),
                 0,
@@ -181,6 +310,11 @@ const ModelLogBoard = () => {
                 ...item.cells.map((cell) => cell.avg_tps || 0),
                 0,
               );
+              const rowMaxFailure = Math.max(
+                ...item.cells.map((cell) => cell.failed_count || 0),
+                0,
+              );
+              const hasFailure = item.summary.failed_count > 0;
 
               return (
                 <Card
@@ -200,12 +334,28 @@ const ModelLogBoard = () => {
                         {buildHeaderStats(item, t).map((stat) => (
                           <div
                             key={`${item.model_name}-${stat.label}`}
-                            className='rounded-lg border border-sky-200/80 bg-sky-100/55 px-2 py-1 dark:border-sky-500/30 dark:bg-sky-900/35'
+                            className={`rounded-lg border px-2 py-1 ${
+                              stat.isFailure
+                                ? 'border-red-200/80 bg-red-50/55 dark:border-red-500/30 dark:bg-red-900/35'
+                                : 'border-sky-200/80 bg-sky-100/55 dark:border-sky-500/30 dark:bg-sky-900/35'
+                            }`}
                           >
-                            <div className='text-[11px] leading-4 text-sky-700/80 dark:text-sky-300/80'>
+                            <div
+                              className={`text-[11px] leading-4 ${
+                                stat.isFailure
+                                  ? 'text-red-700/80 dark:text-red-300/80'
+                                  : 'text-sky-700/80 dark:text-sky-300/80'
+                              }`}
+                            >
                               {stat.label}
                             </div>
-                            <div className='text-xs font-semibold leading-4 text-sky-900 dark:text-sky-100'>
+                            <div
+                              className={`text-xs font-semibold leading-4 ${
+                                stat.isFailure
+                                  ? 'text-red-900 dark:text-red-100'
+                                  : 'text-sky-900 dark:text-sky-100'
+                              }`}
+                            >
                               {stat.value}
                             </div>
                           </div>
@@ -219,12 +369,11 @@ const ModelLogBoard = () => {
                         return (
                           <Tooltip
                             key={`${item.model_name}-${cell.bucket_start_at}`}
-                            content={buildCellTooltip(cell)}
+                            content={buildTokenCellTooltip(cell)}
                             position='top'
                           >
                             <button
                               type='button'
-                              aria-label={getCellAriaLabel(cell)}
                               className='h-4 w-4 shrink-0 rounded-[5px] transition-transform hover:-translate-y-0.5 sm:h-[18px] sm:w-[18px] md:h-5 md:w-5'
                               style={cellStyle}
                             ></button>
@@ -244,7 +393,6 @@ const ModelLogBoard = () => {
                           >
                             <button
                               type='button'
-                              aria-label={`tps-${cell.bucket_start_at}-${cell.avg_tps || 0}`}
                               className='h-4 w-4 shrink-0 rounded-[5px] transition-transform hover:-translate-y-0.5 sm:h-[18px] sm:w-[18px] md:h-5 md:w-5'
                               style={cellStyle}
                             ></button>
@@ -252,6 +400,30 @@ const ModelLogBoard = () => {
                         );
                       })}
                     </div>
+
+                    {hasFailure && (
+                      <div className='flex flex-wrap gap-1.5 sm:gap-2'>
+                        {item.cells.map((cell) => {
+                          const cellStyle = getCellStyleForFailure(
+                            cell,
+                            rowMaxFailure,
+                          );
+                          return (
+                            <Tooltip
+                              key={`fail-${item.model_name}-${cell.bucket_start_at}`}
+                              content={buildFailureCellTooltip(cell)}
+                              position='top'
+                            >
+                              <button
+                                type='button'
+                                className='h-4 w-4 shrink-0 rounded-[5px] transition-transform hover:-translate-y-0.5 sm:h-[18px] sm:w-[18px] md:h-5 md:w-5'
+                                style={cellStyle}
+                              ></button>
+                            </Tooltip>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </Card>
               );

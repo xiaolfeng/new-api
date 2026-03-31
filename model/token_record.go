@@ -2,6 +2,7 @@ package model
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"sort"
 	"strings"
@@ -22,6 +23,8 @@ type TokenRecord struct {
 	CompletionTokens int64  `json:"completion_tokens" gorm:"default:0"`
 	TotalTokens      int64  `json:"total_tokens" gorm:"default:0"`
 	TotalUseTime     int64  `json:"total_use_time" gorm:"default:0"`
+	FailedCount      int64  `json:"failed_count" gorm:"default:0"`
+	FailedDetail     string `json:"failed_detail" gorm:"type:text"` // JSON: {"429":2,"500":1}
 	FirstUsedAt      int64  `json:"first_used_at" gorm:"bigint"`
 	LastUsedAt       int64  `json:"last_used_at" gorm:"bigint"`
 	CreatedAt        int64  `json:"created_at" gorm:"bigint"`
@@ -40,24 +43,29 @@ type TokenRecordHourMeta struct {
 }
 
 type TokenRecordHourCell struct {
-	BucketStartAt    int64   `json:"bucket_start_at"`
-	BucketEndAt      int64   `json:"bucket_end_at"`
-	RequestCount     int64   `json:"request_count"`
-	PromptTokens     int64   `json:"prompt_tokens"`
-	CompletionTokens int64   `json:"completion_tokens"`
-	TotalTokens      int64   `json:"total_tokens"`
-	TotalUseTime     int64   `json:"total_use_time"`
-	AvgTPS           float64 `json:"avg_tps"`
-	IsCurrent        bool    `json:"is_current"`
+	BucketStartAt    int64            `json:"bucket_start_at"`
+	BucketEndAt      int64            `json:"bucket_end_at"`
+	RequestCount     int64            `json:"request_count"`
+	PromptTokens     int64            `json:"prompt_tokens"`
+	CompletionTokens int64            `json:"completion_tokens"`
+	TotalTokens      int64            `json:"total_tokens"`
+	TotalUseTime     int64            `json:"total_use_time"`
+	AvgTPS           float64          `json:"avg_tps"`
+	FailedCount      int64            `json:"failed_count"`
+	FailedDetail     map[string]int64 `json:"failed_detail"`
+	IsCurrent        bool             `json:"is_current"`
 }
 
 type TokenRecordSummary struct {
-	RequestCount     int64   `json:"request_count"`
-	PromptTokens     int64   `json:"prompt_tokens"`
-	CompletionTokens int64   `json:"completion_tokens"`
-	TotalTokens      int64   `json:"total_tokens"`
-	TotalUseTime     int64   `json:"total_use_time"`
-	AvgTPS           float64 `json:"avg_tps"`
+	RequestCount     int64            `json:"request_count"`
+	PromptTokens     int64            `json:"prompt_tokens"`
+	CompletionTokens int64            `json:"completion_tokens"`
+	TotalTokens      int64            `json:"total_tokens"`
+	TotalUseTime     int64            `json:"total_use_time"`
+	AvgTPS           float64          `json:"avg_tps"`
+	FailedCount      int64            `json:"failed_count"`
+	FailedRate       float64          `json:"failed_rate"`
+	FailedDetail     map[string]int64 `json:"failed_detail"`
 }
 
 type TokenRecordRecentItem struct {
@@ -144,6 +152,59 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 	}).Create(&record).Error
 }
 
+func mergeFailedDetail(existing string, statusCode string) string {
+	detail := make(map[string]int64)
+	if existing != "" {
+		_ = common.UnmarshalJsonStr(existing, &detail)
+	}
+	detail[statusCode]++
+	merged, err := common.Marshal(detail)
+	if err != nil {
+		return existing
+	}
+	return string(merged)
+}
+
+func RecordFailedTokenRecord(modelName string, statusCode int, createdAt int64) {
+	if LOG_DB == nil {
+		return
+	}
+
+	modelName = normalizeTokenRecordModelName(modelName)
+	bucketStartAt, bucketEndAt := getTokenRecordHourBucket(createdAt)
+	statusCodeStr := fmt.Sprintf("%d", statusCode)
+
+	var existing TokenRecord
+	err := LOG_DB.Where("bucket_start_at = ? AND model_name = ?", bucketStartAt, modelName).First(&existing).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			failedDetail, _ := common.Marshal(map[string]int64{statusCodeStr: 1})
+			record := TokenRecord{
+				BucketStartAt: bucketStartAt,
+				BucketEndAt:   bucketEndAt,
+				ModelName:     modelName,
+				FailedCount:   1,
+				FailedDetail:  string(failedDetail),
+				FirstUsedAt:   createdAt,
+				LastUsedAt:    createdAt,
+				CreatedAt:     createdAt,
+				UpdatedAt:     createdAt,
+			}
+			_ = LOG_DB.Create(&record).Error
+		}
+		return
+	}
+
+	mergedDetail := mergeFailedDetail(existing.FailedDetail, statusCodeStr)
+	_ = LOG_DB.Model(&TokenRecord{}).
+		Where("bucket_start_at = ? AND model_name = ?", bucketStartAt, modelName).
+		Updates(map[string]interface{}{
+			"failed_count":  existing.FailedCount + 1,
+			"failed_detail": mergedDetail,
+			"updated_at":    createdAt,
+		}).Error
+}
+
 func buildTokenRecordHours(rangeStartAt int64, currentBucketStartAt int64) []TokenRecordHourMeta {
 	hours := make([]TokenRecordHourMeta, 0, 24)
 	for i := 0; i < 24; i++ {
@@ -169,6 +230,39 @@ func buildEmptyTokenRecordCells(hours []TokenRecordHourMeta) []TokenRecordHourCe
 		})
 	}
 	return cells
+}
+
+func parseFailedDetail(raw string) map[string]int64 {
+	detail := make(map[string]int64)
+	if raw != "" {
+		_ = common.UnmarshalJsonStr(raw, &detail)
+	}
+	return detail
+}
+
+func mergeFailedDetailMaps(a, b map[string]int64) map[string]int64 {
+	if len(a) == 0 {
+		return b
+	}
+	if len(b) == 0 {
+		return a
+	}
+	result := make(map[string]int64, len(a))
+	for k, v := range a {
+		result[k] = v
+	}
+	for k, v := range b {
+		result[k] += v
+	}
+	return result
+}
+
+func calcFailedRate(failedCount, requestCount int64) float64 {
+	total := failedCount + requestCount
+	if total <= 0 {
+		return 0
+	}
+	return math.Round((float64(failedCount)/float64(total))*10000) / 100
 }
 
 func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnapshot, error) {
@@ -220,6 +314,8 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 			TotalTokens:      record.TotalTokens,
 			TotalUseTime:     record.TotalUseTime,
 			AvgTPS:           calcTokenRecordAvgTPS(record.TotalTokens, record.TotalUseTime),
+			FailedCount:      record.FailedCount,
+			FailedDetail:     parseFailedDetail(record.FailedDetail),
 			IsCurrent:        hours[hourIndex].IsCurrent,
 		}
 
@@ -228,11 +324,14 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 		item.Summary.CompletionTokens += record.CompletionTokens
 		item.Summary.TotalTokens += record.TotalTokens
 		item.Summary.TotalUseTime += record.TotalUseTime
+		item.Summary.FailedCount += record.FailedCount
+		item.Summary.FailedDetail = mergeFailedDetailMaps(item.Summary.FailedDetail, parseFailedDetail(record.FailedDetail))
 	}
 
 	items := make([]TokenRecordRecentItem, 0, len(itemsMap))
 	for _, item := range itemsMap {
 		item.Summary.AvgTPS = calcTokenRecordAvgTPS(item.Summary.TotalTokens, item.Summary.TotalUseTime)
+		item.Summary.FailedRate = calcFailedRate(item.Summary.FailedCount, item.Summary.RequestCount)
 		items = append(items, *item)
 	}
 

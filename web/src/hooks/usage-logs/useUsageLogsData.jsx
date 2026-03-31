@@ -763,7 +763,7 @@ export const useLogsData = () => {
   };
 
   // Load logs function
-  const loadLogs = async (startIdx, pageSize, customLogType = null) => {
+  const loadLogs = async (startIdx, pageSize, customLogType = null, options = {}) => {
     setLoading(true);
 
     let url = '';
@@ -788,6 +788,16 @@ export const useLogsData = () => {
 
     let localStartTimestamp = Date.parse(start_timestamp) / 1000;
     let localEndTimestamp = Date.parse(end_timestamp) / 1000;
+
+    if (options.useCurrentTime) {
+      localEndTimestamp = Math.floor(Date.now() / 1000);
+      if (formApi) {
+        formApi.setValue('dateRange', [
+          start_timestamp,
+          timestamp2string(localEndTimestamp),
+        ]);
+      }
+    }
     if (isAdminUser) {
       url = `/api/log/?p=${startIdx}&page_size=${pageSize}&type=${currentLogType}&username=${username}&token_name=${token_name}&model_name=${model_name}&start_timestamp=${localStartTimestamp}&end_timestamp=${localEndTimestamp}&channel=${channel}&group=${group}&request_id=${request_id}`;
     } else {
@@ -853,9 +863,11 @@ export const useLogsData = () => {
     }
 
     const refreshIntervalId = setInterval(() => {
-      loadLogs(1, AUTO_REFRESH_PAGE_SIZE).then(() => {
-        handleEyeClick();
-      });
+      loadLogs(1, AUTO_REFRESH_PAGE_SIZE, null, { useCurrentTime: true }).then(
+        () => {
+          handleEyeClick();
+        },
+      );
       setAutoRefreshCountdown(AUTO_REFRESH_INTERVAL_SECONDS);
     }, AUTO_REFRESH_INTERVAL_SECONDS * 1000);
 

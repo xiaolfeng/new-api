@@ -400,7 +400,8 @@ func compactOpenAIResponseBlocks(blocks []model.OpenAIResponseBlock) []model.Ope
 	if len(blocks) == 0 {
 		return nil
 	}
-	result := make([]model.OpenAIResponseBlock, 0, len(blocks))
+	// 第一遍：过滤无效 block
+	filtered := make([]model.OpenAIResponseBlock, 0, len(blocks))
 	for _, block := range blocks {
 		switch block.Type {
 		case "reasoning", "content":
@@ -414,8 +415,53 @@ func compactOpenAIResponseBlocks(blocks []model.OpenAIResponseBlock) []model.Ope
 		default:
 			continue
 		}
-		result = append(result, block)
+		filtered = append(filtered, block)
 	}
+	if len(filtered) == 0 {
+		return nil
+	}
+
+	// 第二遍：合并相邻同类型（content 或 reasoning）block
+	result := make([]model.OpenAIResponseBlock, 0, len(filtered))
+	var pendingContent strings.Builder
+	var pendingType string
+	var pendingRole string
+
+	flushPending := func() {
+		if pendingType != "" && pendingContent.Len() > 0 {
+			result = append(result, model.OpenAIResponseBlock{
+				Type:    pendingType,
+				Role:    pendingRole,
+				Content: safeTruncateUTF8(pendingContent.String(), maxCompletionLength),
+			})
+		}
+		pendingContent.Reset()
+		pendingType = ""
+		pendingRole = ""
+	}
+
+	for _, block := range filtered {
+		switch block.Type {
+		case "reasoning", "content":
+			if block.Type == pendingType {
+				// 相邻同类型，追加内容
+				pendingContent.WriteString(block.Content)
+			} else {
+				// 类型切换，先 flush 前一个
+				flushPending()
+				pendingType = block.Type
+				pendingRole = block.Role
+				pendingContent.WriteString(block.Content)
+			}
+		case "tool_call":
+			// tool_call 前先 flush 累积的文本
+			flushPending()
+			result = append(result, block)
+		}
+	}
+	// flush 最后一段累积的文本
+	flushPending()
+
 	if len(result) == 0 {
 		return nil
 	}

@@ -172,6 +172,21 @@ func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string,
 	if err != nil {
 		logger.LogError(c, "failed to record log: "+err.Error())
 	}
+
+	statusCode := 0
+	if other != nil {
+		if sc, ok := other["status_code"]; ok {
+			switch v := sc.(type) {
+			case int:
+				statusCode = v
+			case float64:
+				statusCode = int(v)
+			}
+		}
+	}
+	if modelName != "" && statusCode > 0 {
+		RecordFailedTokenRecord(modelName, statusCode, log.CreatedAt)
+	}
 }
 
 type RecordConsumeLogParams struct {
