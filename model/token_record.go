@@ -104,11 +104,11 @@ func getTokenRecordHourBucket(createdAt int64) (int64, int64) {
 	return bucketStartAt, bucketStartAt + 3599
 }
 
-func calcTokenRecordAvgTPS(totalTokens int64, totalUseTime int64) float64 {
-	if totalTokens <= 0 || totalUseTime <= 0 {
+func calcTokenRecordAvgTPS(outputTokens int64, totalUseTime int64) float64 {
+	if outputTokens <= 0 || totalUseTime <= 0 {
 		return 0
 	}
-	return math.Round((float64(totalTokens)/float64(totalUseTime))*100) / 100
+	return math.Round((float64(outputTokens)/float64(totalUseTime))*100) / 100
 }
 
 func buildTokenRecordIncrementExpr(column string, delta interface{}) clause.Expr {
@@ -136,7 +136,8 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 		RequestCount:     1,
 		PromptTokens:     inputTokens,
 		CompletionTokens: outputTokens,
-		TotalTokens:      inputTokens + outputTokens,
+		// model-log 看板中的 total_tokens 口径为“输出 Token”
+		TotalTokens:      outputTokens,
 		TotalUseTime:     totalUseTime,
 		FirstUsedAt:      createdAt,
 		LastUsedAt:       createdAt,
@@ -154,7 +155,7 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 			"request_count":     buildTokenRecordIncrementExpr("request_count", 1),
 			"prompt_tokens":     buildTokenRecordIncrementExpr("prompt_tokens", inputTokens),
 			"completion_tokens": buildTokenRecordIncrementExpr("completion_tokens", outputTokens),
-			"total_tokens":      buildTokenRecordIncrementExpr("total_tokens", inputTokens+outputTokens),
+			"total_tokens":      buildTokenRecordIncrementExpr("total_tokens", outputTokens),
 			"total_use_time":    buildTokenRecordIncrementExpr("total_use_time", totalUseTime),
 			"last_used_at":      createdAt,
 			"updated_at":        createdAt,
@@ -323,7 +324,7 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 			CompletionTokens: record.CompletionTokens,
 			TotalTokens:      record.TotalTokens,
 			TotalUseTime:     record.TotalUseTime,
-			AvgTPS:           calcTokenRecordAvgTPS(record.TotalTokens, record.TotalUseTime),
+			AvgTPS:           calcTokenRecordAvgTPS(record.CompletionTokens, record.TotalUseTime),
 			FailedCount:      record.FailedCount,
 			FailedDetail:     parseFailedDetail(record.FailedDetail),
 			IsCurrent:        hours[hourIndex].IsCurrent,
@@ -340,7 +341,7 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 
 	items := make([]TokenRecordRecentItem, 0, len(itemsMap))
 	for _, item := range itemsMap {
-		item.Summary.AvgTPS = calcTokenRecordAvgTPS(item.Summary.TotalTokens, item.Summary.TotalUseTime)
+		item.Summary.AvgTPS = calcTokenRecordAvgTPS(item.Summary.CompletionTokens, item.Summary.TotalUseTime)
 		item.Summary.FailedRate = calcFailedRate(item.Summary.FailedCount, item.Summary.RequestCount)
 		items = append(items, *item)
 	}

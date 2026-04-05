@@ -61,7 +61,7 @@ func TestRecordTokenRecordAccumulatesWithinSameHour(t *testing.T) {
 	require.EqualValues(t, baseTimestamp+3599, record.BucketEndAt)
 	require.Equal(t, "gpt-5", record.ModelName)
 	require.EqualValues(t, 2, record.RequestCount)
-	require.EqualValues(t, 0, record.PromptTokens)
+	require.EqualValues(t, 13, record.PromptTokens)
 	require.EqualValues(t, 27, record.CompletionTokens)
 	require.EqualValues(t, 27, record.TotalTokens)
 	require.EqualValues(t, 7, record.TotalUseTime)

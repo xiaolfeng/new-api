@@ -13,6 +13,7 @@ import { IconAscend, IconDescend, IconLineChartStroked, IconCoinMoneyStroked, Ic
 import CardPro from '../common/ui/CardPro';
 import { renderNumber } from '../../helpers';
 import { useModelLogData } from '../../hooks/model-log/useModelLogData';
+import { useActualTheme } from '../../context/Theme';
 
 const { Text } = Typography;
 
@@ -41,54 +42,40 @@ const formatAvgTps = (avgTps) => {
   return Number(avgTps).toFixed(2);
 };
 
-const getCellStyle = (cell, maxTokens) => {
-  const ratio =
-    maxTokens > 0 && cell.total_tokens > 0 ? cell.total_tokens / maxTokens : 0;
-  const backgroundAlpha = ratio > 0 ? 0.18 + ratio * 0.72 : 0.08;
+const getOutputTokens = (cell) => cell.completion_tokens || 0;
+
+const clamp01 = (value) => Math.min(1, Math.max(0, value));
+
+const getHeatCellStyle = ({
+  value,
+  maxValue,
+  isCurrent,
+  isDark,
+  color,
+}) => {
+  const safeValue = Number(value || 0);
+  const ratio = maxValue > 0 && safeValue > 0 ? clamp01(safeValue / maxValue) : 0;
+  const alphaStart = isDark ? 0.14 : 0.1;
+  const alphaEnd = isDark ? 0.88 : 0.8;
+  const alpha =
+    safeValue > 0 ? alphaStart + ratio * (alphaEnd - alphaStart) : 0;
 
   return {
     background:
-      cell.total_tokens > 0
-        ? `rgba(59, 130, 246, ${backgroundAlpha})`
+      safeValue > 0
+        ? `rgba(${color.r}, ${color.g}, ${color.b}, ${alpha})`
         : 'var(--semi-color-fill-1)',
-    border: cell.is_current
-      ? '2px solid rgba(59, 130, 246, 0.5)'
+    border: isCurrent
+      ? `2px solid rgba(${color.r}, ${color.g}, ${color.b}, ${isDark ? 0.78 : 0.62})`
       : '1px solid var(--semi-color-border)',
-    color: ratio >= 0.55 ? '#ffffff' : 'var(--semi-color-text-0)',
+    color: ratio >= (isDark ? 0.5 : 0.58) ? '#ffffff' : 'var(--semi-color-text-0)',
   };
 };
 
-const getCellStyleForTps = (cell, maxTps) => {
-  const ratio = maxTps > 0 && cell.avg_tps > 0 ? cell.avg_tps / maxTps : 0;
-  const backgroundAlpha = ratio > 0 ? 0.18 + ratio * 0.72 : 0.08;
-
-  return {
-    background:
-      cell.avg_tps > 0
-        ? `rgba(34, 197, 94, ${backgroundAlpha})`
-        : 'var(--semi-color-fill-1)',
-    border: cell.is_current
-      ? '2px solid rgba(34, 197, 94, 0.5)'
-      : '1px solid var(--semi-color-border)',
-    color: ratio >= 0.55 ? '#ffffff' : 'var(--semi-color-text-0)',
-  };
-};
-
-const getCellStyleForFailure = (cell, maxFailure) => {
-  const ratio =
-    maxFailure > 0 && cell.failed_count > 0 ? cell.failed_count / maxFailure : 0;
-  const backgroundAlpha = ratio > 0 ? 0.18 + ratio * 0.72 : 0.08;
-
-  return {
-    background:
-      cell.failed_count > 0
-        ? `rgba(239, 68, 68, ${backgroundAlpha})`
-        : 'var(--semi-color-fill-1)',
-    border: cell.is_current
-      ? '2px solid rgba(239, 68, 68, 0.5)'
-      : '1px solid var(--semi-color-border)',
-    color: ratio >= 0.55 ? '#ffffff' : 'var(--semi-color-text-0)',
-  };
+const HEAT_COLORS = {
+  output: { r: 59, g: 130, b: 246 },
+  tps: { r: 34, g: 197, b: 94 },
+  failure: { r: 239, g: 68, b: 68 },
 };
 
 const buildTokenCellTooltip = (cell) => (
@@ -96,7 +83,7 @@ const buildTokenCellTooltip = (cell) => (
     <div className='font-semibold'>
       {formatHourRange(cell.bucket_start_at, cell.bucket_end_at)}
     </div>
-    <div>Token：{renderNumber(cell.completion_tokens || 0)}</div>
+    <div>输出 Token：{renderNumber(getOutputTokens(cell))}</div>
   </div>
 );
 
@@ -105,7 +92,7 @@ const buildTpsCellTooltip = (cell) => (
     <div className='font-semibold'>
       {formatHourRange(cell.bucket_start_at, cell.bucket_end_at)}
     </div>
-    <div>TPS：{formatAvgTps(cell.avg_tps)}</div>
+    <div>输出 TPS：{formatAvgTps(cell.avg_tps)}</div>
   </div>
 );
 
@@ -137,14 +124,14 @@ const buildHeaderStats = (item, t) => {
   const stats = [
     {
       label: t('输出 Token'),
-      value: renderNumber(item.summary.total_tokens || 0),
+      value: renderNumber(item.summary.completion_tokens || 0),
     },
     {
       label: t('成功请求'),
       value: renderNumber(item.summary.request_count || 0),
     },
     {
-      label: t('平均 TPS'),
+      label: t('输出 TPS'),
       value: formatAvgTps(item.summary.avg_tps),
     },
     {
@@ -173,8 +160,8 @@ const sortItems = (items, sortField, sortDirection) => {
 
     switch (sortField) {
       case 'total_tokens':
-        aVal = a.summary.total_tokens || 0;
-        bVal = b.summary.total_tokens || 0;
+        aVal = a.summary.completion_tokens || 0;
+        bVal = b.summary.completion_tokens || 0;
         break;
       case 'failed_rate':
         aVal = a.summary.failed_rate || 0;
@@ -279,6 +266,8 @@ const buildSummaryCards = (summaryData) => {
 const ModelLogBoard = () => {
   const { t, loading, refreshing, items, lastUpdatedAt, refreshData, summary } =
     useModelLogData();
+  const actualTheme = useActualTheme();
+  const isDark = actualTheme === 'dark';
 
   const [sortField, setSortField] = useState('total_tokens');
   const [sortDirection, setSortDirection] = useState('desc');
@@ -287,6 +276,21 @@ const ModelLogBoard = () => {
     () => sortItems(items, sortField, sortDirection),
     [items, sortField, sortDirection]
   );
+  const metricMax = useMemo(() => {
+    const max = {
+      outputTokens: 0,
+      avgTps: 0,
+      failedCount: 0,
+    };
+    for (const item of sortedItems) {
+      for (const cell of item.cells || []) {
+        max.outputTokens = Math.max(max.outputTokens, getOutputTokens(cell));
+        max.avgTps = Math.max(max.avgTps, Number(cell.avg_tps || 0));
+        max.failedCount = Math.max(max.failedCount, Number(cell.failed_count || 0));
+      }
+    }
+    return max;
+  }, [sortedItems]);
 
   const handleSort = (field) => {
     if (field === sortField) {
@@ -324,9 +328,9 @@ const ModelLogBoard = () => {
                 size='small'
                 style={{ width: 120 }}
               >
-                <Select.Option value='total_tokens'>{t('总 Token')}</Select.Option>
+                <Select.Option value='total_tokens'>{t('输出 Token')}</Select.Option>
                 <Select.Option value='failed_rate'>{t('失败率')}</Select.Option>
-                <Select.Option value='avg_tps'>{t('TPS')}</Select.Option>
+                <Select.Option value='avg_tps'>{t('输出 TPS')}</Select.Option>
               </Select>
               <Button
                 size='small'
@@ -370,11 +374,11 @@ const ModelLogBoard = () => {
             <div className='flex flex-wrap items-center gap-4 text-xs text-sky-700/80 dark:text-sky-300/70'>
               <span className='flex items-center gap-1'>
                 <span className='inline-block h-2 w-2 rounded-sm bg-[rgba(59,130,246,0.5)]'></span>
-                {t('Token 用量')}
+                {t('输出 Token 用量')}
               </span>
               <span className='flex items-center gap-1'>
                 <span className='inline-block h-2 w-2 rounded-sm bg-[rgba(34,197,94,0.5)]'></span>
-                {t('TPS')}
+                {t('输出 TPS')}
               </span>
               <span className='flex items-center gap-1'>
                 <span className='inline-block h-2 w-2 rounded-sm bg-[rgba(239,68,68,0.5)]'></span>
@@ -383,26 +387,14 @@ const ModelLogBoard = () => {
             </div>
           </div>
 
-          <div className='space-y-1'>
+          <div className='space-y-3'>
             {sortedItems.map((item) => {
-              const rowMaxTokens = Math.max(
-                ...item.cells.map((cell) => cell.total_tokens || 0),
-                0,
-              );
-              const rowMaxTps = Math.max(
-                ...item.cells.map((cell) => cell.avg_tps || 0),
-                0,
-              );
-              const rowMaxFailure = Math.max(
-                ...item.cells.map((cell) => cell.failed_count || 0),
-                0,
-              );
               const hasFailure = item.summary.failed_count > 0;
 
               return (
                 <Card
                   key={item.model_name}
-                  className='w-full !rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 to-sky-100/70 dark:border-sky-500/35 dark:from-sky-950/35 dark:to-sky-900/20 mb-3'
+                  className='w-full !rounded-2xl border border-sky-200/80 bg-gradient-to-br from-sky-50 to-sky-100/70 dark:border-sky-500/35 dark:from-sky-950/35 dark:to-sky-900/20'
                   bordered
                   bodyStyle={{ padding: 12 }}
                 >
@@ -448,7 +440,13 @@ const ModelLogBoard = () => {
 
                     <div className='flex flex-wrap gap-1.5 sm:gap-2'>
                       {item.cells.map((cell) => {
-                        const cellStyle = getCellStyle(cell, rowMaxTokens);
+                        const cellStyle = getHeatCellStyle({
+                          value: getOutputTokens(cell),
+                          maxValue: metricMax.outputTokens,
+                          isCurrent: cell.is_current,
+                          isDark,
+                          color: HEAT_COLORS.output,
+                        });
                         return (
                           <Tooltip
                             key={`${item.model_name}-${cell.bucket_start_at}`}
@@ -467,7 +465,13 @@ const ModelLogBoard = () => {
 
                     <div className='flex flex-wrap gap-1.5 sm:gap-2'>
                       {item.cells.map((cell) => {
-                        const cellStyle = getCellStyleForTps(cell, rowMaxTps);
+                        const cellStyle = getHeatCellStyle({
+                          value: cell.avg_tps,
+                          maxValue: metricMax.avgTps,
+                          isCurrent: cell.is_current,
+                          isDark,
+                          color: HEAT_COLORS.tps,
+                        });
                         return (
                           <Tooltip
                             key={`tps-${item.model_name}-${cell.bucket_start_at}`}
@@ -487,10 +491,13 @@ const ModelLogBoard = () => {
                     {hasFailure && (
                       <div className='flex flex-wrap gap-1.5 sm:gap-2'>
                         {item.cells.map((cell) => {
-                          const cellStyle = getCellStyleForFailure(
-                            cell,
-                            rowMaxFailure,
-                          );
+                          const cellStyle = getHeatCellStyle({
+                            value: cell.failed_count,
+                            maxValue: metricMax.failedCount,
+                            isCurrent: cell.is_current,
+                            isDark,
+                            color: HEAT_COLORS.failure,
+                          });
                           return (
                             <Tooltip
                               key={`fail-${item.model_name}-${cell.bucket_start_at}`}
