@@ -37,6 +37,8 @@ var geminiSupportedMimeTypes = map[string]bool{
 	"image/jpeg":      true,
 	"image/jpg":       true, // support old image/jpeg
 	"image/webp":      true,
+	"image/heic":      true,
+	"image/heif":      true,
 	"text/plain":      true,
 	"video/mov":       true,
 	"video/mpeg":      true,
@@ -1298,15 +1300,14 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 	responseText := strings.Builder{}
 	var streamItems []string
 
-	helper.StreamScannerHandler(c, resp, info, func(data string) bool {
+	helper.StreamScannerHandler(c, resp, info, func(data string, sr *helper.StreamResult) {
 		if data != "" {
 			streamItems = append(streamItems, data)
 		}
 		var geminiResponse dto.GeminiChatResponse
-		err := common.UnmarshalJsonStr(data, &geminiResponse)
-		if err != nil {
-			logger.LogError(c, "error unmarshalling stream response: "+err.Error())
-			return false
+		if err := common.UnmarshalJsonStr(data, &geminiResponse); err != nil {
+			sr.Stop(fmt.Errorf("unmarshal: %w", err))
+			return
 		}
 
 		if len(geminiResponse.Candidates) == 0 && geminiResponse.PromptFeedback != nil && geminiResponse.PromptFeedback.BlockReason != nil {
@@ -1331,7 +1332,9 @@ func geminiStreamHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http
 			*usage = mappedUsage
 		}
 
-		return callback(data, &geminiResponse)
+		if !callback(data, &geminiResponse) {
+			sr.Stop(fmt.Errorf("gemini callback stopped"))
+		}
 	})
 
 	if imageCount != 0 {

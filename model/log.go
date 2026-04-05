@@ -81,7 +81,8 @@ func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 
 		if otherParsed || len(otherMap) > 0 {
 			delete(otherMap, "admin_info")
-			delete(otherMap, "reject_reason")
+			// delete(otherMap, "reject_reason")
+			delete(otherMap, "stream_status")
 			logs[i].Other = common.MapToJsonStr(otherMap)
 		} else {
 			logs[i].Other = originalOther
@@ -98,6 +99,7 @@ func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 			}
 		}
 
+		logs[i].Other = common.MapToJsonStr(otherMap)
 		logs[i].Id = startIdx + i + 1
 	}
 }
