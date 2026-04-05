@@ -75,8 +75,17 @@ type TokenRecordRecentItem struct {
 }
 
 type TokenRecordRecentSnapshot struct {
-	Hours []TokenRecordHourMeta   `json:"hours"`
-	Items []TokenRecordRecentItem `json:"items"`
+	Hours   []TokenRecordHourMeta      `json:"hours"`
+	Items   []TokenRecordRecentItem    `json:"items"`
+	Summary *TokenRecordOverallSummary `json:"summary"`
+}
+
+// TokenRecordOverallSummary 全局聚合摘要（最近24小时所有模型合计）
+type TokenRecordOverallSummary struct {
+	TotalRequestCount int64 `json:"total_request_count"` // 总成功请求次数
+	TotalPromptTokens int64 `json:"total_prompt_tokens"` // 总输入Token
+	TotalOutputTokens int64 `json:"total_output_tokens"` // 总输出Token
+	ActiveModelCount  int   `json:"active_model_count"`  // 活跃模型数
 }
 
 func normalizeTokenRecordModelName(modelName string) string {
@@ -113,6 +122,7 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 
 	modelName = normalizeTokenRecordModelName(modelName)
 	bucketStartAt, bucketEndAt := getTokenRecordHourBucket(createdAt)
+	inputTokens := int64(promptTokens)
 	outputTokens := int64(completionTokens)
 	totalUseTime := int64(useTimeSeconds)
 	if totalUseTime < 0 {
@@ -124,9 +134,9 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 		BucketEndAt:      bucketEndAt,
 		ModelName:        modelName,
 		RequestCount:     1,
-		PromptTokens:     0,
+		PromptTokens:     inputTokens,
 		CompletionTokens: outputTokens,
-		TotalTokens:      outputTokens,
+		TotalTokens:      inputTokens + outputTokens,
 		TotalUseTime:     totalUseTime,
 		FirstUsedAt:      createdAt,
 		LastUsedAt:       createdAt,
@@ -142,9 +152,9 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 		DoUpdates: clause.Assignments(map[string]interface{}{
 			"bucket_end_at":     bucketEndAt,
 			"request_count":     buildTokenRecordIncrementExpr("request_count", 1),
-			"prompt_tokens":     buildTokenRecordIncrementExpr("prompt_tokens", 0),
+			"prompt_tokens":     buildTokenRecordIncrementExpr("prompt_tokens", inputTokens),
 			"completion_tokens": buildTokenRecordIncrementExpr("completion_tokens", outputTokens),
-			"total_tokens":      buildTokenRecordIncrementExpr("total_tokens", outputTokens),
+			"total_tokens":      buildTokenRecordIncrementExpr("total_tokens", inputTokens+outputTokens),
 			"total_use_time":    buildTokenRecordIncrementExpr("total_use_time", totalUseTime),
 			"last_used_at":      createdAt,
 			"updated_at":        createdAt,
@@ -342,8 +352,20 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 		return items[i].Summary.TotalTokens > items[j].Summary.TotalTokens
 	})
 
+	// 计算全局聚合摘要
+	var overallSummary TokenRecordOverallSummary
+	if len(items) > 0 {
+		for _, item := range items {
+			overallSummary.TotalRequestCount += item.Summary.RequestCount
+			overallSummary.TotalPromptTokens += item.Summary.PromptTokens
+			overallSummary.TotalOutputTokens += item.Summary.CompletionTokens
+		}
+		overallSummary.ActiveModelCount = len(items)
+	}
+
 	return TokenRecordRecentSnapshot{
-		Hours: hours,
-		Items: items,
+		Hours:   hours,
+		Items:   items,
+		Summary: &overallSummary,
 	}, nil
 }

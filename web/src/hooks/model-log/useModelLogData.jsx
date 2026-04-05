@@ -9,6 +9,7 @@ export const useModelLogData = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [hours, setHours] = useState([]);
   const [items, setItems] = useState([]);
+  const [summary, setSummary] = useState(null);
   const [lastUpdatedAt, setLastUpdatedAt] = useState(0);
 
   const fetchRecentTokenRecords = useCallback(async (withLoading = true) => {
@@ -30,6 +31,7 @@ export const useModelLogData = () => {
 
       setHours(Array.isArray(data?.hours) ? data.hours : []);
       setItems(Array.isArray(data?.items) ? data.items : []);
+      setSummary(data?.summary || null);
       setLastUpdatedAt(dayjs().unix());
     } catch (error) {
       showError(error);
@@ -52,6 +54,7 @@ export const useModelLogData = () => {
     refreshing,
     hours,
     items,
+    summary,
     lastUpdatedAt,
     refreshData: () => fetchRecentTokenRecords(false),
   };
