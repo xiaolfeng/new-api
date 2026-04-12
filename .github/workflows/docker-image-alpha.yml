@@ -1,18 +1,34 @@
+# ============================================================================
+# new-api Alpha Docker Build Workflow (QuantumNous)
+# 触发条件: 推送 alpha tag（如 v0.10.8-alpha.3） 或 手动触发
+# ============================================================================
+
 name: Publish Docker image (alpha)
 
 on:
   push:
-    branches:
-      - alpha
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+-alpha*'
   workflow_dispatch:
     inputs:
-      name:
-        description: "reason"
-        required: false
+      tag:
+        description: 'Tag name to build (e.g., v0.10.8-alpha.3)'
+        required: true
+        type: string
+
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/newapi-fix
+
+concurrency:
+  group: docker-alpha-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: true
 
 jobs:
+  # ==========================================================================
+  # Step 1: 多架构原生构建（amd64 + arm64）
+  # ==========================================================================
   build_single_arch:
-    name: Build & push (${{ matrix.arch }}) [native]
+    name: Build & push (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -29,59 +45,53 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - name: Check out (shallow)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - name: Check out
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 1
+          fetch-depth: ${{ github.event_name == 'workflow_dispatch' && 0 || 1 }}
+          ref: ${{ github.event.inputs.tag || github.ref }}
 
-      - name: Determine alpha version
-        id: version
+      - name: Resolve tag & write VERSION
         run: |
-          VERSION="alpha-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
-          echo "$VERSION" > VERSION
-          echo "value=$VERSION" >> $GITHUB_OUTPUT
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
-          echo "Publishing version: $VERSION for ${{ matrix.arch }}"
-
-      - name: Normalize GHCR repository
-        run: echo "GHCR_REPOSITORY=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            TAG="${{ github.event.inputs.tag }}"
+            if ! git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
+              echo "::error::Tag '$TAG' does not exist in the repository"
+              exit 1
+            fi
+          else
+            TAG=${GITHUB_REF#refs/tags/}
+          fi
+          echo "TAG=$TAG" >> $GITHUB_ENV
+          echo "$TAG" > VERSION
+          echo "Building tag: $TAG for ${{ matrix.arch }}"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata (labels)
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@v6
         with:
           images: |
-            calciumion/new-api
-            ghcr.io/${{ env.GHCR_REPOSITORY }}
+            ${{ env.IMAGE_NAME }}
 
-      - name: Build & push single-arch (to both registries)
+      - name: Build & push single-arch image
         id: build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            calciumion/new-api:alpha-${{ matrix.arch }}
-            calciumion/new-api:${{ steps.version.outputs.value }}-${{ matrix.arch }}
-            ghcr.io/${{ env.GHCR_REPOSITORY }}:alpha-${{ matrix.arch }}
-            ghcr.io/${{ env.GHCR_REPOSITORY }}:${{ steps.version.outputs.value }}-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:${{ env.TAG }}-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:alpha-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -89,91 +99,65 @@ jobs:
           sbom: true
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@v3
 
       - name: Sign image with cosign
-        run: |
-          cosign sign --yes calciumion/new-api@${{ steps.build.outputs.digest }}
-          cosign sign --yes ghcr.io/${{ env.GHCR_REPOSITORY }}@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
 
       - name: Output digest
         run: |
           echo "### Docker Image Digest (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "calciumion/new-api:alpha-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
-          echo "ghcr.io/${{ env.GHCR_REPOSITORY }}:alpha-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE_NAME }}:${{ env.TAG }}-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+  # ==========================================================================
+  # Step 2: 合并多架构 manifest
+  # ==========================================================================
   create_manifests:
-    name: Create multi-arch manifests (Docker Hub + GHCR)
+    name: Create multi-arch manifests
     needs: [build_single_arch]
     runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     permissions:
       packages: write
       contents: read
     steps:
-      - name: Check out (shallow)
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
-        with:
-          fetch-depth: 1
-
-      - name: Normalize GHCR repository
-        run: echo "GHCR_REPOSITORY=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-
-      - name: Determine alpha version
-        id: version
+      - name: Extract tag
         run: |
-          VERSION="alpha-$(date +'%Y%m%d')-$(git rev-parse --short HEAD)"
-          echo "value=$VERSION" >> $GITHUB_OUTPUT
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          if [ -n "${{ github.event.inputs.tag }}" ]; then
+            echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
+          else
+            echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          fi
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Create & push manifest (Docker Hub - alpha)
+      - name: Create & push manifest (version tag)
         run: |
           docker buildx imagetools create \
-            -t calciumion/new-api:alpha \
-            calciumion/new-api:alpha-amd64 \
-            calciumion/new-api:alpha-arm64
+            -t ${{ env.IMAGE_NAME }}:${TAG} \
+            ${{ env.IMAGE_NAME }}:${TAG}-amd64 \
+            ${{ env.IMAGE_NAME }}:${TAG}-arm64
 
-      - name: Create & push manifest (Docker Hub - versioned alpha)
+      - name: Create & push manifest (alpha tag)
         run: |
           docker buildx imagetools create \
-            -t calciumion/new-api:${VERSION} \
-            calciumion/new-api:${VERSION}-amd64 \
-            calciumion/new-api:${VERSION}-arm64
-
-      - name: Log in to GHCR
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Create & push manifest (GHCR - alpha)
-        run: |
-          docker buildx imagetools create \
-            -t ghcr.io/${GHCR_REPOSITORY}:alpha \
-            ghcr.io/${GHCR_REPOSITORY}:alpha-amd64 \
-            ghcr.io/${GHCR_REPOSITORY}:alpha-arm64
-
-      - name: Create & push manifest (GHCR - versioned alpha)
-        run: |
-          docker buildx imagetools create \
-            -t ghcr.io/${GHCR_REPOSITORY}:${VERSION} \
-            ghcr.io/${GHCR_REPOSITORY}:${VERSION}-amd64 \
-            ghcr.io/${GHCR_REPOSITORY}:${VERSION}-arm64
+            -t ${{ env.IMAGE_NAME }}:alpha \
+            ${{ env.IMAGE_NAME }}:alpha-amd64 \
+            ${{ env.IMAGE_NAME }}:alpha-arm64
 
       - name: Output manifest digest
         run: |
           echo "### Multi-arch Manifest Digests" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          docker buildx imagetools inspect calciumion/new-api:alpha >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY
-          docker buildx imagetools inspect ghcr.io/${GHCR_REPOSITORY}:alpha >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE_NAME }}:${TAG}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE_NAME }}:alpha" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          docker buildx imagetools inspect ${{ env.IMAGE_NAME }}:${TAG} >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

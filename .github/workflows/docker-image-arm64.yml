@@ -1,20 +1,38 @@
-name: Publish Docker image (Multi Registries, native amd64+arm64)
+# ============================================================================
+# new-api Release Docker Build Workflow (QuantumNous)
+# 参考 make-dockerfile.sh 本地构建脚本
+# 触发条件: 推送正式 tag（排除 nightly 和 alpha）
+# ============================================================================
+
+name: Publish Docker image (Release)
 
 on:
   push:
     tags:
-      - '*'
-      - '!nightly*'
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-*'
+      - '!*-alpha*'
+      - '!*nightly*'
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag name to build (e.g., v0.10.8-alpha.3)'
+        description: 'Tag name to build (e.g., v0.10.8)'
         required: true
         type: string
 
+env:
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/newapi-fix
+
+concurrency:
+  group: docker-release-${{ github.event.inputs.tag || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # ==========================================================================
+  # Step 1: 多架构原生构建（amd64 + arm64 各自跑在对应 runner 上）
+  # ==========================================================================
   build_single_arch:
-    name: Build & push (${{ matrix.arch }}) [native]
+    name: Build & push (${{ matrix.arch }})
     strategy:
       fail-fast: false
       matrix:
@@ -34,7 +52,7 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@v4
         with:
           fetch-depth: ${{ github.event_name == 'workflow_dispatch' && 0 || 1 }}
           ref: ${{ github.event.inputs.tag || github.ref }}
@@ -43,9 +61,8 @@ jobs:
         run: |
           if [ -n "${{ github.event.inputs.tag }}" ]; then
             TAG="${{ github.event.inputs.tag }}"
-            # Verify tag exists
             if ! git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; then
-              echo "Error: Tag '$TAG' does not exist in the repository"
+              echo "::error::Tag '$TAG' does not exist in the repository"
               exit 1
             fi
           else
@@ -55,46 +72,32 @@ jobs:
           echo "$TAG" > VERSION
           echo "Building tag: $TAG for ${{ matrix.arch }}"
 
-
-#      - name: Normalize GHCR repository
-#        run: echo "GHCR_REPOSITORY=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
-
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-#      - name: Log in to GHCR
-#        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-#        with:
-#          registry: ghcr.io
-#          username: ${{ github.actor }}
-#          password: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Extract metadata (labels)
         id: meta
-        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        uses: docker/metadata-action@v6
         with:
           images: |
-            calciumion/new-api
-#            ghcr.io/${{ env.GHCR_REPOSITORY }}
+            ${{ env.IMAGE_NAME }}
 
-      - name: Build & push single-arch (to both registries)
+      - name: Build & push single-arch image
         id: build
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
           push: true
           tags: |
-            calciumion/new-api:${{ env.TAG }}-${{ matrix.arch }}
-            calciumion/new-api:latest-${{ matrix.arch }}
-#            ghcr.io/${{ env.GHCR_REPOSITORY }}:${{ env.TAG }}-${{ matrix.arch }}
-#            ghcr.io/${{ env.GHCR_REPOSITORY }}:latest-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:${{ env.TAG }}-${{ matrix.arch }}
+            ${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -102,24 +105,29 @@ jobs:
           sbom: true
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3
+        uses: sigstore/cosign-installer@v3
 
       - name: Sign image with cosign
-        run: cosign sign --yes calciumion/new-api@${{ steps.build.outputs.digest }}
+        run: cosign sign --yes ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
 
       - name: Output digest
         run: |
           echo "### Docker Image Digest (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "calciumion/new-api:${{ env.TAG }}-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE_NAME }}:${{ env.TAG }}-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
+  # ==========================================================================
+  # Step 2: 合并多架构 manifest（版本标签 + latest 标签）
+  # ==========================================================================
   create_manifests:
-    name: Create multi-arch manifests (Docker Hub)
+    name: Create multi-arch manifests
     needs: [build_single_arch]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+
     steps:
       - name: Extract tag
         run: |
@@ -128,55 +136,33 @@ jobs:
           else
             echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           fi
-#
-#      - name: Normalize GHCR repository
-#        run: echo "GHCR_REPOSITORY=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Create & push manifest (Docker Hub - version)
+      - name: Create & push manifest (version tag)
         run: |
           docker buildx imagetools create \
-            -t calciumion/new-api:${TAG} \
-            calciumion/new-api:${TAG}-amd64 \
-            calciumion/new-api:${TAG}-arm64
+            -t ${{ env.IMAGE_NAME }}:${TAG} \
+            ${{ env.IMAGE_NAME }}:${TAG}-amd64 \
+            ${{ env.IMAGE_NAME }}:${TAG}-arm64
 
-      - name: Create & push manifest (Docker Hub - latest)
+      - name: Create & push manifest (latest tag)
         run: |
           docker buildx imagetools create \
-            -t calciumion/new-api:latest \
-            calciumion/new-api:latest-amd64 \
-            calciumion/new-api:latest-arm64
+            -t ${{ env.IMAGE_NAME }}:latest \
+            ${{ env.IMAGE_NAME }}:latest-amd64 \
+            ${{ env.IMAGE_NAME }}:latest-arm64
 
       - name: Output manifest digest
         run: |
           echo "### Multi-arch Manifest" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          docker buildx imagetools inspect calciumion/new-api:${TAG} >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE_NAME }}:${TAG}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          docker buildx imagetools inspect ${{ env.IMAGE_NAME }}:${TAG} >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-
-      # ---- GHCR ----
-#      - name: Log in to GHCR
-#        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
-#        with:
-#          registry: ghcr.io
-#          username: ${{ github.actor }}
-#          password: ${{ secrets.GITHUB_TOKEN }}
-
-#      - name: Create & push manifest (GHCR - version)
-#        run: |
-#          docker buildx imagetools create \
-#            -t ghcr.io/${GHCR_REPOSITORY}:${TAG} \
-#            ghcr.io/${GHCR_REPOSITORY}:${TAG}-amd64 \
-#            ghcr.io/${GHCR_REPOSITORY}:${TAG}-arm64
-#
-#      - name: Create & push manifest (GHCR - latest)
-#        run: |
-#          docker buildx imagetools create \
-#            -t ghcr.io/${GHCR_REPOSITORY}:latest \
-#            ghcr.io/${GHCR_REPOSITORY}:latest-amd64 \
-#            ghcr.io/${GHCR_REPOSITORY}:latest-arm64
