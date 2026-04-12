@@ -65,6 +65,7 @@ const (
 
 	// ContextKeyLanguage stores the user's language preference for i18n
 	ContextKeyLanguage ContextKey = "language"
+	ContextKeyIsStream ContextKey = "is_stream"
 
 	// ContextKeyEmptyResponse 标记上游返回空响应（completion_tokens = 0）
 	// 用于触发空响应重试逻辑
