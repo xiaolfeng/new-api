@@ -148,6 +148,17 @@ const buildLineChartSpec = (dataId, dataValues, colorMap, t) => ({
   legends: {
     visible: true,
   },
+  axes: [
+    { orient: 'bottom' },
+    {
+      orient: 'left',
+      nice: true,
+      niceType: 'rough',
+      label: {
+        format: (val) => renderNumber(val),
+      },
+    },
+  ],
   tooltip: {
     mark: {
       content: [
@@ -162,8 +173,20 @@ const buildLineChartSpec = (dataId, dataValues, colorMap, t) => ({
     specified: colorMap,
     fallback: (modelName) => modelToColor(modelName),
   },
+  line: {
+    style: {
+      curveType: 'monotone',
+      lineWidth: 2,
+    },
+  },
   point: {
-    visible: false,
+    visible: true,
+    style: {
+      size: 4,
+      fill: '#fff',
+      stroke: null,
+      lineWidth: 2,
+    },
   },
   crosshair: {
     visible: true,
