@@ -153,6 +153,12 @@ const LogDetailModal = ({
   const openAIResponseBlocks = Array.isArray(record?.openaiResponseBlocks)
     ? record.openaiResponseBlocks
     : [];
+  const openAIRequestBlocks = Array.isArray(record?.openaiRequestBlocks)
+    ? record.openaiRequestBlocks
+    : [];
+  const openaiToolResponses = Array.isArray(record?.openaiToolResponses)
+    ? record.openaiToolResponses
+    : [];
   const hasClaudeStructuredRecord =
     !isFullLogRecord &&
     (claudeRequestBlocks.length > 0 ||
@@ -165,7 +171,9 @@ const LogDetailModal = ({
       responsesResponseBlocks.length > 0);
   const hasOpenAIStructuredRecord =
     !isFullLogRecord &&
-    openAIResponseBlocks.length > 0;
+    (openAIRequestBlocks.length > 0 ||
+      openaiToolResponses.length > 0 ||
+      openAIResponseBlocks.length > 0);
   const claudeResponseSections = useMemo(() => {
     const thinkingParts = [];
     const answerParts = [];
@@ -467,6 +475,57 @@ const LogDetailModal = ({
         bordered
         rowKey='rowKey'
         style={{ fontSize: 12 }}
+      />
+    );
+  };
+
+  const renderOpenAIToolResponsesTable = () => {
+    if (openaiToolResponses.length === 0) {
+      return <Empty description={t('无工具响应记录')} style={{ padding: '20px 0' }} />;
+    }
+
+    const columns = [
+      {
+        title: t('顺序'),
+        dataIndex: 'order',
+        key: 'order',
+        width: 80,
+      },
+      {
+        title: t('调用ID'),
+        dataIndex: 'toolCallId',
+        key: 'toolCallId',
+        render: (text) => <Text code style={{ fontSize: 11 }}>{text || '-'}</Text>,
+      },
+      {
+        title: t('工具'),
+        dataIndex: 'name',
+        key: 'name',
+        render: (text) => text || '-',
+      },
+      {
+        title: t('类型'),
+        dataIndex: 'type',
+        key: 'type',
+        width: 80,
+      },
+    ];
+
+    const dataSource = openaiToolResponses.map((resp, index) => ({
+      key: index,
+      order: index + 1,
+      toolCallId: resp.toolCallId || '',
+      name: resp.name || '',
+      type: resp.type || 'tool',
+    }));
+
+    return (
+      <Table
+        columns={columns}
+        dataSource={dataSource}
+        pagination={false}
+        size='small'
+        bordered
       />
     );
   };
@@ -871,6 +930,80 @@ const LogDetailModal = ({
               </div>
               {renderResponsesToolResponsesTable()}
             </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (hasOpenAIStructuredRecord && openAIRequestBlocks.length > 0) {
+      if (openAIRequestBlocks.length === 0 && openaiToolResponses.length === 0) {
+        return <Empty description={t('无请求内容记录')} style={{ padding: '20px 0' }} />;
+      }
+
+      return (
+        <div style={{ padding: '8px 0' }}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+            <Button
+              icon={<IconCopy />}
+              size='small'
+              theme='borderless'
+              onClick={() => copySection(t('请求内容'), {
+                requestBlocks: openAIRequestBlocks,
+                toolResponses: openaiToolResponses,
+              })}
+            >
+              {t('复制')}
+            </Button>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div>
+              <Text strong>{t('输入内容')}</Text>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 12 }}>
+                {openAIRequestBlocks.length > 0 ? (
+                  openAIRequestBlocks.map((block, index) => (
+                    <div
+                      key={`${block.type || 'block'}-${block.role || 'role'}-${index}`}
+                      style={{
+                        border: '1px solid var(--semi-color-border)',
+                        borderRadius: 10,
+                        background: 'var(--semi-color-bg-1)',
+                        padding: 12,
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, gap: 12 }}>
+                        <Text strong>{t('输入片段')} #{index + 1}</Text>
+                        <Text type='tertiary' size='small'>
+                          {[block.role, block.type].filter(Boolean).join(' · ') || 'text'}
+                        </Text>
+                      </div>
+                      {block.text ? (
+                        renderClaudeRequestBlockContent(block.text)
+                      ) : (
+                        <Text type='tertiary'>{t('该输入片段无可展示文本')}</Text>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <Empty description={t('无输入片段记录')} style={{ padding: '20px 0' }} />
+                )}
+              </div>
+            </div>
+            {openaiToolResponses.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                  <Text strong>{t('工具响应')}</Text>
+                  <Button
+                    icon={<IconCopy />}
+                    size='small'
+                    theme='borderless'
+                    onClick={() => copySection(t('工具响应'), openaiToolResponses)}
+                  >
+                    {t('复制')}
+                  </Button>
+                </div>
+                {renderOpenAIToolResponsesTable()}
+              </div>
+            )}
           </div>
         </div>
       );

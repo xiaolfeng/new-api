@@ -774,3 +774,155 @@ func TestSanitizeToolLogValueTruncatesLongNestedStringValues(t *testing.T) {
 	require.Contains(t, itemValue, "......")
 	require.True(t, utf8.RuneCountInString(itemValue) <= maxLoggedJSONValueLength)
 }
+
+func TestBuildOpenAIRequestBlocks(t *testing.T) {
+	// Case 1: Empty messages → nil
+	t.Run("EmptyMessages", func(t *testing.T) {
+		req := &dto.GeneralOpenAIRequest{Messages: []dto.Message{}}
+		result := buildOpenAIRequestBlocks(req)
+		require.Nil(t, result)
+	})
+
+	// Case 2: No user message → nil
+	t.Run("NoUserMessage", func(t *testing.T) {
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "system", Content: "You are helpful."},
+				{Role: "assistant", Content: "Hi there!"},
+			},
+		}
+		result := buildOpenAIRequestBlocks(req)
+		require.Nil(t, result)
+	})
+
+	// Case 3: String content user message → 1 block
+	t.Run("StringContentUserMessage", func(t *testing.T) {
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "user", Content: "Hello, world!"},
+			},
+		}
+		result := buildOpenAIRequestBlocks(req)
+		require.Len(t, result, 1)
+		require.Equal(t, model.OpenAIRequestBlock{
+			Type: "text",
+			Role: "user",
+			Text: "Hello, world!",
+		}, result[0])
+	})
+
+	// Case 4: Multi-part content with text → text blocks only
+	t.Run("MultiPartContent", func(t *testing.T) {
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{
+					Role: "user",
+					Content: []any{
+						dto.MediaContent{Type: "text", Text: "What is in this image?"},
+						map[string]any{"type": "image_url", "image_url": "https://example.com/img.png"},
+						dto.MediaContent{Type: "text", Text: "Please describe it."},
+					},
+				},
+			},
+		}
+		result := buildOpenAIRequestBlocks(req)
+		require.Len(t, result, 2)
+		require.Equal(t, "text", result[0].Type)
+		require.Equal(t, "What is in this image?", result[0].Text)
+		require.Equal(t, "text", result[1].Type)
+		require.Equal(t, "Please describe it.", result[1].Text)
+	})
+
+	// Case 5: Last user message wins (multiple user messages)
+	t.Run("LastUserMessageWins", func(t *testing.T) {
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "user", Content: "First question"},
+				{Role: "assistant", Content: "First answer"},
+				{Role: "user", Content: "Second question"},
+			},
+		}
+		result := buildOpenAIRequestBlocks(req)
+		require.Len(t, result, 1)
+		require.Equal(t, "Second question", result[0].Text)
+	})
+
+	// Case 6: Empty text content → nil
+	t.Run("EmptyTextContent", func(t *testing.T) {
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "user", Content: "   "},
+			},
+		}
+		result := buildOpenAIRequestBlocks(req)
+		require.Nil(t, result)
+	})
+}
+
+func TestBuildAIToolResponseBlocks(t *testing.T) {
+	// Case 1: No tool messages → nil
+	t.Run("NoToolMessages", func(t *testing.T) {
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "user", Content: "Hello"},
+				{Role: "assistant", Content: "Hi!"},
+			},
+		}
+		result := buildOpenAIToolResponseBlocks(req)
+		require.Nil(t, result)
+	})
+
+	// Case 2: Tool message with matching assistant tool_call → Name resolved
+	t.Run("ToolMessageWithMatchingCall", func(t *testing.T) {
+		toolCallsJSON := `[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{}"}}]`
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "user", Content: "What's the weather?"},
+				{Role: "assistant", Content: nil, ToolCalls: json.RawMessage(toolCallsJSON)},
+				{Role: "tool", Content: `{"temp":72}`, ToolCallId: "call_1"},
+			},
+		}
+		result := buildOpenAIToolResponseBlocks(req)
+		require.Len(t, result, 1)
+		require.Equal(t, model.OpenAIToolResponseBlock{
+			ToolCallID: "call_1",
+			Name:       "get_weather",
+			Type:       "tool",
+			Role:       "tool",
+		}, result[0])
+	})
+
+	// Case 3: Tool message without matching call → Name empty
+	t.Run("ToolMessageWithoutMatchingCall", func(t *testing.T) {
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "tool", Content: "orphan result", ToolCallId: "call_unknown"},
+			},
+		}
+		result := buildOpenAIToolResponseBlocks(req)
+		require.Len(t, result, 1)
+		require.Equal(t, "call_unknown", result[0].ToolCallID)
+		require.Equal(t, "", result[0].Name)
+		require.Equal(t, "tool", result[0].Type)
+		require.Equal(t, "tool", result[0].Role)
+	})
+
+	// Case 4: Multiple tool messages → multiple blocks
+	t.Run("MultipleToolMessages", func(t *testing.T) {
+		toolCallsJSON := `[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{}"}},{"id":"call_2","type":"function","function":{"name":"get_forecast","arguments":"{}"}}]`
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "user", Content: "Weather report"},
+				{Role: "assistant", Content: nil, ToolCalls: json.RawMessage(toolCallsJSON)},
+				{Role: "tool", Content: `{"temp":72}`, ToolCallId: "call_1"},
+				{Role: "tool", Content: `{"rain":true}`, ToolCallId: "call_2"},
+			},
+		}
+		result := buildOpenAIToolResponseBlocks(req)
+		require.Len(t, result, 2)
+		require.Equal(t, "call_1", result[0].ToolCallID)
+		require.Equal(t, "get_weather", result[0].Name)
+		require.Equal(t, "call_2", result[1].ToolCallID)
+		require.Equal(t, "get_forecast", result[1].Name)
+	})
+}

@@ -31,6 +31,8 @@ type LogDetailRecord struct {
 	ResponsesRequestBlocks  []ResponsesRequestBlock      `json:"responsesRequestBlocks,omitempty"`
 	ResponsesToolResponses  []ResponsesToolResponseBlock `json:"responsesToolResponses,omitempty"`
 	ResponsesResponseBlocks []ResponsesResponseBlock     `json:"responsesResponseBlocks,omitempty"`
+	OpenAIRequestBlocks     []OpenAIRequestBlock         `json:"openaiRequestBlocks,omitempty"`
+	OpenAIToolResponses     []OpenAIToolResponseBlock    `json:"openaiToolResponses,omitempty"`
 }
 
 type LogToolInvokeRecord struct {
@@ -83,6 +85,19 @@ type ResponsesResponseBlock struct {
 	Name      string      `json:"name,omitempty"`
 	CallID    string      `json:"callId,omitempty"`
 	Arguments interface{} `json:"arguments,omitempty"`
+}
+
+type OpenAIRequestBlock struct {
+	Type string `json:"type,omitempty"` // "text"
+	Role string `json:"role,omitempty"` // "user"
+	Text string `json:"text,omitempty"`
+}
+
+type OpenAIToolResponseBlock struct {
+	ToolCallID string `json:"toolCallId,omitempty"`
+	Name       string `json:"name,omitempty"`
+	Type       string `json:"type,omitempty"` // "tool"
+	Role       string `json:"role,omitempty"` // "tool"
 }
 
 type OpenAIResponseBlock struct {

@@ -81,6 +81,8 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		case *dto.GeneralOpenAIRequest:
 			if req != nil {
 				record.Prompt = buildPromptRecordFromOpenAI(req)
+				record.OpenAIRequestBlocks = buildOpenAIRequestBlocks(req)
+				record.OpenAIToolResponses = buildOpenAIToolResponseBlocks(req)
 			}
 		case *dto.ClaudeRequest:
 			if req != nil {
@@ -142,6 +144,8 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		len(record.Headers) == 0 &&
 		len(record.ToolInvokes) == 0 &&
 		len(record.OpenAIResponseBlocks) == 0 &&
+		len(record.OpenAIRequestBlocks) == 0 &&
+		len(record.OpenAIToolResponses) == 0 &&
 		len(record.ClaudeRequestBlocks) == 0 &&
 		len(record.ClaudeToolResponses) == 0 &&
 		len(record.ClaudeResponseBlocks) == 0 &&
@@ -1110,6 +1114,105 @@ func buildPromptRecordFromOpenAI(req *dto.GeneralOpenAIRequest) map[string]inter
 	}
 
 	return result
+}
+
+func buildOpenAIRequestBlocks(req *dto.GeneralOpenAIRequest) []model.OpenAIRequestBlock {
+	if req == nil || len(req.Messages) == 0 {
+		return nil
+	}
+
+	var lastUserMsg *dto.Message
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if req.Messages[i].Role == "user" {
+			lastUserMsg = &req.Messages[i]
+			break
+		}
+	}
+	if lastUserMsg == nil {
+		return nil
+	}
+
+	blocks := make([]model.OpenAIRequestBlock, 0)
+
+	if lastUserMsg.IsStringContent() {
+		text := safeTruncateUTF8(lastUserMsg.StringContent(), maxCompletionLength)
+		if strings.TrimSpace(text) == "" {
+			return nil
+		}
+		blocks = append(blocks, model.OpenAIRequestBlock{
+			Type: "text",
+			Role: "user",
+			Text: text,
+		})
+	} else {
+		contents := lastUserMsg.ParseContent()
+		for _, c := range contents {
+			if c.Type != dto.ContentTypeText {
+				continue
+			}
+			if strings.TrimSpace(c.Text) == "" {
+				continue
+			}
+			blocks = append(blocks, model.OpenAIRequestBlock{
+				Type: "text",
+				Role: "user",
+				Text: safeTruncateUTF8(c.Text, maxCompletionLength),
+			})
+		}
+	}
+
+	if len(blocks) == 0 {
+		return nil
+	}
+	return blocks
+}
+
+func buildOpenAIToolResponseBlocks(req *dto.GeneralOpenAIRequest) []model.OpenAIToolResponseBlock {
+	if req == nil || len(req.Messages) == 0 {
+		return nil
+	}
+
+	toolNameMap := make(map[string]string)
+	for i := range req.Messages {
+		msg := &req.Messages[i]
+		if msg.Role != "assistant" {
+			continue
+		}
+		if msg.ToolCalls == nil || len(msg.ToolCalls) == 0 {
+			continue
+		}
+		toolCalls := msg.ParseToolCalls()
+		for _, tc := range toolCalls {
+			id := strings.TrimSpace(tc.ID)
+			name := strings.TrimSpace(tc.Function.Name)
+			if id != "" && name != "" {
+				toolNameMap[id] = name
+			}
+		}
+	}
+
+	blocks := make([]model.OpenAIToolResponseBlock, 0)
+	for i := range req.Messages {
+		msg := &req.Messages[i]
+		if msg.Role != "tool" {
+			continue
+		}
+		toolCallID := strings.TrimSpace(msg.ToolCallId)
+		if toolCallID == "" {
+			continue
+		}
+		blocks = append(blocks, model.OpenAIToolResponseBlock{
+			ToolCallID: toolCallID,
+			Name:       strings.TrimSpace(toolNameMap[toolCallID]),
+			Type:       "tool",
+			Role:       "tool",
+		})
+	}
+
+	if len(blocks) == 0 {
+		return nil
+	}
+	return blocks
 }
 
 func buildFullLogRequestBody(relayInfo *relaycommon.RelayInfo) interface{} {

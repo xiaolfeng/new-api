@@ -771,6 +771,12 @@ function parseInteractionType(record) {
     const openAIResponseBlocks = Array.isArray(recordData?.openaiResponseBlocks)
       ? recordData.openaiResponseBlocks
       : [];
+    const openAIRequestBlocks = Array.isArray(recordData?.openaiRequestBlocks)
+      ? recordData.openaiRequestBlocks
+      : [];
+    const openaiToolResponses = Array.isArray(recordData?.openaiToolResponses)
+      ? recordData.openaiToolResponses
+      : [];
     const responsesPromptItems = flattenResponsesPromptInputItems(prompt?.input);
 
     const responsesStructuredType = inferResponsesStructuredInteractionType({
@@ -802,11 +808,13 @@ function parseInteractionType(record) {
       (lastUserMessage.content && lastUserMessage.content.trim() !== '') ||
       claudeRequestBlocks.length > 0 ||
       responsesRequestBlocks.length > 0 ||
+      openAIRequestBlocks.length > 0 ||
       hasPromptObjectContent ||
       (Array.isArray(prompt) && prompt.length > 0);
     const hasToolInput =
       claudeToolResponses.length > 0 ||
-      responsesToolResponses.length > 0;
+      responsesToolResponses.length > 0 ||
+      openaiToolResponses.length > 0;
     const hasTextOutput =
       (typeof completion === 'string' && completion.trim() !== '') ||
       claudeResponseBlocks.some(
