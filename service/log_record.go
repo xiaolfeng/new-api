@@ -859,7 +859,7 @@ func buildResponsesResponseBlocksFromSSE(responseBody string) []model.ResponsesR
 					if state.Block.Name == "" {
 						state.Block.Name = strings.TrimSpace(streamResp.Item.Name)
 					}
-					mergeResponsesText(&state.ArgumentsRaw, streamResp.Item.Arguments)
+					mergeResponsesText(&state.ArgumentsRaw, string(streamResp.Item.Arguments))
 				}
 				continue
 			}
