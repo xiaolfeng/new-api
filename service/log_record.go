@@ -362,19 +362,25 @@ func buildOpenAIResponseBlocksFromChatBody(responseBody string) []model.OpenAIRe
 	result := make([]model.OpenAIResponseBlock, 0, len(openAIResponse.Choices))
 	for _, choice := range openAIResponse.Choices {
 		role := strings.TrimSpace(choice.Message.Role)
-		if reasoningContent := strings.TrimSpace(choice.Message.ReasoningContent); reasoningContent != "" {
-			result = append(result, model.OpenAIResponseBlock{
-				Type:    "reasoning",
-				Role:    role,
-				Content: safeTruncateUTF8(choice.Message.ReasoningContent, maxCompletionLength),
-			})
+		if choice.Message.ReasoningContent != nil {
+			reasoningContent := strings.TrimSpace(*choice.Message.ReasoningContent)
+			if reasoningContent != "" {
+				result = append(result, model.OpenAIResponseBlock{
+					Type:    "reasoning",
+					Role:    role,
+					Content: safeTruncateUTF8(reasoningContent, maxCompletionLength),
+				})
+			}
 		}
-		if reasoning := strings.TrimSpace(choice.Message.Reasoning); reasoning != "" {
-			result = append(result, model.OpenAIResponseBlock{
-				Type:    "reasoning",
-				Role:    role,
-				Content: safeTruncateUTF8(choice.Message.Reasoning, maxCompletionLength),
-			})
+		if choice.Message.Reasoning != nil {
+			reasoning := strings.TrimSpace(*choice.Message.Reasoning)
+			if reasoning != "" {
+				result = append(result, model.OpenAIResponseBlock{
+					Type:    "reasoning",
+					Role:    role,
+					Content: safeTruncateUTF8(reasoning, maxCompletionLength),
+				})
+			}
 		}
 		if content := choice.Message.StringContent(); strings.TrimSpace(content) != "" {
 			result = append(result, model.OpenAIResponseBlock{

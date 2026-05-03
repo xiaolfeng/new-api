@@ -250,7 +250,7 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 		completionTokens := simpleResponse.Usage.CompletionTokens
 		if completionTokens == 0 {
 			for _, choice := range simpleResponse.Choices {
-				ctkm := service.CountTextToken(choice.Message.StringContent()+choice.Message.ReasoningContent+choice.Message.Reasoning, info.UpstreamModelName)
+				ctkm := service.CountTextToken(choice.Message.StringContent()+choice.Message.GetReasoningContent(), info.UpstreamModelName)
 				completionTokens += ctkm
 			}
 		}
@@ -303,11 +303,11 @@ func OpenaiHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.Respo
 	var completionText strings.Builder
 	for _, choice := range simpleResponse.Choices {
 		completionText.WriteString(choice.Message.StringContent())
-		if choice.Message.ReasoningContent != "" {
-			completionText.WriteString(choice.Message.ReasoningContent)
+		if choice.Message.ReasoningContent != nil {
+			completionText.WriteString(*choice.Message.ReasoningContent)
 		}
-		if choice.Message.Reasoning != "" {
-			completionText.WriteString(choice.Message.Reasoning)
+		if choice.Message.Reasoning != nil {
+			completionText.WriteString(*choice.Message.Reasoning)
 		}
 	}
 	info.CompletionText = completionText.String()

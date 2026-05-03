@@ -1097,7 +1097,7 @@ func responseGeminiChat2OpenAI(c *gin.Context, response *dto.GeminiChatResponse)
 						toolCalls = append(toolCalls, *call)
 					}
 				} else if part.Thought {
-					choice.Message.ReasoningContent = part.Text
+					choice.Message.ReasoningContent = &part.Text
 				} else {
 					if part.ExecutableCode != nil {
 						texts = append(texts, "```"+part.ExecutableCode.Language+"\n"+part.ExecutableCode.Code+"\n```")
@@ -1501,11 +1501,11 @@ func GeminiChatHandler(c *gin.Context, info *relaycommon.RelayInfo, resp *http.R
 	var completionText strings.Builder
 	for _, choice := range fullTextResponse.Choices {
 		completionText.WriteString(choice.Message.StringContent())
-		if choice.Message.ReasoningContent != "" {
-			completionText.WriteString(choice.Message.ReasoningContent)
+		if choice.Message.ReasoningContent != nil {
+			completionText.WriteString(*choice.Message.ReasoningContent)
 		}
-		if choice.Message.Reasoning != "" {
-			completionText.WriteString(choice.Message.Reasoning)
+		if choice.Message.Reasoning != nil {
+			completionText.WriteString(*choice.Message.Reasoning)
 		}
 	}
 	info.CompletionText = completionText.String()
