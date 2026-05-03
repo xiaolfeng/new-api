@@ -113,23 +113,29 @@ export function getTextContent(content: string | ContentPart[]): string {
  */
 export function formatMessageForAPI(message: Message): ChatCompletionMessage {
   const currentVersion = getCurrentVersion(message)
-  return {
+  const result: ChatCompletionMessage = {
     role: message.from,
     content: currentVersion.content,
   }
+  if (message.toolCalls) result.tool_calls = message.toolCalls
+  if (message.toolCallId) result.tool_call_id = message.toolCallId
+  if (message.toolName) result.name = message.toolName
+  return result
 }
 
 /**
  * Check if message is valid for API request
- * Excludes loading/streaming assistant messages and empty content
  */
 export function isValidMessage(message: Message): boolean {
   if (!message || !message.from || !message.versions.length) return false
 
+  if (message.from === 'tool') return true
+
   const content = message.versions[0]?.content
   if (content === undefined) return false
 
-  // Exclude empty assistant messages (loading/streaming placeholders)
+  if (message.from === 'assistant' && message.toolCalls?.length) return true
+
   if (message.from === 'assistant' && !content.trim()) return false
 
   return true

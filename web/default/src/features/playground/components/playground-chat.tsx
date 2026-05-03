@@ -30,6 +30,12 @@ import {
   SourcesContent,
   SourcesTrigger,
 } from '@/components/ai-elements/sources'
+import {
+  Tool,
+  ToolContent,
+  ToolHeader,
+  ToolOutput,
+} from '@/components/ai-elements/tool'
 import { MESSAGE_ROLES } from '../constants'
 import { getMessageContentStyles } from '../lib/message-styles'
 import { parseThinkTags } from '../lib/message-utils'
@@ -208,6 +214,29 @@ export function PlaygroundChat({
                                         {message.reasoning!.content}
                                       </ReasoningContent>
                                     </Reasoning>
+                                  )}
+
+                                  {/* Tool Calls */}
+                                  {isAssistant && message.toolCalls && message.toolCalls.length > 0 && (
+                                    <div className='space-y-2'>
+                                      {message.toolCalls.map((tc, idx) => (
+                                        <Tool key={tc.id || idx}>
+                                          <ToolHeader
+                                            title={tc.function?.name || `Tool ${idx + 1}`}
+                                            type='tool-call'
+                                            state='output-available'
+                                          />
+                                          <ToolContent>
+                                            {tc.function?.arguments && (
+                                              <ToolOutput
+                                                output={tc.function.arguments}
+                                                errorText={undefined}
+                                              />
+                                            )}
+                                          </ToolContent>
+                                        </Tool>
+                                      ))}
+                                    </div>
                                   )}
 
                                   {/* Loader */}

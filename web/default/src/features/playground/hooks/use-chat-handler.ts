@@ -9,7 +9,7 @@ import {
   processStreamingContent,
   finalizeMessage,
 } from '../lib'
-import type { Message, PlaygroundConfig, ParameterEnabled } from '../types'
+import type { Message, PlaygroundConfig, ParameterEnabled, ToolCallDelta } from '../types'
 import { useStreamRequest } from './use-stream-request'
 
 interface UseChatHandlerOptions {
@@ -30,7 +30,7 @@ export function useChatHandler({
 
   // Handle stream update
   const handleStreamUpdate = useCallback(
-    (type: 'reasoning' | 'content', chunk: string) => {
+    (type: 'reasoning' | 'content' | 'tool_call', chunk: string) => {
       onMessageUpdate((prev) =>
         updateLastAssistantMessage(prev, (message) => {
           if (message.status === MESSAGE_STATUS.ERROR) return message
@@ -48,7 +48,16 @@ export function useChatHandler({
             }
           }
 
-          // Content streaming: handle <think> tags
+          if (type === 'tool_call') {
+            const toolCalls = JSON.parse(chunk) as ToolCallDelta[]
+            return {
+              ...message,
+              toolCalls: [...(message.toolCalls || []), ...toolCalls],
+              status: MESSAGE_STATUS.STREAMING,
+            }
+          }
+
+          // Content streaming: handle  semifinished tags
           return {
             ...processStreamingContent(message, chunk),
             status: MESSAGE_STATUS.STREAMING,
@@ -132,6 +141,7 @@ export function useChatHandler({
                     content: choice.message?.content || '',
                   },
                 ],
+                toolCalls: choice.message?.tool_calls,
               },
               choice.message?.reasoning_content
             ),

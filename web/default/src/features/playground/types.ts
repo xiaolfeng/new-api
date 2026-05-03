@@ -1,7 +1,19 @@
 // Message types
-export type MessageRole = 'user' | 'assistant' | 'system'
+export type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
 export type MessageStatus = 'loading' | 'streaming' | 'complete' | 'error'
+
+export interface ToolCallFunction {
+  name: string
+  arguments: string
+}
+
+export interface ToolCallDelta {
+  index?: number
+  id?: string
+  type?: string
+  function: ToolCallFunction
+}
 
 export interface MessageVersion {
   id: string
@@ -22,12 +34,18 @@ export interface Message {
   isContentComplete?: boolean
   status?: MessageStatus
   errorCode?: string | null
+  toolCalls?: ToolCallDelta[]
+  toolCallId?: string
+  toolName?: string
 }
 
 // API payload types
 export interface ChatCompletionMessage {
   role: MessageRole
-  content: string | ContentPart[]
+  content: string | ContentPart[] | null
+  tool_calls?: ToolCallDelta[]
+  tool_call_id?: string
+  name?: string
 }
 
 export interface ContentPart {
@@ -62,6 +80,7 @@ export interface ChatCompletionChunk {
       role?: MessageRole
       content?: string
       reasoning_content?: string
+      tool_calls?: ToolCallDelta[]
     }
     finish_reason: string | null
   }>
@@ -78,6 +97,7 @@ export interface ChatCompletionResponse {
       role: MessageRole
       content: string
       reasoning_content?: string
+      tool_calls?: ToolCallDelta[]
     }
     finish_reason: string
   }>

@@ -14,7 +14,7 @@ export function useStreamRequest() {
   const sendStreamRequest = useCallback(
     (
       payload: ChatCompletionRequest,
-      onUpdate: (type: 'reasoning' | 'content', chunk: string) => void,
+      onUpdate: (type: 'reasoning' | 'content' | 'tool_call', chunk: string) => void,
       onComplete: () => void,
       onError: (error: string, errorCode?: string) => void
     ) => {
@@ -57,6 +57,9 @@ export function useStreamRequest() {
             }
             if (delta.content) {
               onUpdate('content', delta.content)
+            }
+            if (delta.tool_calls && delta.tool_calls.length > 0) {
+              onUpdate('tool_call', JSON.stringify(delta.tool_calls))
             }
           }
         } catch (error) {

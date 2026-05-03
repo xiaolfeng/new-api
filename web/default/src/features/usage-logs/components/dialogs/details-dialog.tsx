@@ -1,22 +1,24 @@
 import {
-  Copy,
+  AlertTriangle,
+  ArrowDownToLine,
+  Brain,
   Check,
+  Cloud,
+  Copy,
+  Globe,
+  Headphones,
+  Info,
+  MessageSquare,
+  Monitor,
   Route,
   Settings2,
-  AlertTriangle,
-  Headphones,
-  Monitor,
-  Cloud,
-  Globe,
   ShieldCheck,
   UserCog,
-  Info,
+  Wrench,
 } from 'lucide-react'
+import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
-import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
-import { cn } from '@/lib/utils'
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -27,20 +29,29 @@ import {
 } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
+import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import type { UsageLog } from '../../data/schema'
 import {
-  parseLogOther,
-  getParamOverrideActionLabel,
-  parseAuditLine,
   decodeBillingExprB64,
+  getFirstResponseTimeColor,
+  getParamOverrideActionLabel,
+  getResponseTimeColor,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
-  getFirstResponseTimeColor,
-  getResponseTimeColor,
+  parseAuditLine,
+  parseLogOther,
 } from '../../lib/format'
+import {
+  hasStructuredData,
+  parseLogDetailRecord,
+  type ParsedSections,
+  type ToolUseRow,
+} from '../../lib/log-block-parser'
 import {
   getLogTypeConfig,
   isPerCallBilling,
@@ -373,6 +384,286 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
   )
 }
 
+function ToolUseTable(props: { rows: ToolUseRow[] }) {
+  const { t } = useTranslation()
+  if (props.rows.length === 0) return null
+  return (
+    <div className='overflow-x-auto'>
+      <table className='w-full text-xs'>
+        <thead>
+          <tr className='border-b text-left'>
+            <th className='px-2 py-1.5 font-medium'>#</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Tool')}</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Call ID')}</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Arguments')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.rows.map((row) => (
+            <tr key={row.id} className='border-b last:border-b-0'>
+              <td className='px-2 py-1.5 font-mono'>{row.order}</td>
+              <td className='px-2 py-1.5 font-semibold'>{row.name || '-'}</td>
+              <td className='max-w-[200px] px-2 py-1.5 font-mono break-all'>
+                {row.callId || row.id || '-'}
+              </td>
+              <td className='max-w-[300px] px-2 py-1.5'>
+                {row.arguments != null || row.input != null ? (
+                  <pre className='m-0 whitespace-pre-wrap break-words font-mono text-[11px] leading-relaxed'>
+                    {JSON.stringify(row.arguments ?? row.input, null, 2)}
+                  </pre>
+                ) : (
+                  '-'
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ToolResponseTable(props: {
+  rows: Array<{ order: number; name: string; callId: string; type?: string }>
+}) {
+  const { t } = useTranslation()
+  if (props.rows.length === 0) return null
+  return (
+    <div className='overflow-x-auto'>
+      <table className='w-full text-xs'>
+        <thead>
+          <tr className='border-b text-left'>
+            <th className='px-2 py-1.5 font-medium'>#</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Tool')}</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Call ID')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.rows.map((row) => (
+            <tr key={`${row.callId}-${row.order}`} className='border-b last:border-b-0'>
+              <td className='px-2 py-1.5 font-mono'>{row.order}</td>
+              <td className='px-2 py-1.5 font-semibold'>{row.name || '-'}</td>
+              <td className='max-w-[300px] px-2 py-1.5 font-mono break-all'>
+                {row.callId || '-'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function StructuredLogContent(props: {
+  sections: ParsedSections
+  rawContent: string
+}) {
+  const { t } = useTranslation()
+  const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
+  const { sections } = props
+
+  const hasThinking = sections.thinking.trim() !== ''
+  const hasAnswer = sections.answer.trim() !== ''
+  const hasToolUses = sections.toolUses.length > 0
+  const hasRequestBlocks = sections.requestBlocks.length > 0
+  const hasToolResponses = sections.toolResponses.length > 0
+
+  const copyAllText = JSON.stringify(
+    {
+      thinking: sections.thinking,
+      answer: sections.answer,
+      toolUses: sections.toolUses,
+    },
+    null,
+    2,
+  )
+
+  return (
+    <div className='space-y-2.5'>
+      {hasRequestBlocks && (
+        <DetailSection
+          icon={<ArrowDownToLine className='size-3.5' aria-hidden='true' />}
+          label={t('Input')}
+        >
+          <div className='relative space-y-2'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() =>
+                copyToClipboard(
+                  sections.requestBlocks.map((b) => b.text).join('\n\n'),
+                )
+              }
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText ===
+              sections.requestBlocks.map((b) => b.text).join('\n\n') ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            {sections.requestBlocks.map((block, index) => (
+              <div
+                key={`${block.type}-${block.role}-${index}`}
+                className='bg-background/60 rounded-md border p-2'
+              >
+                <div className='mb-1 flex items-center justify-between gap-2'>
+                  <span className='text-xs font-semibold'>
+                    {t('Input')} #{index + 1}
+                  </span>
+                  <span className='text-muted-foreground text-[11px]'>
+                    {[block.role, block.type].filter(Boolean).join(' · ') ||
+                      block.type}
+                  </span>
+                </div>
+                <p className='min-w-0 pr-5 text-xs leading-relaxed break-all whitespace-pre-wrap sm:break-words'>
+                  {block.text}
+                </p>
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
+
+      {hasToolResponses && (
+        <DetailSection
+          icon={<Wrench className='size-3.5' aria-hidden='true' />}
+          label={t('Tool Responses')}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() =>
+                copyToClipboard(JSON.stringify(sections.toolResponses, null, 2))
+              }
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText ===
+              JSON.stringify(sections.toolResponses, null, 2) ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <ToolResponseTable rows={sections.toolResponses} />
+          </div>
+        </DetailSection>
+      )}
+
+      {hasThinking && (
+        <DetailSection
+          icon={<Brain className='size-3.5' aria-hidden='true' />}
+          label={t('Thinking')}
+        >
+          <details className='bg-background/60 rounded-md border'>
+            <summary className='cursor-pointer select-none px-2.5 py-1.5 text-xs font-medium'>
+              {t('Show thinking content')}
+            </summary>
+            <div className='relative border-t px-2.5 py-2'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='absolute top-1.5 right-1 h-5 w-5 p-0'
+                onClick={() => copyToClipboard(sections.thinking)}
+                title={t('Copy to clipboard')}
+                aria-label={t('Copy to clipboard')}
+              >
+                {copiedText === sections.thinking ? (
+                  <Check className='size-3 text-green-600' />
+                ) : (
+                  <Copy className='size-3' />
+                )}
+              </Button>
+              <pre className='m-0 max-h-64 overflow-y-auto whitespace-pre-wrap break-words pr-6 font-mono text-[11px] leading-relaxed'>
+                {sections.thinking}
+              </pre>
+            </div>
+          </details>
+        </DetailSection>
+      )}
+
+      {hasAnswer && (
+        <DetailSection
+          icon={
+            <MessageSquare className='size-3.5' aria-hidden='true' />
+          }
+          label={t('Answer')}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() => copyToClipboard(sections.answer)}
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText === sections.answer ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <pre className='m-0 max-h-64 overflow-y-auto whitespace-pre-wrap break-words pr-6 font-mono text-xs leading-relaxed'>
+              {sections.answer}
+            </pre>
+          </div>
+        </DetailSection>
+      )}
+
+      {hasToolUses && (
+        <DetailSection
+          icon={<Wrench className='size-3.5' aria-hidden='true' />}
+          label={`${t('Tool Calls')} (${sections.toolUses.length})`}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() =>
+                copyToClipboard(JSON.stringify(sections.toolUses, null, 2))
+              }
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText ===
+              JSON.stringify(sections.toolUses, null, 2) ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <ToolUseTable rows={sections.toolUses} />
+          </div>
+        </DetailSection>
+      )}
+
+      <div className='flex justify-end'>
+        <Button
+          variant='ghost'
+          size='sm'
+          className='h-6 gap-1 px-2 text-[11px]'
+          onClick={() => copyToClipboard(copyAllText)}
+        >
+          {copiedText === copyAllText ? (
+            <Check className='size-3 text-green-600' />
+          ) : (
+            <Copy className='size-3' />
+          )}
+          {t('Copy all')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 interface DetailsDialogProps {
   log: UsageLog
   isAdmin: boolean
@@ -386,6 +677,19 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const details = props.log.content ?? ''
   const other = parseLogOther(props.log.other)
   const typeConfig = getLogTypeConfig(props.log.type)
+
+  const logSections = useMemo(() => {
+    const record = ((): Record<string, unknown> | null => {
+      if (!details) return null
+      try {
+        return JSON.parse(details)
+      } catch {
+        return null
+      }
+    })()
+    return parseLogDetailRecord(record as Parameters<typeof parseLogDetailRecord>[0])
+  }, [details])
+  const isStructured = hasStructuredData(logSections)
 
   const isViolation = isViolationFeeLog(other)
   const isRefund = props.log.type === 6
@@ -992,8 +1296,13 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 </DetailSection>
               )}
 
-            {/* Content */}
-            {details && (
+            {details && isStructured && (
+              <StructuredLogContent
+                sections={logSections}
+                rawContent={details}
+              />
+            )}
+            {details && !isStructured && (
               <div className='space-y-1.5'>
                 <Label className='text-xs font-semibold'>{t('Content')}</Label>
                 <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
