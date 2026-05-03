@@ -7,6 +7,7 @@ import { cn } from '@/lib/utils'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -44,7 +45,7 @@ export function CommonLogsFilterBar({
   const queryClient = useQueryClient()
   const searchParams = route.useSearch()
   const isAdmin = useIsAdmin()
-  const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
+  const { sensitiveVisible, setSensitiveVisible, autoRefresh, setAutoRefresh, countdown } = useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
   const [expanded, setExpanded] = useState(false)
@@ -290,6 +291,17 @@ export function CommonLogsFilterBar({
             )}
             {t('Search')}
           </Button>
+          <div className='flex items-center gap-1.5'>
+            <Switch
+              checked={autoRefresh}
+              onCheckedChange={setAutoRefresh}
+            />
+            <span className='text-xs text-muted-foreground whitespace-nowrap'>
+              {autoRefresh
+                ? t('Refresh in {{count}}s', { count: countdown })
+                : t('Auto Refresh')}
+            </span>
+          </div>
           {viewOptions}
         </div>
       </div>

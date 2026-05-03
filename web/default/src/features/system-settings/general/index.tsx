@@ -45,6 +45,12 @@ const defaultGeneralSettings: GeneralSettings = {
   'channel_affinity_setting.max_entries': 100000,
   'channel_affinity_setting.default_ttl_seconds': 3600,
   'channel_affinity_setting.rules': '[]',
+  'retry_setting.empty_response_retry_enabled': false,
+  'retry_setting.empty_response_retry_delay_seconds': 0,
+  'retry_setting.record_consume_log_detail_enabled': false,
+  'retry_setting.full_log_consume_enabled': false,
+  'retry_setting.full_log_consume_expires_at': 0,
+  'retry_setting.full_log_consume_remaining_seconds': 0,
 }
 
 export function GeneralSettings() {
@@ -71,6 +77,7 @@ export function GeneralSettings() {
     | 'quota'
     | 'pricing'
     | 'checkin'
+    | 'empty-response-retry'
     | 'behavior'
     | 'channel-affinity'
   const sectionContent = getGeneralSectionContent(

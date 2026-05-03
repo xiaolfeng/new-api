@@ -170,6 +170,10 @@ export interface LogOtherData {
   subscription_consumed?: number
   subscription_remain?: number
   subscription_total?: number
+  // Client source & interaction fields (parsed from request headers or pre-computed)
+  client_source?: string
+  interaction_type?: string
+  tps?: number
 }
 
 /**

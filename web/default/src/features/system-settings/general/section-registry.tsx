@@ -2,6 +2,7 @@ import type { GeneralSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelAffinitySection } from './channel-affinity'
 import { CheckinSettingsSection } from './checkin-settings-section'
+import { EmptyResponseRetrySection } from './empty-response-retry-section'
 import { PricingSection } from './pricing-section'
 import { QuotaSettingsSection } from './quota-settings-section'
 import { SystemBehaviorSection } from './system-behavior-section'
@@ -87,6 +88,29 @@ const GENERAL_SECTIONS = [
           enabled: settings['checkin_setting.enabled'],
           minQuota: settings['checkin_setting.min_quota'],
           maxQuota: settings['checkin_setting.max_quota'],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'empty-response-retry',
+    titleKey: 'Empty Response Retry',
+    descriptionKey: 'Configure empty response retry and logging behavior',
+    build: (settings: GeneralSettings) => (
+      <EmptyResponseRetrySection
+        defaultValues={{
+          'retry_setting.empty_response_retry_enabled':
+            settings['retry_setting.empty_response_retry_enabled'] ?? false,
+          'retry_setting.empty_response_retry_delay_seconds':
+            settings['retry_setting.empty_response_retry_delay_seconds'] ?? 0,
+          'retry_setting.record_consume_log_detail_enabled':
+            settings['retry_setting.record_consume_log_detail_enabled'] ?? false,
+          'retry_setting.full_log_consume_enabled':
+            settings['retry_setting.full_log_consume_enabled'] ?? false,
+          'retry_setting.full_log_consume_expires_at':
+            settings['retry_setting.full_log_consume_expires_at'] ?? 0,
+          'retry_setting.full_log_consume_remaining_seconds':
+            settings['retry_setting.full_log_consume_remaining_seconds'] ?? 0,
         }}
       />
     ),

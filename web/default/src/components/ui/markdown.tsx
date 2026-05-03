@@ -4,11 +4,12 @@ import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 
 interface MarkdownProps {
-  children: string
+  children: string | null | undefined
   className?: string
 }
 
 export function Markdown({ children, className }: MarkdownProps) {
+  const content = children ?? ''
   return (
     <div
       className={cn(
@@ -33,13 +34,12 @@ export function Markdown({ children, className }: MarkdownProps) {
         remarkPlugins={[remarkGfm]}
         rehypePlugins={[rehypeRaw]}
         components={{
-          // 自定义组件渲染（可选）
           a: ({ node, ...props }) => (
             <a {...props} target='_blank' rel='noopener noreferrer' />
           ),
         }}
       >
-        {children}
+        {content}
       </ReactMarkdown>
     </div>
   )

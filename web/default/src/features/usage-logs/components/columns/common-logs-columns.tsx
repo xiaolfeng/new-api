@@ -32,6 +32,8 @@ import {
   isViolationFeeLog,
 } from '../../lib/format'
 import { getLogAvatarStyle } from '../../lib/avatar-color'
+import { parseClientSource, getSourceColor } from '../../lib/source-parser'
+import { parseInteractionType, type InteractionType } from '../../lib/interaction-parser'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -503,6 +505,149 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { label: t('Model'), mobileTitle: true },
+    },
+
+    {
+      id: 'source',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Source')} />
+      ),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
+
+        try {
+          const other = parseLogOther(log.other)
+          if (other?.client_source && typeof other.client_source === 'string') {
+            const color = getSourceColor(other.client_source)
+            return (
+              <span
+                className={cn(
+                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                  color === 'amber' && 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                  color === 'blue' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                  color === 'cyan' && 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+                  color === 'green' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                  color === 'gray' && 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
+                  color === 'indigo' && 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
+                  color === 'sky' && 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+                  color === 'lime' && 'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400',
+                  color === 'orange' && 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+                  color === 'pink' && 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+                  color === 'purple' && 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+                  color === 'red' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                  color === 'teal' && 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+                  color === 'violet' && 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+                  color === 'yellow' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+                )}
+              >
+                {other.client_source}
+              </span>
+            )
+          }
+
+          const recordData = typeof log.content === 'string'
+            ? JSON.parse(log.content)
+            : log.content
+          const headers = recordData?.request?.headers || recordData?.headers || {}
+          const uaKey = Object.keys(headers).find(k => k.toLowerCase() === 'user-agent')
+          const userAgent = uaKey ? headers[uaKey] : ''
+          const source = parseClientSource(userAgent)
+
+          if (source.name === '-') return null
+          return (
+            <span
+              className={cn(
+                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
+                source.color === 'amber' && 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+                source.color === 'blue' && 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+                source.color === 'cyan' && 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+                source.color === 'green' && 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+                source.color === 'gray' && 'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
+                source.color === 'indigo' && 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
+                source.color === 'sky' && 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
+                source.color === 'lime' && 'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400',
+                source.color === 'orange' && 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
+                source.color === 'pink' && 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
+                source.color === 'purple' && 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+                source.color === 'red' && 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
+                source.color === 'teal' && 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
+                source.color === 'violet' && 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+                source.color === 'yellow' && 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400',
+              )}
+            >
+              {source.name}
+            </span>
+          )
+        } catch {
+          return null
+        }
+      },
+      meta: { label: t('Source'), mobileHidden: true },
+    },
+
+    {
+      id: 'interaction_type',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Interaction')} />
+      ),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
+
+        const other = parseLogOther(log.other)
+        const precomputed = other?.interaction_type as InteractionType | undefined
+        const interactionType = precomputed || parseInteractionType(log.content)
+        if (!interactionType) return null
+
+        const colorMap: Record<string, string> = {
+          input: 'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
+          output: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+          callback: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+        }
+        const labelMap: Record<string, string> = {
+          input: t('Input'),
+          output: t('Output'),
+          callback: t('Callback'),
+        }
+
+        return (
+          <span
+            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colorMap[interactionType] || ''}`}
+          >
+            {labelMap[interactionType] || interactionType}
+          </span>
+        )
+      },
+      meta: { label: t('Interaction'), mobileHidden: true },
+    },
+
+    {
+      id: 'tps',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('TPS')} />
+      ),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
+
+        const other = parseLogOther(log.other)
+        const tps = other?.tps
+
+        if (typeof tps !== 'number' || tps <= 0) return null
+
+        let colorClass = 'text-red-600 dark:text-red-400'
+        if (tps >= 81) colorClass = 'text-green-600 dark:text-green-400'
+        else if (tps >= 51) colorClass = 'text-lime-600 dark:text-lime-400'
+        else if (tps >= 11) colorClass = 'text-yellow-600 dark:text-yellow-400'
+
+        return (
+          <span className={`font-mono text-sm font-medium tabular-nums ${colorClass}`}>
+            {tps.toFixed(1)}
+          </span>
+        )
+      },
+      meta: { label: t('TPS'), mobileHidden: true },
     },
 
     {

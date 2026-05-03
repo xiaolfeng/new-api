@@ -74,17 +74,24 @@ export function isViolationFeeLog(other: LogOtherData | null): boolean {
 }
 
 /**
- * Parse the 'other' field from JSON string to object
+ * Parse the 'other' field from JSON string to object.
+ * Returns null for falsy input, non-object parse results, or invalid JSON.
  */
-export function parseLogOther(other: string): LogOtherData | null {
-  if (!other) return null
-  try {
-    return JSON.parse(other) as LogOtherData
-  } catch (error) {
-    // eslint-disable-next-line no-console
-    console.error('Failed to parse log other field:', error)
-    return null
+export function parseLogOther(other: unknown): LogOtherData | null {
+  if (other === undefined || other === null || other === '') return null
+  if (typeof other === 'object' && !Array.isArray(other))
+    return other as LogOtherData
+  if (typeof other === 'string') {
+    try {
+      const parsed = JSON.parse(other)
+      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+        return null
+      return parsed as LogOtherData
+    } catch {
+      return null
+    }
   }
+  return null
 }
 
 /**

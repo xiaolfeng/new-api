@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import { MarkdownSourceHighlighter } from '@/components/ui/markdown-source-highlighter'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -519,9 +520,11 @@ function StructuredLogContent(props: {
                       block.type}
                   </span>
                 </div>
-                <p className='min-w-0 pr-5 text-xs leading-relaxed break-all whitespace-pre-wrap sm:break-words'>
-                  {block.text}
-                </p>
+                <MarkdownSourceHighlighter
+                  content={block.text}
+                  fontSize={12}
+                  className='pr-5'
+                />
               </div>
             ))}
           </div>
@@ -580,9 +583,11 @@ function StructuredLogContent(props: {
                   <Copy className='size-3' />
                 )}
               </Button>
-              <pre className='m-0 max-h-64 overflow-y-auto whitespace-pre-wrap break-words pr-6 font-mono text-[11px] leading-relaxed'>
-                {sections.thinking}
-              </pre>
+              <MarkdownSourceHighlighter
+                content={sections.thinking}
+                fontSize={11}
+                className='pr-6 max-h-64 overflow-y-auto'
+              />
             </div>
           </details>
         </DetailSection>
@@ -610,9 +615,11 @@ function StructuredLogContent(props: {
                 <Copy className='size-3' />
               )}
             </Button>
-            <pre className='m-0 max-h-64 overflow-y-auto whitespace-pre-wrap break-words pr-6 font-mono text-xs leading-relaxed'>
-              {sections.answer}
-            </pre>
+            <MarkdownSourceHighlighter
+              content={sections.answer}
+              fontSize={12}
+              className='pr-6 max-h-64 overflow-y-auto'
+            />
           </div>
         </DetailSection>
       )}
@@ -1320,9 +1327,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       <Copy className='size-3' />
                     )}
                   </Button>
-                  <p className='min-w-0 pr-6 text-xs leading-relaxed break-all whitespace-pre-wrap sm:break-words'>
-                    {details}
-                  </p>
+                  <MarkdownSourceHighlighter
+                    content={details}
+                    fontSize={12}
+                    className='pr-6'
+                  />
                 </div>
               </div>
             )}

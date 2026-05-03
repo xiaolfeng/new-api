@@ -64,6 +64,12 @@ export type GeneralSettings = {
   'channel_affinity_setting.max_entries': number
   'channel_affinity_setting.default_ttl_seconds': number
   'channel_affinity_setting.rules': string
+  'retry_setting.empty_response_retry_enabled': boolean
+  'retry_setting.empty_response_retry_delay_seconds': number
+  'retry_setting.record_consume_log_detail_enabled': boolean
+  'retry_setting.full_log_consume_enabled': boolean
+  'retry_setting.full_log_consume_expires_at': number
+  'retry_setting.full_log_consume_remaining_seconds': number
 }
 
 export type AuthSettings = {
