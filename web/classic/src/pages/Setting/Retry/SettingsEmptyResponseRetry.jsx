@@ -34,6 +34,7 @@ export default function SettingsEmptyResponseRetry(props) {
     'retry_setting.full_log_consume_enabled': false,
     'retry_setting.full_log_consume_expires_at': 0,
     'retry_setting.full_log_consume_remaining_seconds': 0,
+    'global.responses_to_chat_completions_enabled': false,
   });
   const refForm = useRef();
   const [inputsRow, setInputsRow] = useState(inputs);
@@ -216,6 +217,33 @@ export default function SettingsEmptyResponseRetry(props) {
           <Row>
             <Button size='default' onClick={onSubmit}>
               {t('保存客制化设置')}
+            </Button>
+          </Row>
+        </Form.Section>
+        <Form.Section text={t('Responses 转换设置')}>
+          <Row gutter={16}>
+            <Col xs={24} sm={12} md={8} lg={8} xl={8}>
+              <Form.Switch
+                field={'global.responses_to_chat_completions_enabled'}
+                label={t('将 Responses 转换为 Chat Completions')}
+                size='default'
+                checkedText='｜'
+                uncheckedText='〇'
+                extraText={t(
+                  '启用后，对 Responses API 的请求将自动转换为 Chat Completions 格式，适用于不支持 Responses API 的上游提供商'
+                )}
+                onChange={(value) =>
+                  setInputs({
+                    ...inputs,
+                    'global.responses_to_chat_completions_enabled': value,
+                  })
+                }
+              />
+            </Col>
+          </Row>
+          <Row>
+            <Button size='default' onClick={onSubmit}>
+              {t('保存 Responses 转换设置')}
             </Button>
           </Row>
         </Form.Section>

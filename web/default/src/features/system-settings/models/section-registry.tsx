@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { ChannelAffinitySection } from '../general/channel-affinity'
+import { CustomizationSection } from './customization-section'
 import { IoNetDeploymentSettingsSection } from '../integrations/ionet-deployment-settings-section'
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
@@ -154,6 +155,19 @@ const MODELS_SECTIONS = [
         defaultValues={{
           enabled: settings['model_deployment.ionet.enabled'],
           apiKey: settings['model_deployment.ionet.api_key'],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'customization',
+    titleKey: 'Customization',
+    descriptionKey: 'Configure customization features and advanced behavior',
+    build: (settings: ModelSettings) => (
+      <CustomizationSection
+        defaultValues={{
+          'global.responses_to_chat_completions_enabled':
+            settings['global.responses_to_chat_completions_enabled'] ?? false,
         }}
       />
     ),

@@ -84,7 +84,6 @@ const schema = z.object({
     pass_through_request_enabled: z.boolean(),
     thinking_model_blacklist: jsonString,
     chat_completions_to_responses_policy: jsonString,
-    responses_to_chat_completions_enabled: z.boolean(),
   }),
   general_setting: z.object({
     ping_interval_enabled: z.boolean(),
@@ -99,7 +98,6 @@ type FlatGlobalModelSettings = {
   'global.pass_through_request_enabled': boolean
   'global.thinking_model_blacklist': string
   'global.chat_completions_to_responses_policy': string
-  'global.responses_to_chat_completions_enabled': boolean
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
 }
@@ -117,8 +115,6 @@ const flattenGlobalValues = (
     values.global.chat_completions_to_responses_policy,
     '{}'
   ),
-  'global.responses_to_chat_completions_enabled':
-    values.global.responses_to_chat_completions_enabled,
   'general_setting.ping_interval_enabled':
     values.general_setting.ping_interval_enabled,
   'general_setting.ping_interval_seconds':
@@ -346,33 +342,6 @@ export function GlobalSettingsCard({ defaultValues }: GlobalSettingsCardProps) {
               )}
             />
           </div>
-
-          <Separator />
-
-          <FormField
-            control={form.control}
-            name='global.responses_to_chat_completions_enabled'
-            render={({ field }) => (
-              <FormItem className='flex flex-row items-center justify-between rounded-lg border p-4'>
-                <div className='space-y-0.5'>
-                  <FormLabel className='text-base'>
-                    {t('Convert Responses to Chat Completions')}
-                  </FormLabel>
-                  <FormDescription>
-                    {t(
-                      'When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don\'t support the Responses API.'
-                    )}
-                  </FormDescription>
-                </div>
-                <FormControl>
-                  <Switch
-                    checked={field.value}
-                    onCheckedChange={field.onChange}
-                  />
-                </FormControl>
-              </FormItem>
-            )}
-          />
 
           <Separator />
 

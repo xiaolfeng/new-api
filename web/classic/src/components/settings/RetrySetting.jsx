@@ -30,6 +30,7 @@ const RetrySetting = () => {
     'retry_setting.full_log_consume_enabled': false,
     'retry_setting.full_log_consume_expires_at': 0,
     'retry_setting.full_log_consume_remaining_seconds': 0,
+    'global.responses_to_chat_completions_enabled': false,
   });
   const [loading, setLoading] = useState(false);
 
