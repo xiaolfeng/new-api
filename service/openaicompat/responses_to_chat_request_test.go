@@ -557,3 +557,188 @@ func TestStreamOptionsPassthrough(t *testing.T) {
 	require.NotNil(t, out.StreamOptions)
 	assert.True(t, out.StreamOptions.IncludeUsage)
 }
+
+// ---------- Test 16: LogProbs Auto-Enable ----------
+
+func TestLogProbsAutoEnable(t *testing.T) {
+	t.Run("top_logprobs_set_enables_logprobs", func(t *testing.T) {
+		topLogProbs := 5
+		req := &dto.OpenAIResponsesRequest{
+			Model:       "gpt-4o",
+			Input:       mustRaw([]map[string]any{{"role": "user", "content": "hi"}}),
+			TopLogProbs: &topLogProbs,
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		require.NotNil(t, out.LogProbs)
+		assert.True(t, *out.LogProbs)
+		assert.Equal(t, 5, *out.TopLogProbs)
+	})
+
+	t.Run("no_top_logprobs_no_logprobs", func(t *testing.T) {
+		req := &dto.OpenAIResponsesRequest{
+			Model: "gpt-4o",
+			Input: mustRaw([]map[string]any{{"role": "user", "content": "hi"}}),
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		assert.Nil(t, out.LogProbs)
+	})
+}
+
+// ---------- Test 17: Pass-through Fields ----------
+
+func TestPassthroughFields(t *testing.T) {
+	req := &dto.OpenAIResponsesRequest{
+		Model:            "gpt-4o",
+		Input:            mustRaw([]map[string]any{{"role": "user", "content": "hi"}}),
+		ServiceTier:      "auto",
+		SafetyIdentifier: mustRaw("user-abc"),
+		PromptCacheKey:   mustRaw("cache-key-123"),
+		PromptCacheRetention: mustRaw("5m"),
+	}
+
+	out, err := ResponsesRequestToChatCompletionsRequest(req)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+
+	assert.Equal(t, json.RawMessage(`"auto"`), out.ServiceTier)
+	assert.Equal(t, mustRaw("user-abc"), out.SafetyIdentifier)
+	assert.Equal(t, "cache-key-123", out.PromptCacheKey)
+	assert.Equal(t, mustRaw("5m"), out.PromptCacheRetention)
+}
+
+// ---------- Test 18: Input Image Structure ----------
+
+func TestInputImageStructure(t *testing.T) {
+	t.Run("string_url_wrapped", func(t *testing.T) {
+		req := &dto.OpenAIResponsesRequest{
+			Model: "gpt-4o",
+			Input: mustRaw([]map[string]any{
+				{
+					"role": "user",
+					"content": []map[string]any{
+						{"type": "input_image", "image_url": "https://example.com/img.png"},
+					},
+				},
+			}),
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		require.Len(t, out.Messages, 1)
+		parts, ok := out.Messages[0].Content.([]dto.MediaContent)
+		require.True(t, ok)
+		require.Len(t, parts, 1)
+
+		assert.Equal(t, "image_url", parts[0].Type)
+		imgMap, ok := parts[0].ImageUrl.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "https://example.com/img.png", imgMap["url"])
+	})
+
+	t.Run("object_url_passthrough", func(t *testing.T) {
+		req := &dto.OpenAIResponsesRequest{
+			Model: "gpt-4o",
+			Input: mustRaw([]map[string]any{
+				{
+					"role": "user",
+					"content": []map[string]any{
+						{"type": "input_image", "image_url": map[string]any{"url": "https://example.com/img.png", "detail": "high"}},
+					},
+				},
+			}),
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		parts, ok := out.Messages[0].Content.([]dto.MediaContent)
+		require.True(t, ok)
+		require.Len(t, parts, 1)
+
+		imgMap, ok := parts[0].ImageUrl.(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "https://example.com/img.png", imgMap["url"])
+		assert.Equal(t, "high", imgMap["detail"])
+	})
+}
+
+// ---------- Test 19: Input File Structure ----------
+
+func TestInputFileStructure(t *testing.T) {
+	req := &dto.OpenAIResponsesRequest{
+		Model: "gpt-4o",
+		Input: mustRaw([]map[string]any{
+			{
+				"role": "user",
+				"content": []map[string]any{
+					{
+						"type":      "input_file",
+						"file_data": "data:application/pdf;base64,AAA",
+						"filename":  "doc.pdf",
+					},
+				},
+			},
+		}),
+	}
+
+	out, err := ResponsesRequestToChatCompletionsRequest(req)
+	require.NoError(t, err)
+	require.NotNil(t, out)
+
+	require.Len(t, out.Messages, 1)
+	parts, ok := out.Messages[0].Content.([]dto.MediaContent)
+	require.True(t, ok)
+	require.Len(t, parts, 1)
+
+	assert.Equal(t, "file", parts[0].Type)
+	fileMap, ok := parts[0].File.(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "data:application/pdf;base64,AAA", fileMap["file_data"])
+	assert.Equal(t, "doc.pdf", fileMap["filename"])
+}
+
+// ---------- Test 20: Reasoning Effort Mapping ----------
+
+func TestReasoningEffortMapping(t *testing.T) {
+	tests := []struct {
+		name     string
+		effort   string
+		expected string
+	}{
+		{"low_passthrough", "low", "low"},
+		{"medium_passthrough", "medium", "medium"},
+		{"high_passthrough", "high", "high"},
+		{"minimal_to_low", "minimal", "low"},
+		{"xhigh_to_high", "xhigh", "high"},
+		{"none_dropped", "none", ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := &dto.OpenAIResponsesRequest{
+				Model: "o3-mini",
+				Input: mustRaw([]map[string]any{{"role": "user", "content": "Solve this"}}),
+				Reasoning: &dto.Reasoning{
+					Effort: tt.effort,
+				},
+			}
+
+			out, err := ResponsesRequestToChatCompletionsRequest(req)
+			require.NoError(t, err)
+			require.NotNil(t, out)
+
+			assert.Equal(t, tt.expected, out.ReasoningEffort)
+		})
+	}
+}

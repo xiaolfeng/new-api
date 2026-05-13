@@ -35,10 +35,18 @@ func ChatCompletionsResponseToResponsesResponse(
 	// --- Determine status from finish_reason ---
 	status := json.RawMessage(`"completed"`)
 	var incompleteDetails *dto.IncompleteDetails
-	if len(chatResp.Choices) > 0 && chatResp.Choices[0].FinishReason == "length" {
-		status = json.RawMessage(`"incomplete"`)
-		incompleteDetails = &dto.IncompleteDetails{
-			Reasoning: "max_output_tokens",
+	if len(chatResp.Choices) > 0 {
+		switch chatResp.Choices[0].FinishReason {
+		case "length":
+			status = json.RawMessage(`"incomplete"`)
+			incompleteDetails = &dto.IncompleteDetails{
+				Reasoning: "max_output_tokens",
+			}
+		case "content_filter":
+			status = json.RawMessage(`"incomplete"`)
+			incompleteDetails = &dto.IncompleteDetails{
+				Reasoning: "content_filter",
+			}
 		}
 	}
 
@@ -164,6 +172,10 @@ func ChatCompletionsResponseToResponsesResponse(
 		Usage:              usage,
 		User:               user,
 		Metadata:           metadata,
+	}
+
+	if string(status) == `"completed"` {
+		resp.CompletedAt = int(time.Now().Unix())
 	}
 
 	return resp, usage, nil

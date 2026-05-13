@@ -225,27 +225,55 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 
 	// 6. Direct field mapping
 	out := &dto.GeneralOpenAIRequest{
-		Model:       req.Model,
-		Messages:    messages,
-		Stream:      req.Stream,
-		StreamOptions: req.StreamOptions,
-		Temperature: req.Temperature,
-		TopP:        req.TopP,
-		Tools:       tools,
-		ToolChoice:  toolChoice,
-		User:        req.User,
-		Store:       req.Store,
-		Metadata:    req.Metadata,
-		TopLogProbs: req.TopLogProbs,
-		ResponseFormat: responseFormat,
+		Model:                req.Model,
+		Messages:             messages,
+		Stream:               req.Stream,
+		StreamOptions:        req.StreamOptions,
+		Temperature:          req.Temperature,
+		TopP:                 req.TopP,
+		Tools:                tools,
+		ToolChoice:           toolChoice,
+		User:                 req.User,
+		Store:                req.Store,
+		Metadata:             req.Metadata,
+		TopLogProbs:          req.TopLogProbs,
+		ResponseFormat:       responseFormat,
+		SafetyIdentifier:     req.SafetyIdentifier,
+		PromptCacheRetention: req.PromptCacheRetention,
+	}
+
+	if req.ServiceTier != "" {
+		out.ServiceTier = json.RawMessage(`"` + req.ServiceTier + `"`)
+	}
+	if len(req.PromptCacheKey) > 0 {
+		var cacheKey string
+		if err := common.Unmarshal(req.PromptCacheKey, &cacheKey); err == nil {
+			out.PromptCacheKey = cacheKey
+		}
 	}
 
 	if req.MaxOutputTokens != nil {
 		out.MaxCompletionTokens = lo.ToPtr(*req.MaxOutputTokens)
 	}
 
+	// Responses API only has top_logprobs; Chat Completions requires logprobs=true
+	// when top_logprobs is set. Auto-enable it.
+	if req.TopLogProbs != nil && *req.TopLogProbs > 0 {
+		out.LogProbs = lo.ToPtr(true)
+	}
+
 	if req.Reasoning != nil && req.Reasoning.Effort != "" {
-		out.ReasoningEffort = req.Reasoning.Effort
+		effort := req.Reasoning.Effort
+		switch effort {
+		case "none":
+			// Chat Completions has no equivalent; drop it.
+		case "minimal":
+			out.ReasoningEffort = "low"
+		case "xhigh":
+			out.ReasoningEffort = "high"
+		default:
+			out.ReasoningEffort = effort
+		}
 	}
 
 	if len(req.ParallelToolCalls) > 0 {
@@ -316,9 +344,24 @@ func convertResponsesContentToChatContent(content any, role string) any {
 				})
 			case "input_image":
 				imageURL := m["image_url"]
+				// Responses: {"type":"input_image","image_url":"https://..."} or {"image_url":{"url":"..."}}
+				// Chat: {"type":"image_url","image_url":{"url":"..."}}
+				var chatImageURL any
+				switch v := imageURL.(type) {
+				case string:
+					chatImageURL = map[string]any{"url": v}
+				case map[string]any:
+					if _, hasURL := v["url"]; hasURL {
+						chatImageURL = v
+					} else {
+						chatImageURL = map[string]any{"url": imageURL}
+					}
+				default:
+					chatImageURL = imageURL
+				}
 				parts = append(parts, dto.MediaContent{
 					Type:     "image_url",
-					ImageUrl: imageURL,
+					ImageUrl: chatImageURL,
 				})
 			case "input_audio":
 				parts = append(parts, dto.MediaContent{
@@ -326,9 +369,21 @@ func convertResponsesContentToChatContent(content any, role string) any {
 					InputAudio: m["input_audio"],
 				})
 			case "input_file":
+				// Responses: {"type":"input_file","file_data":"...","filename":"..."}
+				// Chat (project custom): {"type":"file","file":{"file_data":"...","filename":"..."}}
+				fileObj := map[string]any{}
+				if fd, ok := m["file_data"]; ok {
+					fileObj["file_data"] = fd
+				}
+				if fn, ok := m["filename"]; ok {
+					fileObj["filename"] = fn
+				}
+				if fid, ok := m["file_id"]; ok {
+					fileObj["file_id"] = fid
+				}
 				parts = append(parts, dto.MediaContent{
 					Type: "file",
-					File: m["file"],
+					File: fileObj,
 				})
 			case "input_video":
 				parts = append(parts, dto.MediaContent{
