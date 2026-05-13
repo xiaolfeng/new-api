@@ -178,12 +178,10 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 						},
 					})
 				} else {
-					// Best-effort: keep original shape for unknown types.
-					var tool dto.ToolCallRequest
-					if b, err := common.Marshal(t); err == nil {
-						_ = common.Unmarshal(b, &tool)
-					}
-					tools = append(tools, tool)
+					// Responses API has tool types (web_search, file_search,
+					// code_interpreter, mcp, etc.) that do not exist in the
+					// Chat Completions API. Drop them with a log entry.
+					log.Printf("[ResponsesToChat] dropping unsupported tool type %q: %s", tType, t["name"])
 				}
 			}
 		}
