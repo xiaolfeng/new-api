@@ -742,3 +742,125 @@ func TestReasoningEffortMapping(t *testing.T) {
 		})
 	}
 }
+
+// ---------- Test 21: Namespace Tool Extraction ----------
+
+func TestNamespaceToolExtraction(t *testing.T) {
+	t.Run("namespace_with_function_tools", func(t *testing.T) {
+		req := &dto.OpenAIResponsesRequest{
+			Model: "gpt-4o",
+			Input: mustRaw([]map[string]any{{"role": "user", "content": "test"}}),
+			Tools: mustRaw([]map[string]any{
+				{
+					"type":        "function",
+					"name":        "get_weather",
+					"description": "Get weather",
+					"parameters": map[string]any{
+						"type": "object",
+						"properties": map[string]any{
+							"city": map[string]any{"type": "string"},
+						},
+					},
+				},
+				{
+					"type":        "namespace",
+					"name":        "mcp__bamboo_document__",
+					"description": "Tools in the mcp__bamboo_document__ namespace.",
+					"tools": []map[string]any{
+						{
+							"type":        "function",
+							"name":        "bamboo_document_list",
+							"description": "List documents",
+							"parameters": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"sector": map[string]any{"type": "string"},
+								},
+							},
+						},
+						{
+							"type":        "function",
+							"name":        "bamboo_document_detail",
+							"description": "Get document detail",
+							"parameters": map[string]any{
+								"type": "object",
+								"properties": map[string]any{
+									"path":   map[string]any{"type": "string"},
+									"sector": map[string]any{"type": "string"},
+								},
+							},
+						},
+					},
+				},
+				{
+					"type": "web_search",
+				},
+			}),
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		// Should have 3 function tools: get_weather + 2 from namespace
+		require.Len(t, out.Tools, 3)
+
+		assert.Equal(t, "get_weather", out.Tools[0].Function.Name)
+		assert.Equal(t, "bamboo_document_list", out.Tools[1].Function.Name)
+		assert.Equal(t, "bamboo_document_detail", out.Tools[2].Function.Name)
+
+		for _, tool := range out.Tools {
+			assert.Equal(t, "function", tool.Type)
+		}
+	})
+
+	t.Run("empty_namespace", func(t *testing.T) {
+		req := &dto.OpenAIResponsesRequest{
+			Model: "gpt-4o",
+			Input: mustRaw([]map[string]any{{"role": "user", "content": "test"}}),
+			Tools: mustRaw([]map[string]any{
+				{
+					"type": "namespace",
+					"name": "mcp__empty__",
+					"tools": []map[string]any{},
+				},
+			}),
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		assert.Len(t, out.Tools, 0)
+	})
+
+	t.Run("namespace_with_non_function_children", func(t *testing.T) {
+		req := &dto.OpenAIResponsesRequest{
+			Model: "gpt-4o",
+			Input: mustRaw([]map[string]any{{"role": "user", "content": "test"}}),
+			Tools: mustRaw([]map[string]any{
+				{
+					"type": "namespace",
+					"name": "mcp__mixed__",
+					"tools": []map[string]any{
+						{
+							"type":        "function",
+							"name":        "usable_tool",
+							"description": "A usable function",
+						},
+						{
+							"type": "tool_search",
+						},
+					},
+				},
+			}),
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		require.Len(t, out.Tools, 1)
+		assert.Equal(t, "usable_tool", out.Tools[0].Function.Name)
+	})
+}

@@ -163,27 +163,7 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 	if len(req.Tools) > 0 {
 		var rawTools []map[string]any
 		if err := common.Unmarshal(req.Tools, &rawTools); err == nil {
-			for _, t := range rawTools {
-				tType, _ := t["type"].(string)
-				if tType == "function" {
-					name, _ := t["name"].(string)
-					desc, _ := t["description"].(string)
-					params := t["parameters"]
-					tools = append(tools, dto.ToolCallRequest{
-						Type: "function",
-						Function: dto.FunctionRequest{
-							Name:        name,
-							Description: desc,
-							Parameters:  params,
-						},
-					})
-				} else {
-					// Responses API has tool types (web_search, file_search,
-					// code_interpreter, mcp, etc.) that do not exist in the
-					// Chat Completions API. Drop them with a log entry.
-					log.Printf("[ResponsesToChat] dropping unsupported tool type %q: %s", tType, t["name"])
-				}
-			}
+			tools = extractFunctionTools(rawTools)
 		}
 	}
 
@@ -474,4 +454,65 @@ func convertResponsesTextToChatResponseFormat(textRaw json.RawMessage) *dto.Resp
 	}
 
 	return result
+}
+
+// extractFunctionTools extracts function tool definitions from a Responses API tools array.
+// Handles three cases:
+// 1. type "function" — converted directly
+// 2. type "namespace" — extracts nested function tools from the "tools" sub-array
+//    (Codex/MCP sends grouped tools this way)
+// 3. other types (web_search, file_search, code_interpreter, etc.) — logged and dropped
+func extractFunctionTools(rawTools []map[string]any) []dto.ToolCallRequest {
+	var tools []dto.ToolCallRequest
+	for _, t := range rawTools {
+		tType, _ := t["type"].(string)
+		switch tType {
+		case "function":
+			name, _ := t["name"].(string)
+			desc, _ := t["description"].(string)
+			params := t["parameters"]
+			tools = append(tools, dto.ToolCallRequest{
+				Type: "function",
+				Function: dto.FunctionRequest{
+					Name:        name,
+					Description: desc,
+					Parameters:  params,
+				},
+			})
+		case "namespace":
+			nsName, _ := t["name"].(string)
+			nsToolsRaw, ok := t["tools"].([]any)
+			if !ok {
+				log.Printf("[ResponsesToChat] namespace %q has no tools array, skipping", nsName)
+				continue
+			}
+			for _, childAny := range nsToolsRaw {
+				child, ok := childAny.(map[string]any)
+				if !ok {
+					continue
+				}
+				childType, _ := child["type"].(string)
+				if childType != "function" {
+					continue
+				}
+				name, _ := child["name"].(string)
+				desc, _ := child["description"].(string)
+				params := child["parameters"]
+				tools = append(tools, dto.ToolCallRequest{
+					Type: "function",
+					Function: dto.FunctionRequest{
+						Name:        name,
+						Description: desc,
+						Parameters:  params,
+					},
+				})
+			}
+			if len(nsToolsRaw) > 0 {
+				log.Printf("[ResponsesToChat] extracted %d function tools from namespace %q", len(nsToolsRaw), nsName)
+			}
+		default:
+			log.Printf("[ResponsesToChat] dropping unsupported tool type %q: %s", tType, t["name"])
+		}
+	}
+	return tools
 }
