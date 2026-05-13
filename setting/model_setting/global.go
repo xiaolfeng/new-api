@@ -36,6 +36,7 @@ type GlobalSettings struct {
 	PassThroughRequestEnabled        bool                             `json:"pass_through_request_enabled"`
 	ThinkingModelBlacklist           []string                         `json:"thinking_model_blacklist"`
 	ChatCompletionsToResponsesPolicy ChatCompletionsToResponsesPolicy `json:"chat_completions_to_responses_policy"`
+	ResponsesToChatCompletionsEnabled bool                            `json:"responses_to_chat_completions_enabled"`
 }
 
 // 默认配置
@@ -49,6 +50,7 @@ var defaultOpenaiSettings = GlobalSettings{
 		Enabled:     false,
 		AllChannels: true,
 	},
+	ResponsesToChatCompletionsEnabled: false,
 }
 
 // 全局实例
@@ -61,6 +63,10 @@ func init() {
 
 func GetGlobalSettings() *GlobalSettings {
 	return &globalSettings
+}
+
+func IsResponsesToChatCompletionsEnabled() bool {
+	return globalSettings.ResponsesToChatCompletionsEnabled
 }
 
 // ShouldPreserveThinkingSuffix 判断模型是否配置为保留 thinking/-nothinking/-low/-high/-medium 后缀
