@@ -14,7 +14,9 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/openaicompat"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -70,6 +72,30 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
 	}
 	adaptor.Init(info)
+
+	// Responses→ChatCompletions conversion: route through chat completions when enabled
+	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
+	if info.RelayMode != relayconstant.RelayModeResponsesCompact &&
+		!passThroughGlobal &&
+		!info.ChannelSetting.PassThroughBodyEnabled &&
+		openaicompat.ShouldResponsesUseChatCompletions(info) {
+		usage, newApiErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
+		if newApiErr != nil {
+			return newApiErr
+		}
+
+		usageDto := usage
+		var containAudioTokens = usageDto.CompletionTokenDetails.AudioTokens > 0 || usageDto.PromptTokensDetails.AudioTokens > 0
+		var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
+
+		if containAudioTokens && containsAudioRatios {
+			service.PostAudioConsumeQuota(c, info, usageDto, "")
+		} else {
+			service.PostTextConsumeQuota(c, info, usageDto, nil)
+		}
+		return nil
+	}
+
 	var requestBody io.Reader
 	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
 		storage, err := common.GetBodyStorage(c)
