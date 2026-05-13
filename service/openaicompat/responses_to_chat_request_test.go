@@ -490,6 +490,53 @@ func TestReasoningMapping(t *testing.T) {
 	assert.Equal(t, "high", out.ReasoningEffort)
 }
 
+// ---------- Test 15: Developer Role Conversion ----------
+
+func TestDeveloperRoleConversion(t *testing.T) {
+	t.Run("developer_to_system", func(t *testing.T) {
+		req := &dto.OpenAIResponsesRequest{
+			Model: "gpt-4o",
+			Input: mustRaw([]map[string]any{
+				{"type": "message", "role": "developer", "content": "You are a helpful assistant."},
+				{"type": "message", "role": "user", "content": "Hello"},
+			}),
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		require.Len(t, out.Messages, 2)
+		assert.Equal(t, "system", out.Messages[0].Role)
+		assert.Equal(t, "You are a helpful assistant.", out.Messages[0].Content)
+		assert.Equal(t, "user", out.Messages[1].Role)
+		assert.Equal(t, "Hello", out.Messages[1].Content)
+	})
+
+	t.Run("developer_with_instructions", func(t *testing.T) {
+		req := &dto.OpenAIResponsesRequest{
+			Model:        "gpt-4o",
+			Instructions: mustRaw("Always be concise."),
+			Input: mustRaw([]map[string]any{
+				{"type": "message", "role": "developer", "content": "You are a math tutor."},
+				{"type": "message", "role": "user", "content": "What is 2+2?"},
+			}),
+		}
+
+		out, err := ResponsesRequestToChatCompletionsRequest(req)
+		require.NoError(t, err)
+		require.NotNil(t, out)
+
+		require.Len(t, out.Messages, 3)
+		assert.Equal(t, "system", out.Messages[0].Role)
+		assert.Equal(t, "Always be concise.", out.Messages[0].Content)
+		assert.Equal(t, "system", out.Messages[1].Role)
+		assert.Equal(t, "You are a math tutor.", out.Messages[1].Content)
+		assert.Equal(t, "user", out.Messages[2].Role)
+		assert.Equal(t, "What is 2+2?", out.Messages[2].Content)
+	})
+}
+
 // ---------- Test 14: Stream Options Passthrough ----------
 
 func TestStreamOptionsPassthrough(t *testing.T) {

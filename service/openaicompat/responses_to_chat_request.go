@@ -108,6 +108,13 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 			if role == "" {
 				role = "user"
 			}
+			// Responses API "developer" role maps to Chat Completions "system" role.
+			// In Responses API, "developer" is equivalent to "system" in Chat Completions
+			// (used for o-series and gpt-5 models). See also: chat_to_responses.go line 128-129
+			// which does the reverse mapping.
+			if role == "developer" {
+				role = "system"
+			}
 
 			// Flush pending tool calls if the role changes away from assistant context.
 			if len(pendingToolCalls) > 0 && role != "assistant" {
