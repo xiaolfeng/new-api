@@ -170,6 +170,17 @@ const MODELS_SECTIONS = [
             responses_to_chat_completions_enabled:
               settings['global.responses_to_chat_completions_enabled'] ?? false,
           },
+          retry_setting: {
+            record_consume_log_detail_enabled:
+              settings['retry_setting.record_consume_log_detail_enabled'] ??
+              false,
+            full_log_consume_enabled:
+              settings['retry_setting.full_log_consume_enabled'] ?? false,
+            full_log_consume_expires_at:
+              settings['retry_setting.full_log_consume_expires_at'] ?? 0,
+            full_log_consume_remaining_seconds:
+              settings['retry_setting.full_log_consume_remaining_seconds'] ?? 0,
+          },
           Notice: settings.Notice ?? '',
           legal: {
             user_agreement: settings['legal.user_agreement'] ?? '',

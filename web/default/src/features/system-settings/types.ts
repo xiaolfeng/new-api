@@ -177,6 +177,10 @@ export type ModelSettings = {
   HomePageContent: string
   'legal.user_agreement': string
   'legal.privacy_policy': string
+  'retry_setting.record_consume_log_detail_enabled': boolean
+  'retry_setting.full_log_consume_enabled': boolean
+  'retry_setting.full_log_consume_expires_at': number
+  'retry_setting.full_log_consume_remaining_seconds': number
   'global.pass_through_request_enabled': boolean
   'global.thinking_model_blacklist': string
   'global.chat_completions_to_responses_policy': string
