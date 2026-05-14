@@ -73,6 +73,77 @@ func convertChatResponseFormatToResponsesText(reqFormat *dto.ResponseFormat) jso
 	return textRaw
 }
 
+func convertLegacyChatFunctionsToResponsesTools(functions json.RawMessage) json.RawMessage {
+	if len(functions) == 0 {
+		return nil
+	}
+
+	var legacyFunctions []map[string]any
+	if err := common.Unmarshal(functions, &legacyFunctions); err != nil || len(legacyFunctions) == 0 {
+		return nil
+	}
+
+	tools := make([]map[string]any, 0, len(legacyFunctions))
+	for _, fn := range legacyFunctions {
+		name := strings.TrimSpace(common.Interface2String(fn["name"]))
+		if name == "" {
+			continue
+		}
+		tool := map[string]any{
+			"type": "function",
+			"name": name,
+		}
+		if description := strings.TrimSpace(common.Interface2String(fn["description"])); description != "" {
+			tool["description"] = description
+		}
+		if parameters, ok := fn["parameters"]; ok && parameters != nil {
+			tool["parameters"] = parameters
+		}
+		tools = append(tools, tool)
+	}
+
+	if len(tools) == 0 {
+		return nil
+	}
+	toolsRaw, _ := common.Marshal(tools)
+	return toolsRaw
+}
+
+func convertLegacyFunctionCallToResponsesToolChoice(functionCall json.RawMessage) json.RawMessage {
+	if len(functionCall) == 0 {
+		return nil
+	}
+
+	var choiceString string
+	if err := common.Unmarshal(functionCall, &choiceString); err == nil {
+		choiceString = strings.TrimSpace(choiceString)
+		if choiceString == "" {
+			return nil
+		}
+		toolChoiceRaw, _ := common.Marshal(choiceString)
+		return toolChoiceRaw
+	}
+
+	var choice map[string]any
+	if err := common.Unmarshal(functionCall, &choice); err != nil || len(choice) == 0 {
+		return nil
+	}
+	name := strings.TrimSpace(common.Interface2String(choice["name"]))
+	if name == "" {
+		if fn, ok := choice["function"].(map[string]any); ok {
+			name = strings.TrimSpace(common.Interface2String(fn["name"]))
+		}
+	}
+	if name == "" {
+		return nil
+	}
+	toolChoiceRaw, _ := common.Marshal(map[string]any{
+		"type": "function",
+		"name": name,
+	})
+	return toolChoiceRaw
+}
+
 func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*dto.OpenAIResponsesRequest, error) {
 	if req == nil {
 		return nil, errors.New("request is nil")
@@ -310,6 +381,8 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 			}
 		}
 		toolsRaw, _ = common.Marshal(tools)
+	} else {
+		toolsRaw = convertLegacyChatFunctionsToResponsesTools(req.Functions)
 	}
 
 	var toolChoiceRaw json.RawMessage
@@ -348,6 +421,8 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 				toolChoiceRaw, _ = common.Marshal(v)
 			}
 		}
+	} else {
+		toolChoiceRaw = convertLegacyFunctionCallToResponsesToolChoice(req.FunctionCall)
 	}
 
 	var parallelToolCallsRaw json.RawMessage

@@ -2,11 +2,23 @@ package openaicompat
 
 import (
 	"slices"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 )
+
+const responsesToChatFallbackTTL = 5 * time.Minute
+
+type responsesToChatFallbackEntry struct {
+	ExpiresAt time.Time
+}
+
+var responsesToChatFallbackCache sync.Map
 
 func ShouldChatCompletionsUseResponsesPolicy(policy model_setting.ChatCompletionsToResponsesPolicy, channelID int, channelType int, model string) bool {
 	if !policy.IsChannelEnabled(channelID, channelType) {
@@ -36,4 +48,58 @@ func ShouldResponsesUseChatCompletions(info *relaycommon.RelayInfo) bool {
 		return false
 	}
 	return true
+}
+
+func ShouldResponsesUseChatCompletionsCached(info *relaycommon.RelayInfo) bool {
+	if !ShouldResponsesUseChatCompletions(info) {
+		return false
+	}
+	key := ResponsesToChatCompletionsFallbackCacheKey(info)
+	if key == "" {
+		return false
+	}
+	raw, ok := responsesToChatFallbackCache.Load(key)
+	if !ok {
+		return false
+	}
+	entry, ok := raw.(responsesToChatFallbackEntry)
+	if !ok || time.Now().After(entry.ExpiresAt) {
+		responsesToChatFallbackCache.Delete(key)
+		return false
+	}
+	return true
+}
+
+func MarkResponsesToChatCompletionsFallback(info *relaycommon.RelayInfo) {
+	if info == nil || !model_setting.IsResponsesToChatCompletionsEnabled() {
+		return
+	}
+	key := ResponsesToChatCompletionsFallbackCacheKey(info)
+	if key == "" {
+		return
+	}
+	responsesToChatFallbackCache.Store(key, responsesToChatFallbackEntry{
+		ExpiresAt: time.Now().Add(responsesToChatFallbackTTL),
+	})
+}
+
+func ClearResponsesToChatCompletionsFallbackCache() {
+	responsesToChatFallbackCache.Range(func(key, _ any) bool {
+		responsesToChatFallbackCache.Delete(key)
+		return true
+	})
+}
+
+func ResponsesToChatCompletionsFallbackCacheKey(info *relaycommon.RelayInfo) string {
+	if info == nil || info.ChannelMeta == nil {
+		return ""
+	}
+	parts := []string{
+		strconv.Itoa(info.ChannelId),
+		strconv.Itoa(info.ChannelType),
+		strings.TrimSpace(info.UpstreamModelName),
+		strings.TrimSpace(info.ApiVersion),
+		strconv.Itoa(info.RelayMode),
+	}
+	return strings.Join(parts, "|")
 }

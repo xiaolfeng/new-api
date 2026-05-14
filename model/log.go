@@ -18,30 +18,30 @@ import (
 )
 
 type Log struct {
-	Id               int     `json:"id" gorm:"index:idx_created_at_id,priority:1;index:idx_user_id_id,priority:2"`
-	UserId           int     `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
-	CreatedAt        int64   `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:2;index:idx_created_at_type"`
-	Type             int     `json:"type" gorm:"index:idx_created_at_type"`
-	Content          string  `json:"content"`
-	Username         string  `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
-	TokenName        string  `json:"token_name" gorm:"index;default:''"`
-	ModelName        string  `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
-	Quota            int     `json:"quota" gorm:"default:0"`
-	PromptTokens     int     `json:"prompt_tokens" gorm:"default:0"`
-	CompletionTokens int     `json:"completion_tokens" gorm:"default:0"`
-	UseTime          int     `json:"use_time" gorm:"default:0"`
-	IsStream         bool    `json:"is_stream"`
-	ChannelId        int     `json:"channel" gorm:"index"`
-	ChannelName      string  `json:"channel_name" gorm:"->"`
-	TokenId          int     `json:"token_id" gorm:"default:0;index"`
-	Group            string  `json:"group" gorm:"index"`
-	Ip               string  `json:"ip" gorm:"index;default:''"`
-	RequestId        string  `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
-	UpstreamRequestId string `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
-	Other            string  `json:"other"`
-	Record           string  `json:"record" gorm:"type:text"`                 // 消费日志详细记录（管理员/代码用户可见，仍受来源限制）
-	FullLog          string  `json:"full_log" gorm:"type:text"`               // 完整消费日志记录（管理员/代码用户可见，仍受来源限制）
-	Tps              float64 `json:"tps" gorm:"type:decimal(10,2);default:0"` // Tokens Per Second
+	Id                int     `json:"id" gorm:"index:idx_created_at_id,priority:1;index:idx_user_id_id,priority:2"`
+	UserId            int     `json:"user_id" gorm:"index;index:idx_user_id_id,priority:1"`
+	CreatedAt         int64   `json:"created_at" gorm:"bigint;index:idx_created_at_id,priority:2;index:idx_created_at_type"`
+	Type              int     `json:"type" gorm:"index:idx_created_at_type"`
+	Content           string  `json:"content"`
+	Username          string  `json:"username" gorm:"index;index:index_username_model_name,priority:2;default:''"`
+	TokenName         string  `json:"token_name" gorm:"index;default:''"`
+	ModelName         string  `json:"model_name" gorm:"index;index:index_username_model_name,priority:1;default:''"`
+	Quota             int     `json:"quota" gorm:"default:0"`
+	PromptTokens      int     `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens  int     `json:"completion_tokens" gorm:"default:0"`
+	UseTime           int     `json:"use_time" gorm:"default:0"`
+	IsStream          bool    `json:"is_stream"`
+	ChannelId         int     `json:"channel" gorm:"index"`
+	ChannelName       string  `json:"channel_name" gorm:"->"`
+	TokenId           int     `json:"token_id" gorm:"default:0;index"`
+	Group             string  `json:"group" gorm:"index"`
+	Ip                string  `json:"ip" gorm:"index;default:''"`
+	RequestId         string  `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
+	UpstreamRequestId string  `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
+	Other             string  `json:"other"`
+	Record            string  `json:"record" gorm:"type:text"`                 // 消费日志详细记录（管理员/代码用户可见，仍受来源限制）
+	FullLog           string  `json:"full_log" gorm:"type:text"`               // 完整消费日志记录（管理员/代码用户可见，仍受来源限制）
+	Tps               float64 `json:"tps" gorm:"type:decimal(10,2);default:0"` // Tokens Per Second
 }
 
 // don't use iota, avoid change log type value
@@ -461,7 +461,37 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 		}
 	}
 
+	appendAdminLogSummaries(logs)
 	return logs, total, err
+}
+
+func appendAdminLogSummaries(logs []*Log) {
+	for i := range logs {
+		sourceFromRecord, interactionFromRecord := ExtractLogDetailSummaries(logs[i].Record)
+		if sourceFromRecord == "" && interactionFromRecord == "" {
+			continue
+		}
+
+		otherMap := map[string]interface{}{}
+		if logs[i].Other != "" {
+			parsedOtherMap, err := common.StrToMap(logs[i].Other)
+			if err != nil {
+				logger.LogWarn(context.TODO(), fmt.Sprintf("appendAdminLogSummaries: failed to parse other field: %v", err))
+			} else {
+				otherMap = parsedOtherMap
+			}
+		}
+
+		if sourceFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherClientSourceKey])) == "" {
+			otherMap[LogOtherClientSourceKey] = sourceFromRecord
+		}
+		if interactionFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherInteractionTypeKey])) == "" {
+			otherMap[LogOtherInteractionTypeKey] = interactionFromRecord
+		}
+		if len(otherMap) > 0 {
+			logs[i].Other = common.MapToJsonStr(otherMap)
+		}
+	}
 }
 
 const logSearchCountLimit = 10000

@@ -73,26 +73,24 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	}
 	adaptor.Init(info)
 
-	// Responses→ChatCompletions conversion: route through chat completions when enabled
+	// Responses→ChatCompletions conversion: prefer native Responses, and only
+	// route directly through Chat Completions when a recent unsupported probe
+	// has already established that this channel/model needs the compatibility path.
 	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
+	responsesToChatFallbackEnabled := info.RelayMode != relayconstant.RelayModeResponsesCompact &&
+		!passThroughGlobal &&
+		!info.ChannelSetting.PassThroughBodyEnabled &&
+		openaicompat.ShouldResponsesUseChatCompletions(info)
 	if info.RelayMode != relayconstant.RelayModeResponsesCompact &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		openaicompat.ShouldResponsesUseChatCompletions(info) {
+		openaicompat.ShouldResponsesUseChatCompletionsCached(info) {
 		usage, newApiErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
 		if newApiErr != nil {
 			return newApiErr
 		}
 
-		usageDto := usage
-		var containAudioTokens = usageDto.CompletionTokenDetails.AudioTokens > 0 || usageDto.PromptTokensDetails.AudioTokens > 0
-		var containsAudioRatios = ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
-
-		if containAudioTokens && containsAudioRatios {
-			service.PostAudioConsumeQuota(c, info, usageDto, "")
-		} else {
-			service.PostTextConsumeQuota(c, info, usageDto, nil)
-		}
+		postResponsesUsageQuota(c, info, usage)
 		return nil
 	}
 
@@ -106,7 +104,17 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			newAPIError = types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+			if responsesToChatFallbackEnabled && isResponsesToChatFallbackCandidate(newAPIError) {
+				usage, fallbackErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
+				if fallbackErr != nil {
+					return fallbackErr
+				}
+				openaicompat.MarkResponsesToChatCompletionsFallback(info)
+				postResponsesUsageQuota(c, info, usage)
+				return nil
+			}
+			return newAPIError
 		}
 		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
 		jsonData, err := common.Marshal(convertedRequest)
@@ -137,7 +145,17 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	var httpResp *http.Response
 	resp, err := adaptor.DoRequest(c, info, requestBody)
 	if err != nil {
-		return types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+		newAPIError = types.NewOpenAIError(err, types.ErrorCodeDoRequestFailed, http.StatusInternalServerError)
+		if responsesToChatFallbackEnabled && isResponsesToChatFallbackCandidate(newAPIError) {
+			usage, fallbackErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
+			if fallbackErr != nil {
+				return fallbackErr
+			}
+			openaicompat.MarkResponsesToChatCompletionsFallback(info)
+			postResponsesUsageQuota(c, info, usage)
+			return nil
+		}
+		return newAPIError
 	}
 
 	statusCodeMappingStr := c.GetString("status_code_mapping")
@@ -149,6 +167,15 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			newAPIError = service.RelayErrorHandler(c.Request.Context(), httpResp, false)
 			// reset status code 重置状态码
 			service.ResetStatusCode(newAPIError, statusCodeMappingStr)
+			if responsesToChatFallbackEnabled && info.SendResponseCount == 0 && isResponsesToChatFallbackCandidate(newAPIError) {
+				usage, fallbackErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
+				if fallbackErr != nil {
+					return fallbackErr
+				}
+				openaicompat.MarkResponsesToChatCompletionsFallback(info)
+				postResponsesUsageQuota(c, info, usage)
+				return nil
+			}
 			return newAPIError
 		}
 	}
@@ -178,10 +205,48 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return nil
 	}
 
-	if strings.HasPrefix(info.OriginModelName, "gpt-4o-audio") {
-		service.PostAudioConsumeQuota(c, info, usageDto, "")
-	} else {
-		service.PostTextConsumeQuota(c, info, usageDto, nil)
-	}
+	postResponsesUsageQuota(c, info, usageDto)
 	return nil
+}
+
+func postResponsesUsageQuota(c *gin.Context, info *relaycommon.RelayInfo, usageDto *dto.Usage) {
+	if usageDto == nil {
+		usageDto = &dto.Usage{}
+	}
+	containAudioTokens := usageDto.CompletionTokenDetails.AudioTokens > 0 || usageDto.PromptTokensDetails.AudioTokens > 0
+	containsAudioRatios := ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
+
+	if strings.HasPrefix(info.OriginModelName, "gpt-4o-audio") || (containAudioTokens && containsAudioRatios) {
+		service.PostAudioConsumeQuota(c, info, usageDto, "")
+		return
+	}
+	service.PostTextConsumeQuota(c, info, usageDto, nil)
+}
+
+func isResponsesToChatFallbackCandidate(err *types.NewAPIError) bool {
+	if err == nil {
+		return false
+	}
+	switch err.StatusCode {
+	case http.StatusBadRequest, http.StatusNotFound, http.StatusMethodNotAllowed, http.StatusNotImplemented:
+	default:
+		if err.GetErrorCode() != types.ErrorCodeConvertRequestFailed && err.GetErrorCode() != types.ErrorCodeDoRequestFailed {
+			return false
+		}
+	}
+
+	message := strings.ToLower(err.Error() + " " + err.ToOpenAIError().Message)
+	if strings.Contains(message, "responses") ||
+		strings.Contains(message, "/v1/responses") ||
+		strings.Contains(message, "endpoint") {
+		return strings.Contains(message, "not support") ||
+			strings.Contains(message, "unsupported") ||
+			strings.Contains(message, "unknown url") ||
+			strings.Contains(message, "not found") ||
+			strings.Contains(message, "no such endpoint") ||
+			strings.Contains(message, "invalid endpoint") ||
+			strings.Contains(message, "endpoint not found")
+	}
+	return strings.Contains(message, "responses api is not supported") ||
+		strings.Contains(message, "responses is not supported")
 }

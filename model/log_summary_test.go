@@ -91,3 +91,69 @@ func TestFormatUserLogsKeepsDeveloperToolLogsForCodeUser(t *testing.T) {
 	require.Equal(t, "OpenCode", otherMap[LogOtherClientSourceKey])
 	require.Equal(t, "输入", otherMap[LogOtherInteractionTypeKey])
 }
+
+func TestExtractLogDetailSummariesOpenAIOutput(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		OpenAIResponseBlocks: []OpenAIResponseBlock{
+			{
+				Type:    "content",
+				Content: "完成了",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, interactionType := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "输出", interactionType)
+}
+
+func TestExtractLogDetailSummariesOpenAIToolCallIsCallback(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{
+				Type: "text",
+				Role: "user",
+				Text: "请执行命令",
+			},
+		},
+		OpenAIResponseBlocks: []OpenAIResponseBlock{
+			{
+				Type:    "content",
+				Content: "我先处理。",
+			},
+			{
+				Type: "tool_call",
+				ID:   "call_1",
+				Name: "exec_command",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	_, interactionType := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "回调", interactionType)
+}
+
+func TestAppendAdminLogSummaries(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent": "codex_cli_rs/0.1.0",
+		},
+		OpenAIToolResponses: []OpenAIToolResponseBlock{
+			{
+				ToolCallID: "call_1",
+				Type:       "tool",
+				Role:       "tool",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	logs := []*Log{{Record: string(recordBytes), Other: `{}`}}
+	appendAdminLogSummaries(logs)
+
+	otherMap, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Equal(t, "Codex", otherMap[LogOtherClientSourceKey])
+	require.Equal(t, "回调", otherMap[LogOtherInteractionTypeKey])
+}

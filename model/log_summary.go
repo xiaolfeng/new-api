@@ -192,6 +192,14 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 		return interactionType
 	}
 
+	if interactionType := inferOpenAIStructuredInteractionType(
+		detailRecord.OpenAIRequestBlocks,
+		detailRecord.OpenAIToolResponses,
+		detailRecord.OpenAIResponseBlocks,
+	); interactionType != "" {
+		return interactionType
+	}
+
 	if interactionType := inferResponsesInteractionType(
 		flattenResponsesPromptInputItems(detailRecord.Prompt["input"]),
 	); interactionType != "" {
@@ -339,6 +347,39 @@ func inferResponsesStructuredInteractionType(
 	case !hasRequestInput && hasTextOutput && !hasToolUse:
 		return "输出"
 	case hasToolResponse || hasToolUse || len(responseBlocks) > 0:
+		return "回调"
+	default:
+		return ""
+	}
+}
+
+func inferOpenAIStructuredInteractionType(
+	requestBlocks []OpenAIRequestBlock,
+	toolResponses []OpenAIToolResponseBlock,
+	responseBlocks []OpenAIResponseBlock,
+) string {
+	hasToolResponse := len(toolResponses) > 0
+	hasTextOutput := hasOpenAITextResponseBlocks(responseBlocks)
+	hasToolUse := hasOpenAIToolCallBlocks(responseBlocks)
+
+	hasRequestInput := false
+	for _, block := range requestBlocks {
+		if strings.TrimSpace(block.Text) != "" {
+			hasRequestInput = true
+			break
+		}
+	}
+
+	switch {
+	case hasToolResponse:
+		return "回调"
+	case hasToolUse:
+		return "回调"
+	case !hasRequestInput && hasTextOutput:
+		return "输出"
+	case hasRequestInput:
+		return "输入"
+	case len(responseBlocks) > 0:
 		return "回调"
 	default:
 		return ""
