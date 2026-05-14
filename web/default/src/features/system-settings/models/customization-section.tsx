@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useEffect, useRef, useState } from 'react'
 import * as z from 'zod'
 import type { Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -36,13 +37,18 @@ import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
-import { SettingsSection } from '../components/settings-section'
 import { useSettingsForm } from '../hooks/use-settings-form'
 import { useUpdateOption } from '../hooks/use-update-option'
 
 const customizationSchema = z.object({
   global: z.object({
     responses_to_chat_completions_enabled: z.boolean(),
+  }),
+  retry_setting: z.object({
+    record_consume_log_detail_enabled: z.boolean(),
+    full_log_consume_enabled: z.boolean(),
+    full_log_consume_expires_at: z.coerce.number(),
+    full_log_consume_remaining_seconds: z.coerce.number(),
   }),
   Notice: z.string().optional(),
   legal: z.object({
@@ -77,7 +83,12 @@ export function CustomizationSection({
       >,
       defaultValues,
       onSubmit: async (_data, changedFields) => {
+        const readonlyKeys = new Set([
+          'retry_setting.full_log_consume_expires_at',
+          'retry_setting.full_log_consume_remaining_seconds',
+        ])
         for (const [key, value] of Object.entries(changedFields)) {
+          if (readonlyKeys.has(key)) continue
           await updateOption.mutateAsync({
             key,
             value:
@@ -87,31 +98,101 @@ export function CustomizationSection({
       },
     })
 
+  const [remainingSeconds, setRemainingSeconds] = useState(
+    defaultValues.retry_setting.full_log_consume_remaining_seconds ?? 0
+  )
+  const fullLogEnabled =
+    form.watch('retry_setting.full_log_consume_enabled') ?? false
+  const expiresAt = form.watch('retry_setting.full_log_consume_expires_at') ?? 0
+  const isFullLogActive = fullLogEnabled && remainingSeconds > 0
+
+  const prevDefaultRemaining = useRef(remainingSeconds)
+  useEffect(() => {
+    const newRemaining =
+      defaultValues.retry_setting.full_log_consume_remaining_seconds ?? 0
+    if (newRemaining !== prevDefaultRemaining.current) {
+      setRemainingSeconds(newRemaining)
+      prevDefaultRemaining.current = newRemaining
+    }
+  }, [defaultValues])
+
+  useEffect(() => {
+    if (!fullLogEnabled || remainingSeconds <= 0) {
+      return undefined
+    }
+
+    const timer = window.setInterval(() => {
+      setRemainingSeconds((prev) => {
+        const next = prev - 1
+        if (next <= 0) {
+          form.reset({
+            ...form.getValues(),
+            retry_setting: {
+              ...form.getValues().retry_setting,
+              full_log_consume_enabled: false,
+              full_log_consume_expires_at: 0,
+              full_log_consume_remaining_seconds: 0,
+            },
+          })
+          return 0
+        }
+        return next
+      })
+    }, 1000)
+
+    return () => window.clearInterval(timer)
+  }, [fullLogEnabled, remainingSeconds, form])
+
+  const formatExpireTime = (timestamp: number) => {
+    if (!timestamp) return '-'
+    return new Date(timestamp * 1000).toLocaleString()
+  }
+
   return (
     <>
       <FormNavigationGuard when={isDirty} />
-      <SettingsSection
-        title={t('Customization')}
-        description={t(
-          'Configure customization features and advanced behavior'
-        )}
-      >
-        <Form {...form}>
-          <form onSubmit={handleSubmit} className='space-y-6'>
-            <FormDirtyIndicator isDirty={isDirty} />
+      <Form {...form}>
+        <form onSubmit={handleSubmit} className='space-y-6'>
+          <FormDirtyIndicator isDirty={isDirty} />
 
+          <FormField
+            control={form.control}
+            name='global.responses_to_chat_completions_enabled'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
+                <div className='space-y-0.5'>
+                  <FormLabel className='text-base'>
+                    {t('Convert Responses to Chat Completions')}
+                  </FormLabel>
+                  <FormDescription>
+                    {t(
+                      "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API."
+                    )}
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <div className='space-y-4'>
             <FormField
               control={form.control}
-              name='global.responses_to_chat_completions_enabled'
+              name='retry_setting.record_consume_log_detail_enabled'
               render={({ field }) => (
                 <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
                   <div className='space-y-0.5'>
                     <FormLabel className='text-base'>
-                      {t('Convert Responses to Chat Completions')}
+                      {t('Enable Record Logging')}
                     </FormLabel>
                     <FormDescription>
                       {t(
-                        "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API."
+                        'Record summary request content, response content, tool calls, and filtered HTTP headers'
                       )}
                     </FormDescription>
                   </div>
@@ -125,122 +206,122 @@ export function CustomizationSection({
               )}
             />
 
-            <div className='grid gap-4 sm:grid-cols-2'>
-              <FormField
-                control={form.control}
-                name='SystemName'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('System Name')}</FormLabel>
-                    <FormControl>
-                      <Input placeholder={t('New API')} {...field} />
-                    </FormControl>
+            <FormField
+              control={form.control}
+              name='retry_setting.full_log_consume_enabled'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
+                  <div className='space-y-0.5'>
+                    <FormLabel className='text-base'>
+                      {t('Enable 5-Minute Full Logging')}
+                    </FormLabel>
                     <FormDescription>
-                      {t('The name displayed across the application')}
+                      {t(
+                        'Fully record request content, response content, and HTTP headers (excluding sensitive info), only allowed for 5 minutes'
+                      )}
                     </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
 
-              <FormField
-                control={form.control}
-                name='Logo'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Logo URL')}</FormLabel>
-                    <FormControl>
-                      <Input
-                        placeholder={t('https://example.com/logo.png')}
-                        {...field}
-                      />
-                    </FormControl>
-                    <FormDescription>
-                      {t('URL of the logo image displayed in the header')}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
+            {isFullLogActive && (
+              <div className='rounded-lg border border-green-200 bg-green-50 p-3 dark:border-green-800 dark:bg-green-950'>
+                <p className='text-sm text-green-700 dark:text-green-400'>
+                  {t('Full logging remaining {{count}} seconds', {
+                    count: remainingSeconds,
+                  })}
+                </p>
+                <p className='text-muted-foreground mt-1 text-xs'>
+                  {t('Expires at')}: {formatExpireTime(expiresAt)}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className='grid gap-4 sm:grid-cols-2'>
+            <FormField
+              control={form.control}
+              name='SystemName'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('System Name')}</FormLabel>
+                  <FormControl>
+                    <Input placeholder={t('New API')} {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {t('The name displayed across the application')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
             <FormField
               control={form.control}
-              name='Notice'
+              name='Logo'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('System Notice')}</FormLabel>
+                  <FormLabel>{t('Logo URL')}</FormLabel>
                   <FormControl>
-                    <Textarea
-                      rows={6}
-                      placeholder={t(
-                        'Planned maintenance on Friday at 22:00 UTC...'
-                      )}
+                    <Input
+                      placeholder={t('https://example.com/logo.png')}
                       {...field}
                     />
                   </FormControl>
                   <FormDescription>
-                    {t(
-                      'Broadcast a global banner to users. Markdown is supported.'
-                    )}
+                    {t('URL of the logo image displayed in the header')}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+          </div>
 
-            <div className='grid gap-4 lg:grid-cols-2'>
-              <FormField
-                control={form.control}
-                name='legal.user_agreement'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('User Agreement')}</FormLabel>
-                    <FormControl>
-                      <Textarea rows={7} {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      {t(
-                        'When filled, users must accept the user agreement during registration.'
-                      )}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+          <FormField
+            control={form.control}
+            name='Notice'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('System Notice')}</FormLabel>
+                <FormControl>
+                  <Textarea
+                    rows={6}
+                    placeholder={t(
+                      'Planned maintenance on Friday at 22:00 UTC...'
+                    )}
+                    {...field}
+                  />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'Broadcast a global banner to users. Markdown is supported.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-              <FormField
-                control={form.control}
-                name='legal.privacy_policy'
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>{t('Privacy Policy')}</FormLabel>
-                    <FormControl>
-                      <Textarea rows={7} {...field} />
-                    </FormControl>
-                    <FormDescription>
-                      {t(
-                        'When filled, users must accept the privacy policy during registration.'
-                      )}
-                    </FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-
+          <div className='grid gap-4 lg:grid-cols-2'>
             <FormField
               control={form.control}
-              name='HomePageContent'
+              name='legal.user_agreement'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('Home Page Content')}</FormLabel>
+                  <FormLabel>{t('User Agreement')}</FormLabel>
                   <FormControl>
                     <Textarea rows={7} {...field} />
                   </FormControl>
                   <FormDescription>
                     {t(
-                      'Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.'
+                      'When filled, users must accept the user agreement during registration.'
                     )}
                   </FormDescription>
                   <FormMessage />
@@ -250,62 +331,100 @@ export function CustomizationSection({
 
             <FormField
               control={form.control}
-              name='About'
+              name='legal.privacy_policy'
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>{t('About')}</FormLabel>
+                  <FormLabel>{t('Privacy Policy')}</FormLabel>
                   <FormControl>
                     <Textarea rows={7} {...field} />
                   </FormControl>
                   <FormDescription>
                     {t(
-                      'Enter HTML code (e.g., <p>About us...</p>) or a URL (e.g., https://example.com) to embed as iframe'
+                      'When filled, users must accept the privacy policy during registration.'
                     )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
+          </div>
 
-            <FormField
-              control={form.control}
-              name='Footer'
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{t('Footer')}</FormLabel>
-                  <FormControl>
-                    <Input {...field} />
-                  </FormControl>
-                  <FormDescription>
-                    {t('Footer text displayed at the bottom of pages')}
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <FormField
+            control={form.control}
+            name='HomePageContent'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Home Page Content')}</FormLabel>
+                <FormControl>
+                  <Textarea rows={7} {...field} />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            <div className='flex flex-col gap-2 sm:flex-row'>
-              <Button
-                type='submit'
-                disabled={isSubmitting || updateOption.isPending}
-              >
-                {isSubmitting || updateOption.isPending
-                  ? t('Saving...')
-                  : t('Save Changes')}
-              </Button>
-              <Button
-                type='button'
-                variant='outline'
-                onClick={handleReset}
-                disabled={!isDirty || isSubmitting || updateOption.isPending}
-              >
-                <RotateCcw className='size-4' />
-                {t('Reset')}
-              </Button>
-            </div>
-          </form>
-        </Form>
-      </SettingsSection>
+          <FormField
+            control={form.control}
+            name='About'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('About')}</FormLabel>
+                <FormControl>
+                  <Textarea rows={7} {...field} />
+                </FormControl>
+                <FormDescription>
+                  {t(
+                    'Enter HTML code (e.g., <p>About us...</p>) or a URL (e.g., https://example.com) to embed as iframe'
+                  )}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='Footer'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Footer')}</FormLabel>
+                <FormControl>
+                  <Input {...field} />
+                </FormControl>
+                <FormDescription>
+                  {t('Footer text displayed at the bottom of pages')}
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+
+          <div className='flex flex-col gap-2 sm:flex-row'>
+            <Button
+              type='submit'
+              disabled={isSubmitting || updateOption.isPending}
+            >
+              {isSubmitting || updateOption.isPending
+                ? t('Saving...')
+                : t('Save Changes')}
+            </Button>
+            <Button
+              type='button'
+              variant='outline'
+              onClick={handleReset}
+              disabled={!isDirty || isSubmitting || updateOption.isPending}
+            >
+              <RotateCcw className='size-4' />
+              {t('Reset')}
+            </Button>
+          </div>
+        </form>
+      </Form>
     </>
   )
 }
