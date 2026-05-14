@@ -4458,6 +4458,13 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Detailed Record": "Enregistrement détaillé",
+    "Full Log": "Journal complet",
+    "Structured request, tool and response details": "Détails structurés de la requête, des outils et de la réponse",
+    "Complete raw request and response payload": "Charge utile brute complète de la requête et de la réponse",
+    "When filled, users must accept the user agreement during registration.": "Une fois renseigné, les utilisateurs doivent accepter les conditions d’utilisation lors de l’inscription.",
+    "When filled, users must accept the privacy policy during registration.": "Une fois renseignée, les utilisateurs doivent accepter la politique de confidentialité lors de l’inscription.",
+    "Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.": "Saisissez du Markdown ou du HTML pour la page d’accueil, ou une URL à intégrer comme iframe."
   }
 }

@@ -4458,6 +4458,13 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Detailed Record": "詳細記録",
+    "Full Log": "完全ログ",
+    "Structured request, tool and response details": "構造化されたリクエスト、ツール、レスポンスの詳細",
+    "Complete raw request and response payload": "完全な生リクエストおよびレスポンスペイロード",
+    "When filled, users must accept the user agreement during registration.": "入力すると、ユーザーは登録時に利用規約への同意が必要になります。",
+    "When filled, users must accept the privacy policy during registration.": "入力すると、ユーザーは登録時にプライバシーポリシーへの同意が必要になります。",
+    "Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.": "ホームページ用の Markdown または HTML、または iframe として埋め込む URL を入力します。"
   }
 }

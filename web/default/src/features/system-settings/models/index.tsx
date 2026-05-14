@@ -24,6 +24,14 @@ import {
 } from './section-registry.tsx'
 
 const defaultModelSettings: ModelSettings = {
+  Notice: '',
+  SystemName: 'New API',
+  Logo: '',
+  Footer: '',
+  About: '',
+  HomePageContent: '',
+  'legal.user_agreement': '',
+  'legal.privacy_policy': '',
   'global.pass_through_request_enabled': false,
   'global.thinking_model_blacklist': '[]',
   'global.chat_completions_to_responses_policy': '{}',

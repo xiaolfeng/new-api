@@ -4458,6 +4458,13 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Detailed Record": "Bản ghi chi tiết",
+    "Full Log": "Nhật ký đầy đủ",
+    "Structured request, tool and response details": "Chi tiết có cấu trúc về yêu cầu, công cụ và phản hồi",
+    "Complete raw request and response payload": "Payload thô đầy đủ của yêu cầu và phản hồi",
+    "When filled, users must accept the user agreement during registration.": "Khi được điền, người dùng phải chấp nhận thỏa thuận người dùng khi đăng ký.",
+    "When filled, users must accept the privacy policy during registration.": "Khi được điền, người dùng phải chấp nhận chính sách quyền riêng tư khi đăng ký.",
+    "Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.": "Nhập Markdown hoặc HTML cho trang chủ, hoặc URL để nhúng dưới dạng iframe."
   }
 }

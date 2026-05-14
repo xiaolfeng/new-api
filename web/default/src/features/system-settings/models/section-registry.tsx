@@ -17,11 +17,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { ChannelAffinitySection } from '../general/channel-affinity'
-import { CustomizationSection } from './customization-section'
 import { IoNetDeploymentSettingsSection } from '../integrations/ionet-deployment-settings-section'
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ClaudeSettingsCard } from './claude-settings-card'
+import { CustomizationSection } from './customization-section'
 import { GeminiSettingsCard } from './gemini-settings-card'
 import { GlobalSettingsCard } from './global-settings-card'
 import { GrokSettingsCard } from './grok-settings-card'
@@ -166,8 +166,20 @@ const MODELS_SECTIONS = [
     build: (settings: ModelSettings) => (
       <CustomizationSection
         defaultValues={{
-          'global.responses_to_chat_completions_enabled':
-            settings['global.responses_to_chat_completions_enabled'] ?? false,
+          global: {
+            responses_to_chat_completions_enabled:
+              settings['global.responses_to_chat_completions_enabled'] ?? false,
+          },
+          Notice: settings.Notice ?? '',
+          legal: {
+            user_agreement: settings['legal.user_agreement'] ?? '',
+            privacy_policy: settings['legal.privacy_policy'] ?? '',
+          },
+          SystemName: settings.SystemName ?? 'New API',
+          Logo: settings.Logo ?? '',
+          HomePageContent: settings.HomePageContent ?? '',
+          About: settings.About ?? '',
+          Footer: settings.Footer ?? '',
         }}
       />
     ),

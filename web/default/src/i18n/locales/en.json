@@ -4458,6 +4458,13 @@
     "Zero retention": "Zero retention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Detailed Record": "Detailed Record",
+    "Full Log": "Full Log",
+    "Structured request, tool and response details": "Structured request, tool and response details",
+    "Complete raw request and response payload": "Complete raw request and response payload",
+    "When filled, users must accept the user agreement during registration.": "When filled, users must accept the user agreement during registration.",
+    "When filled, users must accept the privacy policy during registration.": "When filled, users must accept the privacy policy during registration.",
+    "Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.": "Enter Markdown or HTML for the homepage, or a URL to embed as an iframe."
   }
 }

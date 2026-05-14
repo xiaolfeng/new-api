@@ -4458,6 +4458,13 @@
     "Zero retention": "零数据保留",
     "Zhipu": "智谱",
     "Zhipu V4": "智谱 V4",
-    "Zoom": "缩放"
+    "Zoom": "缩放",
+    "Detailed Record": "详细记录",
+    "Full Log": "完整日志",
+    "Structured request, tool and response details": "结构化请求、工具与响应详情",
+    "Complete raw request and response payload": "完整原始请求与响应负载",
+    "When filled, users must accept the user agreement during registration.": "填写后，用户注册时必须接受用户协议。",
+    "When filled, users must accept the privacy policy during registration.": "填写后，用户注册时必须接受隐私政策。",
+    "Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.": "输入用于首页的 Markdown 或 HTML，或输入一个 URL 作为 iframe 嵌入。"
   }
 }

@@ -35,7 +35,9 @@ describe('parseInteractionType', () => {
   it('detects callback type from tool responses', () => {
     const record = {
       claudeRequestBlocks: [],
-      claudeToolResponses: [{ toolUseId: '1', name: 'tool1', type: 'tool_result' }],
+      claudeToolResponses: [
+        { toolUseId: '1', name: 'tool1', type: 'tool_result' },
+      ],
       claudeResponseBlocks: [],
     }
     expect(parseInteractionType(record)).toBe('callback')
@@ -45,7 +47,9 @@ describe('parseInteractionType', () => {
     const record = {
       claudeRequestBlocks: [],
       claudeToolResponses: [],
-      claudeResponseBlocks: [{ type: 'tool_use', id: '1', name: 'tool1', input: {} }],
+      claudeResponseBlocks: [
+        { type: 'tool_use', id: '1', name: 'tool1', input: {} },
+      ],
     }
     expect(parseInteractionType(record)).toBe('callback')
   })
@@ -68,7 +72,9 @@ describe('parseInteractionType', () => {
 
   it('handles responses format with request blocks', () => {
     const record = {
-      responsesRequestBlocks: [{ type: 'input_text', text: 'Hello', role: 'user' }],
+      responsesRequestBlocks: [
+        { type: 'input_text', text: 'Hello', role: 'user' },
+      ],
       responsesToolResponses: [],
       responsesResponseBlocks: [],
     }
@@ -86,7 +92,9 @@ describe('parseInteractionType', () => {
     const record = {
       responsesRequestBlocks: [],
       responsesToolResponses: [],
-      responsesResponseBlocks: [{ type: 'output_text', content: 'AI response' }],
+      responsesResponseBlocks: [
+        { type: 'output_text', content: 'AI response' },
+      ],
     }
     expect(parseInteractionType(record)).toBe('output')
   })
@@ -95,7 +103,9 @@ describe('parseInteractionType', () => {
     const record = {
       responsesRequestBlocks: [],
       responsesToolResponses: [],
-      responsesResponseBlocks: [{ type: 'function_call', name: 'tool1', arguments: '{}' }],
+      responsesResponseBlocks: [
+        { type: 'function_call', name: 'tool1', arguments: '{}' },
+      ],
     }
     expect(parseInteractionType(record)).toBe('callback')
   })
@@ -107,6 +117,40 @@ describe('parseInteractionType', () => {
       openaiResponseBlocks: [{ type: 'reasoning', content: 'Thinking...' }],
     }
     expect(parseInteractionType(record)).toBe('input')
+  })
+
+  it('detects output from openai structured response blocks', () => {
+    const record = {
+      openaiRequestBlocks: [],
+      openaiToolResponses: [],
+      openaiResponseBlocks: [{ type: 'content', content: 'Done' }],
+    }
+    expect(parseInteractionType(record)).toBe('output')
+  })
+
+  it('prioritizes openai tool calls as callback over request input', () => {
+    const record = {
+      openaiRequestBlocks: [
+        { type: 'text', role: 'user', text: 'Run command' },
+      ],
+      openaiToolResponses: [],
+      openaiResponseBlocks: [
+        { type: 'content', content: 'I will run it.' },
+        { type: 'tool_call', id: 'call_1', name: 'exec_command' },
+      ],
+    }
+    expect(parseInteractionType(record)).toBe('callback')
+  })
+
+  it('detects openai tool responses as callback', () => {
+    const record = {
+      openaiRequestBlocks: [],
+      openaiToolResponses: [
+        { type: 'tool', role: 'tool', toolCallId: 'call_1' },
+      ],
+      openaiResponseBlocks: [],
+    }
+    expect(parseInteractionType(record)).toBe('callback')
   })
 
   it('returns null for invalid JSON string', () => {
@@ -123,7 +167,9 @@ describe('parseInteractionType', () => {
   it('handles responses format with tool responses', () => {
     const record = {
       responsesRequestBlocks: [],
-      responsesToolResponses: [{ type: 'function_call_output', output: 'result' }],
+      responsesToolResponses: [
+        { type: 'function_call_output', output: 'result' },
+      ],
       responsesResponseBlocks: [],
     }
     expect(parseInteractionType(record)).toBe('callback')
