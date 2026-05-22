@@ -33,6 +33,7 @@ import {
   CreditCard,
   ListTodo,
   Settings,
+  BarChart3,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { WORKSPACE_IDS } from '@/components/layout/lib/workspace-registry'
@@ -97,6 +98,11 @@ export function useSidebarData(): SidebarData {
             activeUrls: ['/usage-logs/drawing'],
             configUrls: ['/usage-logs/drawing', '/usage-logs/task'],
             icon: ListTodo,
+          },
+          {
+            title: t('Model Log'),
+            url: '/model-log',
+            icon: BarChart3,
           },
         ],
       },
