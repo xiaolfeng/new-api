@@ -718,20 +718,43 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         const other = parseLogOther(log.other)
         const tps = other?.tps
+        const hasValidTps = typeof tps === 'number' && tps > 0
 
-        if (typeof tps !== 'number' || tps <= 0) return null
+        const useTime = log.use_time
+        const avgTps =
+          useTime > 0 && log.completion_tokens > 0
+            ? log.completion_tokens / useTime
+            : null
+
+        if (!hasValidTps && avgTps == null) return null
 
         let colorClass = 'text-red-600 dark:text-red-400'
-        if (tps >= 81) colorClass = 'text-green-600 dark:text-green-400'
-        else if (tps >= 51) colorClass = 'text-lime-600 dark:text-lime-400'
-        else if (tps >= 11) colorClass = 'text-yellow-600 dark:text-yellow-400'
+        if (hasValidTps) {
+          if (tps >= 81) colorClass = 'text-green-600 dark:text-green-400'
+          else if (tps >= 51) colorClass = 'text-lime-600 dark:text-lime-400'
+          else if (tps >= 11) colorClass = 'text-yellow-600 dark:text-yellow-400'
+        }
 
         return (
-          <span
-            className={`font-mono text-sm font-medium tabular-nums ${colorClass}`}
-          >
-            {tps.toFixed(1)}
-          </span>
+          <div className='flex flex-col gap-0.5'>
+            {hasValidTps && (
+              <span
+                className={`font-mono text-sm font-medium tabular-nums ${colorClass}`}
+              >
+                {tps.toFixed(1)}
+              </span>
+            )}
+            {avgTps != null && (
+              <span className='text-muted-foreground/60 text-[11px]'>
+                {log.is_stream ? t('Stream') : t('Non-stream')}
+                {' · '}
+                <span className='font-mono tabular-nums'>
+                  {Math.round(avgTps)}
+                </span>
+                {' t/s'}
+              </span>
+            )}
+          </div>
         )
       },
       meta: { label: t('TPS'), mobileHidden: true },
@@ -749,10 +772,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
         const frt = other?.frt
-        const tokensPerSecond =
-          useTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / useTime
-            : null
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const frtVariant = frt ? getFirstResponseTimeColor(frt / 1000) : null
 
@@ -814,15 +833,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <div className='flex items-center gap-1 text-[11px]'>
               <span className='text-muted-foreground/60'>
                 {log.is_stream ? t('Stream') : t('Non-stream')}
-                {tokensPerSecond != null && (
-                  <>
-                    {' · '}
-                    <span className='font-mono tabular-nums'>
-                      {Math.round(tokensPerSecond)}
-                    </span>
-                    {' t/s'}
-                  </>
-                )}
               </span>
               {log.is_stream &&
                 other?.stream_status &&
