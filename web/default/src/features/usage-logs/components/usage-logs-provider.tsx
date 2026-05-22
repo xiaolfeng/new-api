@@ -37,6 +37,7 @@ interface UsageLogsContextValue {
   autoRefresh: boolean
   setAutoRefresh: (enabled: boolean) => void
   countdown: number
+  disableAutoRefresh: () => void
 }
 
 const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
@@ -60,6 +61,11 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
     if (!enabled) {
       setCountdown(AUTO_REFRESH_INTERVAL_SECONDS)
     }
+  }, [])
+
+  const disableAutoRefresh = useCallback(() => {
+    setAutoRefreshState(false)
+    setCountdown(AUTO_REFRESH_INTERVAL_SECONDS)
   }, [])
 
   useEffect(() => {
@@ -104,6 +110,7 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
         autoRefresh,
         setAutoRefresh,
         countdown,
+        disableAutoRefresh,
       }}
     >
       {children}

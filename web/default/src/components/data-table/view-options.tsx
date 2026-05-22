@@ -56,7 +56,7 @@ export function DataTableViewOptions<TData>({
             .getAllColumns()
             .filter(
               (column) =>
-                typeof column.accessorFn !== 'undefined' && column.getCanHide()
+                column.getCanHide() && column.columnDef.header != null
             )
             .map((column) => {
               return (
