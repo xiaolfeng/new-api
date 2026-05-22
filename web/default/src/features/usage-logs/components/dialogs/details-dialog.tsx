@@ -1171,8 +1171,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                     value={formatLogQuota(other.fee_quota ?? props.log.quota)}
                     mono
                   />
-                )}
-                {other.subscription_remain != null && (
+                  {other.subscription_remain != null && (
                   <DetailRow
                     label={t('Remaining')}
                     value={`${formatLogQuota(other.subscription_remain)}${other.subscription_total != null ? ` / ${formatLogQuota(other.subscription_total)}` : ''}`}
