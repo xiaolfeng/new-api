@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect } from 'react'
+import { useEffect, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import {
@@ -43,6 +43,7 @@ import { fetchLogsByCategory } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
+import { useUsageLogsContext } from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
@@ -60,12 +61,13 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const isAdmin = useIsAdmin()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
+  const { disableAutoRefresh } = useUsageLogsContext()
 
   const {
     columnFilters,
     onColumnFiltersChange,
     pagination,
-    onPaginationChange,
+    onPaginationChange: urlOnPaginationChange,
     ensurePageInRange,
   } = useTableUrlState({
     search: route.useSearch(),
@@ -93,6 +95,14 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
         : []),
     ],
   })
+
+  const onPaginationChange = useCallback(
+    (updater: Parameters<typeof urlOnPaginationChange>[0]) => {
+      disableAutoRefresh()
+      urlOnPaginationChange(updater)
+    },
+    [disableAutoRefresh, urlOnPaginationChange]
+  )
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: [

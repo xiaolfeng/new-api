@@ -795,8 +795,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         }
 
         return (
-          <div className='flex flex-col gap-1'>
-            <div className='flex items-center gap-1.5'>
+          <div className='flex items-center gap-1.5'>
+            <div className='relative'>
               <span
                 className={cn(
                   'inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
@@ -814,33 +814,14 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 {formatUseTime(useTime)}
               </span>
               {log.is_stream &&
-                (frt != null && frt > 0 ? (
-                  <span
-                    className={cn(
-                      'inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
-                      pillBg[frtVariant!],
-                      pillText[frtVariant!]
-                    )}
-                  >
-                    {formatUseTime(frt / 1000)}
-                  </span>
-                ) : (
-                  <span className='border-border/60 text-muted-foreground/50 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px]'>
-                    N/A
-                  </span>
-                ))}
-            </div>
-            <div className='flex items-center gap-1 text-[11px]'>
-              <span className='text-muted-foreground/60'>
-                {log.is_stream ? t('Stream') : t('Non-stream')}
-              </span>
-              {log.is_stream &&
                 other?.stream_status &&
                 other.stream_status.status !== 'ok' && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger
-                        render={<CircleAlert className='size-3 text-red-500' />}
+                        render={
+                          <CircleAlert className='absolute -top-1.5 -right-1.5 size-3 text-red-500' />
+                        }
                       ></TooltipTrigger>
                       <TooltipContent>
                         <div className='space-y-0.5 text-xs'>
@@ -860,6 +841,22 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   </TooltipProvider>
                 )}
             </div>
+            {log.is_stream &&
+              (frt != null && frt > 0 ? (
+                <span
+                  className={cn(
+                    'inline-flex items-center rounded-md px-1.5 py-0.5 font-mono text-xs font-medium',
+                    pillBg[frtVariant!],
+                    pillText[frtVariant!]
+                  )}
+                >
+                  {formatUseTime(frt / 1000)}
+                </span>
+              ) : (
+                <span className='border-border/60 text-muted-foreground/50 inline-flex items-center rounded-md border px-1.5 py-0.5 text-[11px]'>
+                  N/A
+                </span>
+              ))}
           </div>
         )
       },

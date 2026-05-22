@@ -20,11 +20,12 @@ import { useState, useEffect, useCallback } from 'react'
 import { useQueryClient, useIsFetching } from '@tanstack/react-query'
 import { useNavigate, getRouteApi } from '@tanstack/react-router'
 import { type Table } from '@tanstack/react-table'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { useIsAdmin } from '@/hooks/use-admin'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -68,7 +69,8 @@ export function CommonLogsFilterBar<TData>(
   const queryClient = useQueryClient()
   const searchParams = route.useSearch()
   const isAdmin = useIsAdmin()
-  const { sensitiveVisible, setSensitiveVisible } = useUsageLogsContext()
+  const { sensitiveVisible, setSensitiveVisible, autoRefresh, setAutoRefresh, countdown } =
+    useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
 
   const [filters, setFilters] = useState<CommonLogFilters>(() => {
@@ -194,6 +196,21 @@ export function CommonLogsFilterBar<TData>(
           {sensitiveVisible ? t('Hide') : t('Show')}
         </TooltipContent>
       </Tooltip>
+      <div className='flex items-center gap-1.5'>
+        <Switch
+          size='sm'
+          checked={autoRefresh}
+          onCheckedChange={setAutoRefresh}
+        />
+        <span className='text-muted-foreground text-xs'>
+          {t('Auto refresh')}
+        </span>
+        {autoRefresh && (
+          <span className='text-muted-foreground/60 font-mono text-xs tabular-nums'>
+            {countdown}s
+          </span>
+        )}
+      </div>
     </div>
   )
 
