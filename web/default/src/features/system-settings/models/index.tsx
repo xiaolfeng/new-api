@@ -24,14 +24,6 @@ import {
 } from './section-registry.tsx'
 
 const defaultModelSettings: ModelSettings = {
-  Notice: '',
-  SystemName: 'New API',
-  Logo: '',
-  Footer: '',
-  About: '',
-  HomePageContent: '',
-  'legal.user_agreement': '',
-  'legal.privacy_policy': '',
   'retry_setting.record_consume_log_detail_enabled': false,
   'retry_setting.full_log_consume_enabled': false,
   'retry_setting.full_log_consume_expires_at': 0,
