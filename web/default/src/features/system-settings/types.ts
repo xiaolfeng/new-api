@@ -169,14 +169,6 @@ export type ContentSettings = {
 }
 
 export type ModelSettings = {
-  Notice: string
-  SystemName: string
-  Logo: string
-  Footer: string
-  About: string
-  HomePageContent: string
-  'legal.user_agreement': string
-  'legal.privacy_policy': string
   'retry_setting.record_consume_log_detail_enabled': boolean
   'retry_setting.full_log_consume_enabled': boolean
   'retry_setting.full_log_consume_expires_at': number

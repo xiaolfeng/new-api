@@ -181,16 +181,6 @@ const MODELS_SECTIONS = [
             full_log_consume_remaining_seconds:
               settings['retry_setting.full_log_consume_remaining_seconds'] ?? 0,
           },
-          Notice: settings.Notice ?? '',
-          legal: {
-            user_agreement: settings['legal.user_agreement'] ?? '',
-            privacy_policy: settings['legal.privacy_policy'] ?? '',
-          },
-          SystemName: settings.SystemName ?? 'New API',
-          Logo: settings.Logo ?? '',
-          HomePageContent: settings.HomePageContent ?? '',
-          About: settings.About ?? '',
-          Footer: settings.Footer ?? '',
         }}
       />
     ),
