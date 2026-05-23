@@ -925,4 +925,35 @@ func TestBuildAIToolResponseBlocks(t *testing.T) {
 		require.Equal(t, "call_2", result[1].ToolCallID)
 		require.Equal(t, "get_forecast", result[1].Name)
 	})
+
+	// Case 5: Tool in middle not at end → nil
+	t.Run("ToolInMiddleNotAtEnd", func(t *testing.T) {
+		toolCallsJSON := `[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{}"}}]`
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "user", Content: "查天气"},
+				{Role: "assistant", Content: nil, ToolCalls: json.RawMessage(toolCallsJSON)},
+				{Role: "tool", Content: `{"temp":72}`, ToolCallId: "call_1"},
+				{Role: "user", Content: "继续"},
+			},
+		}
+		result := buildOpenAIToolResponseBlocks(req)
+		require.Nil(t, result) // 末尾是 user 不是 tool，应该返回 nil
+	})
+
+	// Case 6: Tool messages after user not collected (末尾是 assistant)
+	t.Run("ToolMessagesAfterUserNotCollected", func(t *testing.T) {
+		toolCallsJSON := `[{"id":"call_1","type":"function","function":{"name":"get_weather","arguments":"{}"}}]`
+		req := &dto.GeneralOpenAIRequest{
+			Messages: []dto.Message{
+				{Role: "user", Content: "查天气"},
+				{Role: "assistant", Content: nil, ToolCalls: json.RawMessage(toolCallsJSON)},
+				{Role: "tool", Content: `{"temp":72}`, ToolCallId: "call_1"},
+				{Role: "user", Content: "再查一次"},
+				{Role: "assistant", Content: "好的"},
+			},
+		}
+		result := buildOpenAIToolResponseBlocks(req)
+		require.Nil(t, result) // 末尾是 assistant 不是 tool
+	})
 }

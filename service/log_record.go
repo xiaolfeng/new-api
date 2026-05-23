@@ -1197,12 +1197,26 @@ func buildOpenAIToolResponseBlocks(req *dto.GeneralOpenAIRequest) []model.OpenAI
 		}
 	}
 
-	blocks := make([]model.OpenAIToolResponseBlock, 0)
-	for i := range req.Messages {
+	// 从末尾往前收集连续的 tool 消息（仅提取当前轮次）
+	var toolMsgs []dto.Message
+	for i := len(req.Messages) - 1; i >= 0; i-- {
 		msg := &req.Messages[i]
 		if msg.Role != "tool" {
-			continue
+			break
 		}
+		toolMsgs = append(toolMsgs, *msg)
+	}
+	if len(toolMsgs) == 0 {
+		return nil
+	}
+	// 反转为原始顺序
+	for i, j := 0, len(toolMsgs)-1; i < j; i, j = i+1, j-1 {
+		toolMsgs[i], toolMsgs[j] = toolMsgs[j], toolMsgs[i]
+	}
+
+	blocks := make([]model.OpenAIToolResponseBlock, 0, len(toolMsgs))
+	for i := range toolMsgs {
+		msg := &toolMsgs[i]
 		toolCallID := strings.TrimSpace(msg.ToolCallId)
 		if toolCallID == "" {
 			continue
