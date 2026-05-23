@@ -230,10 +230,8 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 			expected:       "输入",
 		},
 		{
-			name: "有用户输入且有tool response → 回调",
-			requestBlocks: []OpenAIRequestBlock{
-				{Type: "text", Role: "user", Text: "执行命令"},
-			},
+			name:          "有tool response但无requestBlocks → 回调",
+			requestBlocks: nil,
 			toolResponses: []OpenAIToolResponseBlock{
 				{ToolCallID: "call_1", Name: "exec", Type: "tool", Role: "tool"},
 			},
@@ -262,10 +260,8 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 			expected: "回调",
 		},
 		{
-			name: "有用户输入且有tool use和tool response → 回调",
-			requestBlocks: []OpenAIRequestBlock{
-				{Type: "text", Role: "user", Text: "执行"},
-			},
+			name:          "有tool use和tool response但无requestBlocks → 回调",
+			requestBlocks: nil,
 			toolResponses: []OpenAIToolResponseBlock{
 				{ToolCallID: "call_1", Name: "exec", Type: "tool", Role: "tool"},
 			},
