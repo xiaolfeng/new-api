@@ -38,7 +38,6 @@ import {
 import { DataTableColumnHeader } from '@/components/data-table'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import type { UsageLog } from '../../data/schema'
-import { getLogAvatarStyle } from '../../lib/avatar-color'
 import {
   formatModelName,
   getFirstResponseTimeColor,
@@ -52,7 +51,8 @@ import {
   parseInteractionType,
   type InteractionType,
 } from '../../lib/interaction-parser'
-import { parseClientSource, getSourceColor } from '../../lib/source-parser'
+import { parseClientSource } from '../../lib/source-parser'
+import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -559,42 +559,14 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         try {
           const other = parseLogOther(log.other)
           if (other?.client_source && typeof other.client_source === 'string') {
-            const color = getSourceColor(other.client_source)
+            const color = stringToHslColor(other.client_source)
             return (
               <span
-                className={cn(
-                  'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                  color === 'amber' &&
-                    'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-                  color === 'blue' &&
-                    'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-                  color === 'cyan' &&
-                    'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
-                  color === 'green' &&
-                    'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-                  color === 'gray' &&
-                    'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
-                  color === 'indigo' &&
-                    'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
-                  color === 'sky' &&
-                    'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
-                  color === 'lime' &&
-                    'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400',
-                  color === 'orange' &&
-                    'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-                  color === 'pink' &&
-                    'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
-                  color === 'purple' &&
-                    'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-                  color === 'red' &&
-                    'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-                  color === 'teal' &&
-                    'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
-                  color === 'violet' &&
-                    'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
-                  color === 'yellow' &&
-                    'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-                )}
+                className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center'
+                style={{
+                  backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+                  color: color,
+                }}
               >
                 {other.client_source}
               </span>
@@ -614,41 +586,14 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           const source = parseClientSource(userAgent)
 
           if (source.name === '-') return null
+          const color = stringToHslColor(source.name)
           return (
             <span
-              className={cn(
-                'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-                source.color === 'amber' &&
-                  'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
-                source.color === 'blue' &&
-                  'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-                source.color === 'cyan' &&
-                  'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
-                source.color === 'green' &&
-                  'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-                source.color === 'gray' &&
-                  'bg-gray-100 text-gray-700 dark:bg-gray-900/30 dark:text-gray-400',
-                source.color === 'indigo' &&
-                  'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400',
-                source.color === 'sky' &&
-                  'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
-                source.color === 'lime' &&
-                  'bg-lime-100 text-lime-700 dark:bg-lime-900/30 dark:text-lime-400',
-                source.color === 'orange' &&
-                  'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400',
-                source.color === 'pink' &&
-                  'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-400',
-                source.color === 'purple' &&
-                  'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-                source.color === 'red' &&
-                  'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
-                source.color === 'teal' &&
-                  'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400',
-                source.color === 'violet' &&
-                  'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
-                source.color === 'yellow' &&
-                  'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400'
-              )}
+              className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center'
+              style={{
+                backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+                color: color,
+              }}
             >
               {source.name}
             </span>
@@ -717,23 +662,17 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const interactionType = precomputed || parseInteractionType(log.content)
         if (!interactionType) return null
 
-        const colorMap: Record<string, string> = {
-          input:
-            'bg-cyan-100 text-cyan-700 dark:bg-cyan-900/30 dark:text-cyan-400',
-          output:
-            'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
-          callback:
-            'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-        }
         const labelMap: Record<string, string> = {
           input: t('Input'),
           output: t('Output'),
           callback: t('Callback'),
         }
 
+        const badge = getBadgeStyle(`interaction-type-${interactionType}`)
+
         return (
           <span
-            className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colorMap[interactionType] || ''}`}
+            className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center ${badge.bg} ${badge.text}`}
           >
             {labelMap[interactionType] || interactionType}
           </span>

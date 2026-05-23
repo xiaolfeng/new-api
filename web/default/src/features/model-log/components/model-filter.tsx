@@ -1,7 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { stringToColor } from '@/lib/format'
 
 interface ModelFilterProps {
   models: string[]
@@ -9,6 +8,7 @@ interface ModelFilterProps {
   onToggleModel: (model: string) => void
   onSelectAll: () => void
   onDeselectAll: () => void
+  modelColorMap: Map<string, string>
 }
 
 export function ModelFilter({
@@ -17,6 +17,7 @@ export function ModelFilter({
   onToggleModel,
   onSelectAll,
   onDeselectAll,
+  modelColorMap,
 }: ModelFilterProps) {
   const { t } = useTranslation()
 
@@ -34,6 +35,7 @@ export function ModelFilter({
       <div className='flex flex-wrap gap-1.5'>
         {models.map((model) => {
           const isSelected = selectedModels.has(model)
+          const color = modelColorMap.get(model)
           return (
             <Badge
               key={model}
@@ -41,8 +43,8 @@ export function ModelFilter({
               className='cursor-pointer transition-opacity hover:opacity-80'
               style={{
                 opacity: isSelected ? 1 : 0.4,
-                borderColor: isSelected ? stringToColor(model) : undefined,
-                color: isSelected ? stringToColor(model) : undefined,
+                borderColor: isSelected && color ? color : undefined,
+                color: isSelected && color ? color : undefined,
               }}
               onClick={() => onToggleModel(model)}
             >

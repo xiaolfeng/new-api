@@ -1,20 +1,4 @@
-const COLORS = [
-  'amber',
-  'blue',
-  'cyan',
-  'green',
-  'gray',
-  'indigo',
-  'sky',
-  'lime',
-  'orange',
-  'pink',
-  'purple',
-  'red',
-  'teal',
-  'violet',
-  'yellow',
-]
+import { stringToHslColor } from '@/lib/colors'
 
 export interface ParsedSource {
   name: string
@@ -22,7 +6,7 @@ export interface ParsedSource {
 }
 
 export function parseClientSource(userAgent: string): ParsedSource {
-  if (!userAgent) return { name: '-', color: 'gray' }
+  if (!userAgent) return { name: '-', color: 'hsl(220, 10%, 60%)' }
 
   const ua = userAgent.toLowerCase()
 
@@ -84,14 +68,10 @@ export function parseClientSource(userAgent: string): ParsedSource {
     }
   }
 
-  return { name: '-', color: 'gray' }
+  return { name: '-', color: 'hsl(220, 10%, 60%)' }
 }
 
 export function getSourceColor(source: string): string {
-  if (!source || source === '-') return 'gray'
-  let hash = 0
-  for (let i = 0; i < source.length; i++) {
-    hash = source.charCodeAt(i) + ((hash << 5) - hash)
-  }
-  return COLORS[Math.abs(hash) % COLORS.length]
+  if (!source || source === '-') return 'hsl(220, 10%, 60%)'
+  return stringToHslColor(source)
 }
