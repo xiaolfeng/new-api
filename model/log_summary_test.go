@@ -21,7 +21,7 @@ func TestExtractLogDetailSummaries(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	source, interactionType := ExtractLogDetailSummaries(string(recordBytes))
+	source, interactionType, _, _ := ExtractLogDetailSummaries(string(recordBytes))
 	require.Equal(t, "Claude Code", source)
 	require.Equal(t, "输入", interactionType)
 }
@@ -103,7 +103,7 @@ func TestExtractLogDetailSummariesOpenAIOutput(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, interactionType := ExtractLogDetailSummaries(string(recordBytes))
+	_, interactionType, _, _ := ExtractLogDetailSummaries(string(recordBytes))
 	require.Equal(t, "输出", interactionType)
 }
 
@@ -130,7 +130,7 @@ func TestExtractLogDetailSummariesOpenAIToolCallIsCallback(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, interactionType := ExtractLogDetailSummaries(string(recordBytes))
+	_, interactionType, _, _ := ExtractLogDetailSummaries(string(recordBytes))
 	require.Equal(t, "回调", interactionType)
 }
 

@@ -9,6 +9,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/pkg/naming"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -58,7 +59,7 @@ const (
 func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 	for i := range logs {
 		logs[i].ChannelName = ""
-		sourceFromRecord, interactionFromRecord := ExtractLogDetailSummaries(logs[i].Record)
+		sourceFromRecord, interactionFromRecord, agentIdFromRecord, sessionIdFromRecord := ExtractLogDetailSummaries(logs[i].Record)
 
 		otherMap := map[string]interface{}{}
 		otherParsed := false
@@ -78,6 +79,14 @@ func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 		}
 		if interactionFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherInteractionTypeKey])) == "" {
 			otherMap[LogOtherInteractionTypeKey] = interactionFromRecord
+		}
+		if agentIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherAgentIdKey])) == "" {
+			otherMap[LogOtherAgentIdKey] = agentIdFromRecord
+			otherMap[LogOtherAgentNameKey] = naming.AgentName(agentIdFromRecord)
+		}
+		if sessionIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherSessionIdKey])) == "" {
+			otherMap[LogOtherSessionIdKey] = sessionIdFromRecord
+			otherMap[LogOtherSessionNameKey] = naming.SessionName(sessionIdFromRecord)
 		}
 
 		if otherParsed || len(otherMap) > 0 {
@@ -467,8 +476,8 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 
 func appendAdminLogSummaries(logs []*Log) {
 	for i := range logs {
-		sourceFromRecord, interactionFromRecord := ExtractLogDetailSummaries(logs[i].Record)
-		if sourceFromRecord == "" && interactionFromRecord == "" {
+		sourceFromRecord, interactionFromRecord, agentIdFromRecord, sessionIdFromRecord := ExtractLogDetailSummaries(logs[i].Record)
+		if sourceFromRecord == "" && interactionFromRecord == "" && agentIdFromRecord == "" && sessionIdFromRecord == "" {
 			continue
 		}
 
@@ -487,6 +496,14 @@ func appendAdminLogSummaries(logs []*Log) {
 		}
 		if interactionFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherInteractionTypeKey])) == "" {
 			otherMap[LogOtherInteractionTypeKey] = interactionFromRecord
+		}
+		if agentIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherAgentIdKey])) == "" {
+			otherMap[LogOtherAgentIdKey] = agentIdFromRecord
+			otherMap[LogOtherAgentNameKey] = naming.AgentName(agentIdFromRecord)
+		}
+		if sessionIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherSessionIdKey])) == "" {
+			otherMap[LogOtherSessionIdKey] = sessionIdFromRecord
+			otherMap[LogOtherSessionNameKey] = naming.SessionName(sessionIdFromRecord)
 		}
 		if len(otherMap) > 0 {
 			logs[i].Other = common.MapToJsonStr(otherMap)
