@@ -81,8 +81,11 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		case *dto.GeneralOpenAIRequest:
 			if req != nil {
 				record.Prompt = buildPromptRecordFromOpenAI(req)
-				record.OpenAIRequestBlocks = buildOpenAIRequestBlocks(req)
 				record.OpenAIToolResponses = buildOpenAIToolResponseBlocks(req)
+				// 工具回调场景下不记录 request blocks：此时的 user 消息是历史上下文，不是新输入
+				if len(record.OpenAIToolResponses) == 0 {
+					record.OpenAIRequestBlocks = buildOpenAIRequestBlocks(req)
+				}
 			}
 		case *dto.ClaudeRequest:
 			if req != nil {
