@@ -34,7 +34,7 @@ function getThemeChartColors(): string[] {
   ).filter(Boolean)
 }
 
-function getChartColors(count: number): string[] {
+export function getChartColors(count: number): string[] {
   const themeColors = getThemeChartColors()
   if (themeColors.length > 0) {
     return Array.from(

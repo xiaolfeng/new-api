@@ -20,7 +20,7 @@ import { SectionPageLayout } from '@/components/layout'
 import { useModelLogData } from './hooks/use-model-log-data'
 import { SummaryCards } from './components/summary-cards'
 import { ModelFilter } from './components/model-filter'
-import { ModelLogCharts } from './components/model-log-charts'
+import { ModelLogCharts, getChartColors } from './components/model-log-charts'
 import { SORT_OPTIONS } from './constants'
 import type { SortField, TokenRecordRecentItem } from './types'
 
@@ -102,6 +102,19 @@ export function ModelLogPage() {
     if (selectedModels !== null) return selectedModels
     return new Set(modelNames)
   }, [selectedModels, modelNames])
+
+  const colorRange = useMemo(
+    () => getChartColors(modelNames.length),
+    [modelNames.length]
+  )
+
+  const modelColorMap = useMemo(() => {
+    const map = new Map<string, string>()
+    modelNames.forEach((name, idx) => {
+      map.set(name, colorRange[idx])
+    })
+    return map
+  }, [modelNames, colorRange])
 
   const handleToggleModel = useCallback(
     (model: string) => {
@@ -224,6 +237,7 @@ export function ModelLogPage() {
                 onToggleModel={handleToggleModel}
                 onSelectAll={handleSelectAll}
                 onDeselectAll={handleDeselectAll}
+                modelColorMap={modelColorMap}
               />
               <ModelLogCharts
                 sortedItems={sortedItems}

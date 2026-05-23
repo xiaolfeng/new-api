@@ -141,21 +141,22 @@ describe('parseClientSource', () => {
 })
 
 describe('getSourceColor', () => {
-  it('returns gray for empty input', () => {
-    expect(getSourceColor('')).toBe('gray')
+  it('returns HSL gray for empty input', () => {
+    expect(getSourceColor('')).toBe('hsl(220, 10%, 60%)')
   })
-  it('returns gray for dash', () => {
-    expect(getSourceColor('-')).toBe('gray')
+  it('returns HSL gray for dash', () => {
+    expect(getSourceColor('-')).toBe('hsl(220, 10%, 60%)')
   })
   it('returns consistent color for same input', () => {
     expect(getSourceColor('Cursor')).toBe(getSourceColor('Cursor'))
   })
-  it('returns valid color strings', () => {
+  it('returns different colors for different inputs', () => {
     const c1 = getSourceColor('Cursor')
     const c2 = getSourceColor('Claude Code')
-    expect(typeof c1).toBe('string')
-    expect(typeof c2).toBe('string')
-    expect(c1.length).toBeGreaterThan(0)
-    expect(c2.length).toBeGreaterThan(0)
+    expect(c1).not.toBe(c2)
+  })
+  it('returns HSL format string', () => {
+    const c = getSourceColor('Cursor')
+    expect(c).toMatch(/^hsl\(\d+,\s*\d+%,\s*\d+%\)$/)
   })
 })

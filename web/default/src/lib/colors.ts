@@ -183,3 +183,63 @@ export function stringToColor(str: string): SemanticColor {
   const index = sum % TAG_COLORS.length
   return TAG_COLORS[index]
 }
+
+/**
+ * Distinct color palette for badges - each color is visually distinguishable
+ * 15 unique colors with good light/dark mode support
+ */
+export const BADGE_PALETTE = [
+  { dot: 'bg-blue-500', text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30' },
+  { dot: 'bg-rose-500', text: 'text-rose-600 dark:text-rose-400', bg: 'bg-rose-100 dark:bg-rose-900/30' },
+  { dot: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30' },
+  { dot: 'bg-amber-500', text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30' },
+  { dot: 'bg-violet-500', text: 'text-violet-600 dark:text-violet-400', bg: 'bg-violet-100 dark:bg-violet-900/30' },
+  { dot: 'bg-cyan-500', text: 'text-cyan-600 dark:text-cyan-400', bg: 'bg-cyan-100 dark:bg-cyan-900/30' },
+  { dot: 'bg-orange-500', text: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-100 dark:bg-orange-900/30' },
+  { dot: 'bg-teal-500', text: 'text-teal-600 dark:text-teal-400', bg: 'bg-teal-100 dark:bg-teal-900/30' },
+  { dot: 'bg-pink-500', text: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-900/30' },
+  { dot: 'bg-indigo-500', text: 'text-indigo-600 dark:text-indigo-400', bg: 'bg-indigo-100 dark:bg-indigo-900/30' },
+  { dot: 'bg-lime-500', text: 'text-lime-600 dark:text-lime-400', bg: 'bg-lime-100 dark:bg-lime-900/30' },
+  { dot: 'bg-sky-400', text: 'text-sky-600 dark:text-sky-400', bg: 'bg-sky-100 dark:bg-sky-900/30' },
+  { dot: 'bg-fuchsia-500', text: 'text-fuchsia-600 dark:text-fuchsia-400', bg: 'bg-fuchsia-100 dark:bg-fuchsia-900/30' },
+  { dot: 'bg-red-500', text: 'text-red-600 dark:text-red-400', bg: 'bg-red-100 dark:bg-red-900/30' },
+  { dot: 'bg-slate-500', text: 'text-slate-600 dark:text-slate-400', bg: 'bg-slate-100 dark:bg-slate-900/30' },
+] as const
+
+/**
+ * Generate a consistent HSL color from a string.
+ * Uses bit-shift hash for better distribution than simple charCode sum.
+ */
+export function stringToHslColor(str: string): string {
+  if (!str) return 'hsl(0, 0%, 60%)'
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash)
+    hash = hash & hash
+  }
+  const hue = Math.abs(hash % 360)
+  const saturation = 65 + (Math.abs(hash) % 10) // 65-75%
+  const lightness = 50 + (Math.abs(hash >> 8) % 8) // 50-58%
+  return `hsl(${hue}, ${saturation}%, ${lightness}%)`
+}
+
+/**
+ * Deterministic color index for badge palette
+ */
+export function stringToBadgeIndex(str: string): number {
+  let hash = 0
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash)
+    hash = hash & hash
+  }
+  return Math.abs(hash) % BADGE_PALETTE.length
+}
+
+/**
+ * Get badge style classes (dot, text, bg) for a given string
+ * Returns an object with dot, text, bg Tailwind classes
+ */
+export function getBadgeStyle(str: string): { dot: string; text: string; bg: string } {
+  const index = stringToBadgeIndex(str)
+  return BADGE_PALETTE[index]
+}
