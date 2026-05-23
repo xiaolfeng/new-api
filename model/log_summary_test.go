@@ -211,3 +211,95 @@ func TestExtractLogDetailSummariesSessionAffinityPriority(t *testing.T) {
 	require.Equal(t, "ses_opencode_session", sessionId)
 	require.Equal(t, "agent_claudecode", agentId)
 }
+
+func TestInferOpenAIStructuredInteractionType(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestBlocks  []OpenAIRequestBlock
+		toolResponses  []OpenAIToolResponseBlock
+		responseBlocks []OpenAIResponseBlock
+		expected       string
+	}{
+		{
+			name: "有用户输入且无tool response → 输入",
+			requestBlocks: []OpenAIRequestBlock{
+				{Type: "text", Role: "user", Text: "hello"},
+			},
+			toolResponses:  nil,
+			responseBlocks: nil,
+			expected:       "输入",
+		},
+		{
+			name: "有用户输入且有tool response → 回调",
+			requestBlocks: []OpenAIRequestBlock{
+				{Type: "text", Role: "user", Text: "执行命令"},
+			},
+			toolResponses: []OpenAIToolResponseBlock{
+				{ToolCallID: "call_1", Name: "exec", Type: "tool", Role: "tool"},
+			},
+			responseBlocks: nil,
+			expected:       "回调",
+		},
+		{
+			name:          "无输入无tool response有文本输出 → 输出",
+			requestBlocks: nil,
+			toolResponses: nil,
+			responseBlocks: []OpenAIResponseBlock{
+				{Type: "content", Content: "完成了"},
+			},
+			expected: "输出",
+		},
+		{
+			name: "有用户输入且有tool use → 回调",
+			requestBlocks: []OpenAIRequestBlock{
+				{Type: "text", Role: "user", Text: "执行命令"},
+			},
+			toolResponses: nil,
+			responseBlocks: []OpenAIResponseBlock{
+				{Type: "content", Content: "我来处理"},
+				{Type: "tool_call", ID: "call_1", Name: "exec_command"},
+			},
+			expected: "回调",
+		},
+		{
+			name: "有用户输入且有tool use和tool response → 回调",
+			requestBlocks: []OpenAIRequestBlock{
+				{Type: "text", Role: "user", Text: "执行"},
+			},
+			toolResponses: []OpenAIToolResponseBlock{
+				{ToolCallID: "call_1", Name: "exec", Type: "tool", Role: "tool"},
+			},
+			responseBlocks: []OpenAIResponseBlock{
+				{Type: "tool_call", ID: "call_2", Name: "next_command"},
+			},
+			expected: "回调",
+		},
+		{
+			name:          "空responseBlock无内容 → 回调",
+			requestBlocks: nil,
+			toolResponses: nil,
+			responseBlocks: []OpenAIResponseBlock{
+				{Type: "content", Content: ""},
+			},
+			expected: "回调",
+		},
+		{
+			name: "requestBlock有空text → 不算有输入",
+			requestBlocks: []OpenAIRequestBlock{
+				{Type: "text", Role: "user", Text: "  "},
+			},
+			toolResponses: nil,
+			responseBlocks: []OpenAIResponseBlock{
+				{Type: "content", Content: "响应"},
+			},
+			expected: "输出",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := inferOpenAIStructuredInteractionType(tt.requestBlocks, tt.toolResponses, tt.responseBlocks)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+}
