@@ -996,7 +996,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   />
                 )}
 
-                {(other?.session_name || other?.agent_name) && (
+                {(other?.session_name || other?.agent_name || other?.parent_session_id) && (
                   <DetailSection label={t('Session Info')}>
                     {other.session_name && (
                       <DetailRow
@@ -1024,6 +1024,25 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       <DetailRow
                         label={t('Agent ID')}
                         value={other.agent_id}
+                        mono
+                      />
+                    )}
+                    {other.parent_session_name && (
+                      <DetailRow
+                        label={t('Parent Session')}
+                        value={
+                          <span className='inline-flex items-center gap-1.5'>
+                            <span className='inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'>
+                              {other.parent_session_name}
+                            </span>
+                          </span>
+                        }
+                      />
+                    )}
+                    {other.parent_session_id && (
+                      <DetailRow
+                        label={t('Parent Session ID')}
+                        value={other.parent_session_id}
                         mono
                       />
                     )}

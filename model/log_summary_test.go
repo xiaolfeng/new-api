@@ -21,7 +21,7 @@ func TestExtractLogDetailSummaries(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	source, interactionType, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+	source, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
 	require.Equal(t, "Claude Code", source)
 	require.Equal(t, "输入", interactionType)
 }
@@ -103,7 +103,7 @@ func TestExtractLogDetailSummariesOpenAIOutput(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, interactionType, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+	_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
 	require.Equal(t, "输出", interactionType)
 }
 
@@ -130,7 +130,7 @@ func TestExtractLogDetailSummariesOpenAIToolCallIsCallback(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, interactionType, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+	_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
 	require.Equal(t, "回调", interactionType)
 }
 
@@ -156,4 +156,58 @@ func TestAppendAdminLogSummaries(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "Codex", otherMap[LogOtherClientSourceKey])
 	require.Equal(t, "回调", otherMap[LogOtherInteractionTypeKey])
+}
+
+func TestExtractLogDetailSummariesWithSessionAffinity(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":         "opencode/1.15.10",
+			"X-Session-Affinity": "ses_1aa5b42cbffeQC26Uu3hvGrmkc",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "测试"},
+		},
+	})
+	require.NoError(t, err)
+
+	_, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "ses_1aa5b42cbffeQC26Uu3hvGrmkc", sessionId)
+	require.Empty(t, parentSessionId)
+}
+
+func TestExtractLogDetailSummariesWithParentSession(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":          "opencode/1.15.10",
+			"X-Session-Affinity":  "ses_1aa5b42cbffeQC26Uu3hvGrmkc",
+			"X-Parent-Session-Id": "ses_1aa5b4864ffeU0ei6wLtOgldkE",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "子 Agent 请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	_, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "ses_1aa5b42cbffeQC26Uu3hvGrmkc", sessionId)
+	require.Equal(t, "ses_1aa5b4864ffeU0ei6wLtOgldkE", parentSessionId)
+}
+
+func TestExtractLogDetailSummariesSessionAffinityPriority(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":               "opencode/1.15.10",
+			"X-Session-Affinity":       "ses_opencode_session",
+			"X-Claude-Code-Session-Id": "ses_claudecode_session",
+			"X-Claude-Code-Agent-Id":   "agent_claudecode",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "优先级测试"},
+		},
+	})
+	require.NoError(t, err)
+
+	_, _, agentId, sessionId, _ := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "ses_opencode_session", sessionId)
+	require.Equal(t, "agent_claudecode", agentId)
 }

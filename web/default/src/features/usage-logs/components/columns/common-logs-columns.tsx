@@ -670,13 +670,18 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (!isDisplayableLogType(log.type)) return null
 
         const other = parseLogOther(log.other)
-        if (!other?.session_name && !other?.agent_name) return null
+        if (!other?.session_name && !other?.agent_name && !other?.parent_session_id) return null
 
         return (
           <div className='flex flex-col gap-0.5'>
             {other.session_name && (
               <span className='inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'>
                 {other.session_name}
+              </span>
+            )}
+            {other.parent_session_name && (
+              <span className='text-muted-foreground/50 pl-2 text-[10px]'>
+                ↳ {other.parent_session_name}
               </span>
             )}
             {other.agent_name && (

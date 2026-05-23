@@ -192,11 +192,14 @@ export interface LogOtherData {
   // Client source & interaction fields (parsed from request headers or pre-computed)
   client_source?: string
   interaction_type?: string
-  // Claude Code agent/session tracking (from X-Claude-Code-Agent-Id / X-Claude-Code-Session-Id headers)
+  // Agent/session tracking (from X-Claude-Code-Agent-Id / X-Claude-Code-Session-Id / X-Session-Affinity headers)
   agent_id?: string
   session_id?: string
   agent_name?: string
   session_name?: string
+  // Parent session tracking (from X-Parent-Session-Id header, indicates sub-agent)
+  parent_session_id?: string
+  parent_session_name?: string
   tps?: number
 }
 
