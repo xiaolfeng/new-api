@@ -4,11 +4,16 @@ import (
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/pkg/naming"
 )
 
 const (
 	LogOtherClientSourceKey    = "client_source"
 	LogOtherInteractionTypeKey = "interaction_type"
+	LogOtherAgentIdKey         = "agent_id"
+	LogOtherSessionIdKey       = "session_id"
+	LogOtherAgentNameKey       = "agent_name"
+	LogOtherSessionNameKey     = "session_name"
 )
 
 type responsesPromptInputItem struct {
@@ -22,27 +27,38 @@ func AppendLogDetailSummaries(other map[string]interface{}, record string) map[s
 		other = make(map[string]interface{})
 	}
 
-	source, interactionType := ExtractLogDetailSummaries(record)
+	source, interactionType, agentId, sessionId := ExtractLogDetailSummaries(record)
 	if source != "" {
 		other[LogOtherClientSourceKey] = source
 	}
 	if interactionType != "" {
 		other[LogOtherInteractionTypeKey] = interactionType
 	}
+	if agentId != "" {
+		other[LogOtherAgentIdKey] = agentId
+		other[LogOtherAgentNameKey] = naming.AgentName(agentId)
+	}
+	if sessionId != "" {
+		other[LogOtherSessionIdKey] = sessionId
+		other[LogOtherSessionNameKey] = naming.SessionName(sessionId)
+	}
 	return other
 }
 
-func ExtractLogDetailSummaries(record string) (string, string) {
+func ExtractLogDetailSummaries(record string) (string, string, string, string) {
 	if strings.TrimSpace(record) == "" {
-		return "", ""
+		return "", "", "", ""
 	}
 
 	var detailRecord LogDetailRecord
 	if err := common.UnmarshalJsonStr(record, &detailRecord); err != nil {
-		return "", ""
+		return "", "", "", ""
 	}
 
-	return parseClientSourceFromHeaders(detailRecord.Headers), parseInteractionTypeFromDetailRecord(&detailRecord)
+	source := parseClientSourceFromHeaders(detailRecord.Headers)
+	interactionType := parseInteractionTypeFromDetailRecord(&detailRecord)
+	agentId, sessionId := parseAgentSessionFromHeaders(detailRecord.Headers)
+	return source, interactionType, agentId, sessionId
 }
 
 func IsDeveloperToolLogSource(source string) bool {
@@ -69,6 +85,15 @@ func parseClientSourceFromHeaders(headers map[string]string) string {
 	}
 
 	return parseClientSource(userAgent)
+}
+
+func parseAgentSessionFromHeaders(headers map[string]string) (agentId, sessionId string) {
+	if len(headers) == 0 {
+		return "", ""
+	}
+	agentId = getHeaderIgnoreCase(headers, "X-Claude-Code-Agent-Id")
+	sessionId = getHeaderIgnoreCase(headers, "X-Claude-Code-Session-Id")
+	return agentId, sessionId
 }
 
 func getHeaderIgnoreCase(headers map[string]string, target string) string {

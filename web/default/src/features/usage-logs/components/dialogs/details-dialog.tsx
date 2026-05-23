@@ -996,6 +996,40 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   />
                 )}
 
+                {(other?.session_name || other?.agent_name) && (
+                  <DetailSection label={t('Session Info')}>
+                    {other.session_name && (
+                      <DetailRow
+                        label={t('Session Name')}
+                        value={
+                          <span className='inline-flex items-center gap-1.5'>
+                            <span className='inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'>
+                              {other.session_name}
+                            </span>
+                          </span>
+                        }
+                      />
+                    )}
+                    {other.session_id && (
+                      <DetailRow
+                        label={t('Session ID')}
+                        value={other.session_id}
+                        mono
+                      />
+                    )}
+                    {other.agent_name && (
+                      <DetailRow label={t('Agent Name')} value={other.agent_name} />
+                    )}
+                    {other.agent_id && (
+                      <DetailRow
+                        label={t('Agent ID')}
+                        value={other.agent_id}
+                        mono
+                      />
+                    )}
+                  </DetailSection>
+                )}
+
                 {props.isAdmin && props.log.channel > 0 && (
                   <DetailRow
                     label={t('Channel')}

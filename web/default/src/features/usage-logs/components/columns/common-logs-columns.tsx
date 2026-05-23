@@ -661,6 +661,36 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     },
 
     {
+      id: 'session',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title={t('Session')} />
+      ),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
+
+        const other = parseLogOther(log.other)
+        if (!other?.session_name && !other?.agent_name) return null
+
+        return (
+          <div className='flex flex-col gap-0.5'>
+            {other.session_name && (
+              <span className='inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'>
+                {other.session_name}
+              </span>
+            )}
+            {other.agent_name && (
+              <span className='text-muted-foreground/60 truncate text-[11px]'>
+                {other.agent_name}
+              </span>
+            )}
+          </div>
+        )
+      },
+      meta: { label: t('Session'), mobileHidden: true },
+    },
+
+    {
       id: 'interaction_type',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title={t('Interaction')} />
