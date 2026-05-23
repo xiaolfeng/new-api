@@ -59,7 +59,7 @@ const (
 func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 	for i := range logs {
 		logs[i].ChannelName = ""
-		sourceFromRecord, interactionFromRecord, agentIdFromRecord, sessionIdFromRecord := ExtractLogDetailSummaries(logs[i].Record)
+		sourceFromRecord, interactionFromRecord, agentIdFromRecord, sessionIdFromRecord, parentSessionIdFromRecord := ExtractLogDetailSummaries(logs[i].Record)
 
 		otherMap := map[string]interface{}{}
 		otherParsed := false
@@ -88,7 +88,10 @@ func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 			otherMap[LogOtherSessionIdKey] = sessionIdFromRecord
 			otherMap[LogOtherSessionNameKey] = naming.SessionName(sessionIdFromRecord)
 		}
-
+		if parentSessionIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherParentSessionIdKey])) == "" {
+			otherMap[LogOtherParentSessionIdKey] = parentSessionIdFromRecord
+			otherMap[LogOtherParentSessionNameKey] = naming.SessionName(parentSessionIdFromRecord)
+		}
 		if otherParsed || len(otherMap) > 0 {
 			delete(otherMap, "admin_info")
 			// delete(otherMap, "reject_reason")
@@ -476,8 +479,8 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 
 func appendAdminLogSummaries(logs []*Log) {
 	for i := range logs {
-		sourceFromRecord, interactionFromRecord, agentIdFromRecord, sessionIdFromRecord := ExtractLogDetailSummaries(logs[i].Record)
-		if sourceFromRecord == "" && interactionFromRecord == "" && agentIdFromRecord == "" && sessionIdFromRecord == "" {
+		sourceFromRecord, interactionFromRecord, agentIdFromRecord, sessionIdFromRecord, parentSessionIdFromRecord := ExtractLogDetailSummaries(logs[i].Record)
+		if sourceFromRecord == "" && interactionFromRecord == "" && agentIdFromRecord == "" && sessionIdFromRecord == "" && parentSessionIdFromRecord == "" {
 			continue
 		}
 
@@ -504,6 +507,10 @@ func appendAdminLogSummaries(logs []*Log) {
 		if sessionIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherSessionIdKey])) == "" {
 			otherMap[LogOtherSessionIdKey] = sessionIdFromRecord
 			otherMap[LogOtherSessionNameKey] = naming.SessionName(sessionIdFromRecord)
+		}
+		if parentSessionIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherParentSessionIdKey])) == "" {
+			otherMap[LogOtherParentSessionIdKey] = parentSessionIdFromRecord
+			otherMap[LogOtherParentSessionNameKey] = naming.SessionName(parentSessionIdFromRecord)
 		}
 		if len(otherMap) > 0 {
 			logs[i].Other = common.MapToJsonStr(otherMap)

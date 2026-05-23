@@ -14,6 +14,8 @@ const (
 	LogOtherSessionIdKey       = "session_id"
 	LogOtherAgentNameKey       = "agent_name"
 	LogOtherSessionNameKey     = "session_name"
+	LogOtherParentSessionIdKey   = "parent_session_id"
+	LogOtherParentSessionNameKey = "parent_session_name"
 )
 
 type responsesPromptInputItem struct {
@@ -27,7 +29,7 @@ func AppendLogDetailSummaries(other map[string]interface{}, record string) map[s
 		other = make(map[string]interface{})
 	}
 
-	source, interactionType, agentId, sessionId := ExtractLogDetailSummaries(record)
+	source, interactionType, agentId, sessionId, parentSessionId := ExtractLogDetailSummaries(record)
 	if source != "" {
 		other[LogOtherClientSourceKey] = source
 	}
@@ -42,23 +44,27 @@ func AppendLogDetailSummaries(other map[string]interface{}, record string) map[s
 		other[LogOtherSessionIdKey] = sessionId
 		other[LogOtherSessionNameKey] = naming.SessionName(sessionId)
 	}
+	if parentSessionId != "" {
+		other[LogOtherParentSessionIdKey] = parentSessionId
+		other[LogOtherParentSessionNameKey] = naming.SessionName(parentSessionId)
+	}
 	return other
 }
 
-func ExtractLogDetailSummaries(record string) (string, string, string, string) {
+func ExtractLogDetailSummaries(record string) (string, string, string, string, string) {
 	if strings.TrimSpace(record) == "" {
-		return "", "", "", ""
+		return "", "", "", "", ""
 	}
 
 	var detailRecord LogDetailRecord
 	if err := common.UnmarshalJsonStr(record, &detailRecord); err != nil {
-		return "", "", "", ""
+		return "", "", "", "", ""
 	}
 
 	source := parseClientSourceFromHeaders(detailRecord.Headers)
 	interactionType := parseInteractionTypeFromDetailRecord(&detailRecord)
-	agentId, sessionId := parseAgentSessionFromHeaders(detailRecord.Headers)
-	return source, interactionType, agentId, sessionId
+	agentId, sessionId, parentSessionId := parseAgentSessionFromHeaders(detailRecord.Headers)
+	return source, interactionType, agentId, sessionId, parentSessionId
 }
 
 func IsDeveloperToolLogSource(source string) bool {
@@ -87,13 +93,19 @@ func parseClientSourceFromHeaders(headers map[string]string) string {
 	return parseClientSource(userAgent)
 }
 
-func parseAgentSessionFromHeaders(headers map[string]string) (agentId, sessionId string) {
+func parseAgentSessionFromHeaders(headers map[string]string) (agentId, sessionId, parentSessionId string) {
 	if len(headers) == 0 {
-		return "", ""
+		return "", "", ""
+	}
+	// OpenCode headers (priority over ClaudeCode)
+	sessionId = getHeaderIgnoreCase(headers, "X-Session-Affinity")
+	parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Session-Id")
+	// ClaudeCode headers (fallback)
+	if sessionId == "" {
+		sessionId = getHeaderIgnoreCase(headers, "X-Claude-Code-Session-Id")
 	}
 	agentId = getHeaderIgnoreCase(headers, "X-Claude-Code-Agent-Id")
-	sessionId = getHeaderIgnoreCase(headers, "X-Claude-Code-Session-Id")
-	return agentId, sessionId
+	return agentId, sessionId, parentSessionId
 }
 
 func getHeaderIgnoreCase(headers map[string]string, target string) string {
