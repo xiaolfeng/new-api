@@ -40,6 +40,7 @@ import { useTranslation } from 'react-i18next'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { getBadgeStyle } from '@/lib/colors'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 import {
@@ -1003,9 +1004,16 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         label={t('Session Name')}
                         value={
                           <span className='inline-flex items-center gap-1.5'>
-                            <span className='inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'>
-                              {other.session_name}
-                            </span>
+                            {(() => {
+                              const badge = getBadgeStyle(`session-${other.session_name}`)
+                              return (
+                                <span
+                                  className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
+                                >
+                                  {other.session_name}
+                                </span>
+                              )
+                            })()}
                           </span>
                         }
                       />
@@ -1032,9 +1040,16 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         label={t('Parent Session')}
                         value={
                           <span className='inline-flex items-center gap-1.5'>
-                            <span className='inline-flex items-center rounded-full bg-violet-100 px-2 py-0.5 text-xs font-medium text-violet-700 dark:bg-violet-900/30 dark:text-violet-400'>
-                              {other.parent_session_name}
-                            </span>
+                            {(() => {
+                              const badge = getBadgeStyle(`session-${other.parent_session_name}`)
+                              return (
+                                <span
+                                  className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
+                                >
+                                  {other.parent_session_name}
+                                </span>
+                              )
+                            })()}
                           </span>
                         }
                       />
