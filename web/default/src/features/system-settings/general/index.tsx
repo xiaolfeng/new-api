@@ -2,13 +2,13 @@ import { useParams } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 import { parseCurrencyDisplayType } from '@/lib/currency'
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
-import type { GeneralSettings } from '../types'
+import type { SiteSettings } from '../types'
 import {
   GENERAL_DEFAULT_SECTION,
   getGeneralSectionContent,
 } from './section-registry.tsx'
 
-const defaultGeneralSettings: GeneralSettings = {
+const defaultGeneralSettings: SiteSettings = {
   'theme.frontend': 'default',
   Notice: '',
   SystemName: 'New API',
@@ -51,13 +51,15 @@ const defaultGeneralSettings: GeneralSettings = {
   'retry_setting.full_log_consume_enabled': false,
   'retry_setting.full_log_consume_expires_at': 0,
   'retry_setting.full_log_consume_remaining_seconds': 0,
+  HeaderNavModules: '',
+  SidebarModulesAdmin: '',
 }
 
 export function GeneralSettings() {
   const { t } = useTranslation()
   const { data, isLoading } = useSystemOptions()
   const params = useParams({
-    from: '/_authenticated/system-settings/general/$section',
+    from: '/_authenticated/system-settings/general/$section' as never,
   })
 
   if (isLoading) {
@@ -72,7 +74,7 @@ export function GeneralSettings() {
   const quotaDisplayType = parseCurrencyDisplayType(
     settings['general_setting.quota_display_type']
   )
-  const activeSection = (params?.section ?? GENERAL_DEFAULT_SECTION) as
+  const activeSection = ((params as Record<string, string> | null)?.section ?? GENERAL_DEFAULT_SECTION) as
     | 'system-info'
     | 'quota'
     | 'pricing'

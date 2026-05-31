@@ -21,6 +21,7 @@ import type { SiteSettings } from '../types'
 import {
   SITE_DEFAULT_SECTION,
   getSiteSectionContent,
+  getSiteSectionMeta,
 } from './section-registry.tsx'
 
 const defaultSiteSettings: SiteSettings = {
@@ -34,6 +35,38 @@ const defaultSiteSettings: SiteSettings = {
   ServerAddress: '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
+  QuotaForNewUser: 0,
+  PreConsumedQuota: 0,
+  QuotaForInviter: 0,
+  QuotaForInvitee: 0,
+  TopUpLink: '',
+  'general_setting.docs_link': '',
+  'quota_setting.enable_free_model_pre_consume': false,
+  QuotaPerUnit: 500000,
+  USDExchangeRate: 7.3,
+  'general_setting.quota_display_type': 'quota',
+  'general_setting.custom_currency_symbol': '',
+  'general_setting.custom_currency_exchange_rate': 1,
+  RetryTimes: 0,
+  DisplayInCurrencyEnabled: false,
+  DisplayTokenStatEnabled: false,
+  DefaultCollapseSidebar: false,
+  DemoSiteEnabled: false,
+  SelfUseModeEnabled: false,
+  'checkin_setting.enabled': false,
+  'checkin_setting.min_quota': 0,
+  'checkin_setting.max_quota': 0,
+  'channel_affinity_setting.enabled': false,
+  'channel_affinity_setting.switch_on_success': true,
+  'channel_affinity_setting.max_entries': 100000,
+  'channel_affinity_setting.default_ttl_seconds': 3600,
+  'channel_affinity_setting.rules': '[]',
+  'retry_setting.empty_response_retry_enabled': false,
+  'retry_setting.empty_response_retry_delay_seconds': 0,
+  'retry_setting.record_consume_log_detail_enabled': false,
+  'retry_setting.full_log_consume_enabled': false,
+  'retry_setting.full_log_consume_expires_at': 0,
+  'retry_setting.full_log_consume_remaining_seconds': 0,
   HeaderNavModules: '',
   SidebarModulesAdmin: '',
 }
@@ -45,6 +78,7 @@ export function SiteSettings() {
       defaultSettings={defaultSiteSettings}
       defaultSection={SITE_DEFAULT_SECTION}
       getSectionContent={getSiteSectionContent}
+      getSectionMeta={getSiteSectionMeta}
     />
   )
 }
