@@ -999,68 +999,68 @@ export function DetailsDialog(props: DetailsDialogProps) {
 
                 {(other?.session_name || other?.agent_name || other?.parent_session_id) && (
                   <DetailSection label={t('Session Info')}>
-                    {other.session_name && (
-                      <DetailRow
-                        label={t('Session Name')}
-                        value={
-                          <span className='inline-flex items-center gap-1.5'>
-                            {(() => {
-                              const badge = getBadgeStyle(`session-${other.session_name}`)
-                              return (
-                                <span
-                                  className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
-                                >
-                                  {other.session_name}
+                    {(() => {
+                      const hasParent = !!other?.parent_session_name
+                      const mainSessionName = hasParent ? other.parent_session_name : other.session_name
+                      const mainSessionId = hasParent ? other.parent_session_id : other.session_id
+                      const subSessionName = hasParent ? other.session_name : null
+                      const subSessionId = hasParent ? other.session_id : null
+                      const subAgentName = other.agent_name
+
+                      return (
+                        <>
+                          {mainSessionName && (
+                            <DetailRow
+                              label={t('Session Name')}
+                              value={
+                                <span className='inline-flex items-center gap-1.5'>
+                                  {(() => {
+                                    const badge = getBadgeStyle(`session-${mainSessionName}`)
+                                    return (
+                                      <span
+                                        className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
+                                      >
+                                        {mainSessionName}
+                                      </span>
+                                    )
+                                  })()}
                                 </span>
-                              )
-                            })()}
-                          </span>
-                        }
-                      />
-                    )}
-                    {other.session_id && (
-                      <DetailRow
-                        label={t('Session ID')}
-                        value={other.session_id}
-                        mono
-                      />
-                    )}
-                    {other.agent_name && (
-                      <DetailRow label={t('Agent Name')} value={other.agent_name} />
-                    )}
-                    {other.agent_id && (
-                      <DetailRow
-                        label={t('Agent ID')}
-                        value={other.agent_id}
-                        mono
-                      />
-                    )}
-                    {other.parent_session_name && (
-                      <DetailRow
-                        label={t('Parent Session')}
-                        value={
-                          <span className='inline-flex items-center gap-1.5'>
-                            {(() => {
-                              const badge = getBadgeStyle(`session-${other.parent_session_name}`)
-                              return (
-                                <span
-                                  className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
-                                >
-                                  {other.parent_session_name}
-                                </span>
-                              )
-                            })()}
-                          </span>
-                        }
-                      />
-                    )}
-                    {other.parent_session_id && (
-                      <DetailRow
-                        label={t('Parent Session ID')}
-                        value={other.parent_session_id}
-                        mono
-                      />
-                    )}
+                              }
+                            />
+                          )}
+                          {mainSessionId && (
+                            <DetailRow
+                              label={t('Session ID')}
+                              value={mainSessionId}
+                              mono
+                            />
+                          )}
+                          {subSessionName && (
+                            <DetailRow
+                              label={t('Sub Session')}
+                              value={subSessionName}
+                            />
+                          )}
+                          {subSessionId && (
+                            <DetailRow
+                              label={t('Sub Session ID')}
+                              value={subSessionId}
+                              mono
+                            />
+                          )}
+                          {subAgentName && (
+                            <DetailRow label={t('Agent Name')} value={subAgentName} />
+                          )}
+                          {other.agent_id && (
+                            <DetailRow
+                              label={t('Agent ID')}
+                              value={other.agent_id}
+                              mono
+                            />
+                          )}
+                        </>
+                      )
+                    })()}
                   </DetailSection>
                 )}
 
