@@ -623,31 +623,35 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const other = parseLogOther(log.other)
         if (!other?.session_name && !other?.agent_name && !other?.parent_session_id) return null
 
+        // When parent_session_id exists, the parent is the main conversation
+        // and the current session is the sub-agent/child session.
+        // When no parent, session_name is the main conversation and
+        // agent_name is the sub-agent.
+        const hasParent = !!other.parent_session_name
+        const mainSessionName = hasParent ? other.parent_session_name : other.session_name
+        const subSessionName = hasParent ? other.session_name : null
+        const subAgentName = other.agent_name
+
         return (
           <div className='flex flex-col items-center gap-0.5'>
-            {other.session_name && (() => {
-              const badge = getBadgeStyle(`session-${other.session_name}`)
+            {mainSessionName && (() => {
+              const badge = getBadgeStyle(`session-${mainSessionName}`)
               return (
                 <span
                   className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
                 >
-                  {other.session_name}
+                  {mainSessionName}
                 </span>
               )
             })()}
-            {other.parent_session_name && (() => {
-              const badge = getBadgeStyle(`session-${other.parent_session_name}`)
-              return (
-                <span
-                  className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.bg} ${badge.text}`}
-                >
-                  ↳ {other.parent_session_name}
-                </span>
-              )
-            })()}
-            {other.agent_name && (
+            {subSessionName && (
               <span className='text-muted-foreground/60 truncate text-[11px]'>
-                {other.agent_name}
+                ↳ {subSessionName}
+              </span>
+            )}
+            {subAgentName && (
+              <span className='text-muted-foreground/60 truncate text-[11px]'>
+                ↳ {subAgentName}
               </span>
             )}
           </div>
