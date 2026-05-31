@@ -1,4 +1,4 @@
-import type { GeneralSettings } from '../types'
+import type { SiteSettings as GeneralSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelAffinitySection } from './channel-affinity'
 import { CheckinSettingsSection } from './checkin-settings-section'
@@ -19,7 +19,6 @@ const GENERAL_SECTIONS = [
           theme: {
             frontend: settings['theme.frontend'] as 'default' | 'classic',
           },
-          Notice: settings.Notice,
           SystemName: settings.SystemName,
           Logo: settings.Logo,
           Footer: settings.Footer,
@@ -46,9 +45,13 @@ const GENERAL_SECTIONS = [
           QuotaForInviter: settings.QuotaForInviter,
           QuotaForInvitee: settings.QuotaForInvitee,
           TopUpLink: settings.TopUpLink,
-          'general_setting.docs_link': settings['general_setting.docs_link'],
-          'quota_setting.enable_free_model_pre_consume':
-            settings['quota_setting.enable_free_model_pre_consume'],
+          general_setting: {
+            docs_link: settings['general_setting.docs_link'],
+          },
+          quota_setting: {
+            enable_free_model_pre_consume:
+              settings['quota_setting.enable_free_model_pre_consume'],
+          },
         }}
       />
     ),
