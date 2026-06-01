@@ -53,13 +53,6 @@ import {
 import { Label } from '@/components/ui/label'
 import { MarkdownSourceHighlighter } from '@/components/ui/markdown-source-highlighter'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from '@/components/ui/sheet'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
 import type { UsageLog } from '../../data/schema'
@@ -436,9 +429,14 @@ function ToolUseTable(props: { rows: ToolUseRow[] }) {
               </td>
               <td className='max-w-[300px] px-2 py-1.5'>
                 {row.arguments != null || row.input != null ? (
-                  <pre className='m-0 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap'>
-                    {JSON.stringify(row.arguments ?? row.input, null, 2)}
-                  </pre>
+                  <details className='group'>
+                    <summary className='cursor-pointer text-muted-foreground hover:text-foreground text-[11px] select-none'>
+                      {t('Tool Arguments')}
+                    </summary>
+                    <pre className='m-0 mt-1 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap'>
+                      {JSON.stringify(row.arguments ?? row.input, null, 2)}
+                    </pre>
+                  </details>
                 ) : (
                   '-'
                 )}
@@ -707,105 +705,6 @@ function parseJsonRecord(content: string): Record<string, unknown> | null {
   }
 }
 
-function LogDetailSheet(props: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  title: string
-  description: string
-  content: string
-  structured?: boolean
-}) {
-  const { t } = useTranslation()
-  const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
-  const parsedRecord = useMemo(
-    () => parseJsonRecord(props.content),
-    [props.content]
-  )
-  const sections = useMemo(
-    () =>
-      props.structured
-        ? parseLogDetailRecord(
-            parsedRecord as Parameters<typeof parseLogDetailRecord>[0]
-          )
-        : null,
-    [parsedRecord, props.structured]
-  )
-  const isStructured = !!sections && hasStructuredData(sections)
-  const rawJson = useMemo(() => {
-    if (!parsedRecord) return props.content
-    return JSON.stringify(parsedRecord, null, 2)
-  }, [parsedRecord, props.content])
-
-  return (
-    <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-      <SheetContent
-        side='right'
-        className='w-[92vw] gap-0 p-0 sm:max-w-2xl lg:max-w-3xl'
-      >
-        <SheetHeader className='border-b pr-12'>
-          <SheetTitle>{props.title}</SheetTitle>
-          <SheetDescription>{props.description}</SheetDescription>
-        </SheetHeader>
-        <ScrollArea className='min-h-0 flex-1'>
-          <div className='space-y-3 p-4'>
-            {isStructured && sections ? (
-              <StructuredLogContent sections={sections} rawContent={rawJson} />
-            ) : (
-              <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
-                <Button
-                  variant='ghost'
-                  size='sm'
-                  className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
-                  onClick={() => copyToClipboard(rawJson)}
-                  title={t('Copy to clipboard')}
-                  aria-label={t('Copy to clipboard')}
-                >
-                  {copiedText === rawJson ? (
-                    <Check className='size-3 text-green-600' />
-                  ) : (
-                    <Copy className='size-3' />
-                  )}
-                </Button>
-                <MarkdownSourceHighlighter
-                  content={rawJson}
-                  fontSize={12}
-                  className='pr-6'
-                />
-              </div>
-            )}
-
-            {isStructured && (
-              <DetailSection label={t('Raw JSON')}>
-                <div className='relative min-w-0'>
-                  <Button
-                    variant='ghost'
-                    size='sm'
-                    className='absolute top-1 right-1 h-5 w-5 p-0'
-                    onClick={() => copyToClipboard(rawJson)}
-                    title={t('Copy to clipboard')}
-                    aria-label={t('Copy to clipboard')}
-                  >
-                    {copiedText === rawJson ? (
-                      <Check className='size-3 text-green-600' />
-                    ) : (
-                      <Copy className='size-3' />
-                    )}
-                  </Button>
-                  <MarkdownSourceHighlighter
-                    content={rawJson}
-                    fontSize={11}
-                    className='max-h-96 overflow-y-auto pr-6'
-                  />
-                </div>
-              </DetailSection>
-            )}
-          </div>
-        </ScrollArea>
-      </SheetContent>
-    </Sheet>
-  )
-}
-
 interface DetailsDialogProps {
   log: UsageLog
   isAdmin: boolean
@@ -816,9 +715,7 @@ interface DetailsDialogProps {
 export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
-  const [detailSheet, setDetailSheet] = useState<'record' | 'full_log' | null>(
-    null
-  )
+  const [viewMode, setViewMode] = useState<'main' | 'record' | 'full_log'>('main')
   const details = props.log.content ?? ''
   const detailRecord = props.log.record ?? ''
   const fullLog = props.log.full_log ?? ''
@@ -911,22 +808,23 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const useChannel = other?.admin_info?.use_channel
   const channelChain =
     useChannel && useChannel.length > 0 ? useChannel.join(' → ') : undefined
-  const activeSheetContent =
-    detailSheet === 'record'
-      ? detailRecord
-      : detailSheet === 'full_log'
-        ? fullLog
-        : ''
-  const activeSheetTitle =
-    detailSheet === 'record' ? t('Detailed Record') : t('Full Log')
-  const activeSheetDescription =
-    detailSheet === 'record'
-      ? t('Structured request, tool and response details')
-      : t('Complete raw request and response payload')
+  const detailView = useMemo(() => {
+    const content = viewMode === 'record' ? detailRecord : viewMode === 'full_log' ? fullLog : ''
+    if (!content || viewMode === 'main') return null
+    const parsedRecord = parseJsonRecord(content)
+    const sections = viewMode === 'record'
+      ? parseLogDetailRecord(parsedRecord as Parameters<typeof parseLogDetailRecord>[0])
+      : null
+    const isStructured = !!sections && hasStructuredData(sections)
+    const rawJson = parsedRecord ? JSON.stringify(parsedRecord, null, 2) : content
+    return { content, parsedRecord, sections, isStructured, rawJson }
+  }, [viewMode, detailRecord, fullLog])
 
   return (
-    <>
-      <Dialog open={props.open} onOpenChange={props.onOpenChange}>
+    <Dialog open={props.open} onOpenChange={(open) => {
+      if (!open) setViewMode('main')
+      props.onOpenChange(open)
+    }}>
         <DialogContent
           className={cn(
             'min-w-0 overflow-hidden',
@@ -936,13 +834,22 @@ export function DetailsDialog(props: DetailsDialogProps) {
         >
           <DialogHeader className='max-sm:gap-1'>
             <DialogTitle className='flex items-center gap-2 text-base'>
-              {t('Log Details')}
-              <StatusBadge
-                label={t(typeConfig.label)}
-                variant={typeConfig.color as StatusBadgeProps['variant']}
-                size='sm'
-                copyable={false}
-              />
+              {viewMode !== 'main' && (
+                <Button variant="ghost" size="sm" onClick={() => setViewMode('main')} className="mr-2">
+                  ← {t('Back')}
+                </Button>
+              )}
+              {viewMode === 'main' ? (
+                <>
+                  {t('Log Details')}
+                  <StatusBadge
+                    label={t(typeConfig.label)}
+                    variant={typeConfig.color as StatusBadgeProps['variant']}
+                    size='sm'
+                    copyable={false}
+                  />
+                </>
+              ) : viewMode === 'record' ? t('Detailed Record') : t('Full Log')}
             </DialogTitle>
             <DialogDescription className='sr-only'>
               {t('View the complete details for this log entry')}
@@ -950,7 +857,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </DialogHeader>
 
           <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
-            <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
+            {viewMode === 'main' ? (
+              <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
               {/* Overview section - key identifiers */}
               <div className='min-w-0 space-y-1'>
                 {(detailRecord || fullLog) && (
@@ -961,7 +869,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         variant='outline'
                         size='sm'
                         className='h-8 gap-1.5'
-                        onClick={() => setDetailSheet('record')}
+                        onClick={() => setViewMode('record')}
                       >
                         <FileText className='size-3.5' aria-hidden='true' />
                         {t('Detailed Record')}
@@ -973,7 +881,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         variant='outline'
                         size='sm'
                         className='h-8 gap-1.5'
-                        onClick={() => setDetailSheet('full_log')}
+                        onClick={() => setViewMode('full_log')}
                       >
                         <FileText className='size-3.5' aria-hidden='true' />
                         {t('Full Log')}
@@ -1640,20 +1548,67 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 </div>
               )}
             </div>
+            ) : detailView ? (
+              <div className='space-y-3 p-4'>
+                {detailView.isStructured && detailView.sections ? (
+                  <StructuredLogContent sections={detailView.sections} rawContent={detailView.rawJson} />
+                ) : (
+                  <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
+                    <Button
+                      variant='ghost'
+                      size='sm'
+                      className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
+                      onClick={() => copyToClipboard(detailView.rawJson)}
+                      title={t('Copy to clipboard')}
+                      aria-label={t('Copy to clipboard')}
+                    >
+                      {copiedText === detailView.rawJson ? (
+                        <Check className='size-3 text-green-600' />
+                      ) : (
+                        <Copy className='size-3' />
+                      )}
+                    </Button>
+                    <MarkdownSourceHighlighter
+                      content={detailView.rawJson}
+                      fontSize={12}
+                      className='pr-6'
+                    />
+                  </div>
+                )}
+
+                {detailView.isStructured && (
+                  <details>
+                    <summary className='cursor-pointer font-semibold text-xs text-muted-foreground hover:text-foreground select-none mb-1.5'>
+                      {t('Raw JSON')}
+                    </summary>
+                    <div className='relative min-w-0'>
+                      <Button
+                        variant='ghost'
+                        size='sm'
+                        className='absolute top-1 right-1 h-5 w-5 p-0'
+                        onClick={() => copyToClipboard(detailView.rawJson)}
+                        title={t('Copy to clipboard')}
+                        aria-label={t('Copy to clipboard')}
+                      >
+                        {copiedText === detailView.rawJson ? (
+                          <Check className='size-3 text-green-600' />
+                        ) : (
+                          <Copy className='size-3' />
+                        )}
+                      </Button>
+                      <MarkdownSourceHighlighter
+                        content={detailView.rawJson}
+                        fontSize={11}
+                        className='max-h-96 overflow-y-auto pr-6'
+                      />
+                    </div>
+                  </details>
+                )}
+              </div>
+            ) : null}
           </ScrollArea>
         </DialogContent>
       </Dialog>
-      <LogDetailSheet
-        open={detailSheet !== null}
-        onOpenChange={(open) => {
-          if (!open) setDetailSheet(null)
-        }}
-        title={activeSheetTitle}
-        description={activeSheetDescription}
-        content={activeSheetContent}
-        structured={detailSheet === 'record'}
-      />
-    </>
   )
 }
 

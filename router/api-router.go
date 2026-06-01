@@ -314,6 +314,8 @@ func SetApiRouter(router *gin.Engine) {
 
 		tokenRecordRoute := apiRouter.Group("/token_record")
 		tokenRecordRoute.GET("/recent", middleware.UserAuth(), controller.GetRecentTokenRecords)
+		tokenRecordRoute.GET("/daily", middleware.UserAuth(), controller.GetDailyTokenRecords)
+		tokenRecordRoute.GET("/daily/self", middleware.UserAuth(), controller.GetSelfDailyTokenRecords)
 
 		dataRoute := apiRouter.Group("/data")
 		dataRoute.GET("/", middleware.AdminAuth(), controller.GetAllQuotaDates)

@@ -16,7 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { CircleAlert, Sparkles, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -633,7 +633,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const subAgentName = other.agent_name
 
         return (
-          <div className='flex flex-col items-center gap-0.5'>
+          <div className='flex flex-col items-start gap-0.5'>
             {mainSessionName && (() => {
               const badge = getBadgeStyle(`session-${mainSessionName}`)
               return (
@@ -645,12 +645,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               )
             })()}
             {subSessionName && (
-              <span className='text-muted-foreground/60 truncate text-[11px]'>
+              <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                 ↳ {subSessionName}
               </span>
             )}
             {subAgentName && (
-              <span className='text-muted-foreground/60 truncate text-[11px]'>
+              <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                 ↳ {subAgentName}
               </span>
             )}
@@ -766,10 +766,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
         const frt = other?.frt
-        const tokensPerSecond =
-          useTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / useTime
-            : null
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
         const frtVariant = frt
           ? getFirstResponseTimeColor(frt / 1000)
@@ -823,15 +819,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <div className='flex items-center gap-1 [font-family:var(--font-body)] !text-xs leading-none'>
               <span className='text-muted-foreground/60 [font-family:var(--font-body)] !text-xs leading-none'>
                 {log.is_stream ? t('Stream') : t('Non-stream')}
-                {tokensPerSecond != null && (
-                  <>
-                    {' · '}
-                    <span className='tabular-nums'>
-                      {Math.round(tokensPerSecond)}
-                    </span>
-                    {' t/s'}
-                  </>
-                )}
               </span>
               {log.is_stream &&
                 other?.stream_status &&
@@ -840,7 +827,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <Tooltip>
                       <TooltipTrigger
                         render={
-                          <CircleAlert className='absolute -top-1.5 -right-1.5 size-3 text-red-500' />
+                          <CircleAlert className='size-3 text-red-500 shrink-0' />
                         }
                       ></TooltipTrigger>
                       <TooltipContent>
@@ -978,6 +965,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       header: t('Details'),
       cell: function DetailsCell({ row }) {
         const [dialogOpen, setDialogOpen] = useState(false)
+        const { setIsDetailOpen } = useUsageLogsContext()
         const log = row.original
         const other = parseLogOther(log.other)
 
@@ -985,12 +973,20 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const primary = segments[0]
         const hasMore = segments.length > 1
 
+        const handleOpenChange = useCallback(
+          (open: boolean) => {
+            setDialogOpen(open)
+            setIsDetailOpen(open)
+          },
+          [setIsDetailOpen]
+        )
+
         return (
           <>
             <button
               type='button'
               className='group flex max-w-[200px] items-center gap-1 text-left text-xs'
-              onClick={() => setDialogOpen(true)}
+              onClick={() => handleOpenChange(true)}
               title={t('Click to view full details')}
             >
               {primary ? (
@@ -1023,7 +1019,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               log={log}
               isAdmin={isAdmin}
               open={dialogOpen}
-              onOpenChange={setDialogOpen}
+              onOpenChange={handleOpenChange}
             />
           </>
         )

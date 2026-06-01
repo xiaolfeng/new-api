@@ -105,5 +105,5 @@ export function buildLineChartSpec(
     crosshair: {
       visible: true,
     },
-  }
+  } as ISpec
 }

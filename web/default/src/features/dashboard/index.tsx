@@ -27,6 +27,7 @@ import { SectionPageLayout } from '@/components/layout'
 import { FadeIn } from '@/components/page-transition'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
+import { UserHeatmap } from './components/models/user-heatmap'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
@@ -288,6 +289,9 @@ export function Dashboard() {
                     }
                   />
                 </Suspense>
+              </FadeIn>
+              <FadeIn delay={0.2}>
+                <UserHeatmap />
               </FadeIn>
             </>
           )}

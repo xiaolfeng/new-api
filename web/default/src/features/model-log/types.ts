@@ -52,3 +52,10 @@ export interface ChartDataPoint {
   Model: string
   Value: number
 }
+
+export interface TokenRecordDailyItem {
+  date: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+}
