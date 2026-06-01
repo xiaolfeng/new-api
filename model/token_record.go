@@ -88,6 +88,14 @@ type TokenRecordOverallSummary struct {
 	ActiveModelCount  int   `json:"active_model_count"`  // 活跃模型数
 }
 
+// TokenRecordDailyItem represents daily aggregated data
+type TokenRecordDailyItem struct {
+	Date             string `json:"date"` // "YYYY-MM-DD"
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+	TotalTokens      int64  `json:"total_tokens"`
+}
+
 func normalizeTokenRecordModelName(modelName string) string {
 	modelName = strings.TrimSpace(modelName)
 	if modelName == "" {
@@ -276,14 +284,18 @@ func calcFailedRate(failedCount, requestCount int64) float64 {
 	return math.Round((float64(failedCount)/float64(total))*10000) / 100
 }
 
-func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnapshot, error) {
+func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRecordRecentSnapshot, error) {
 	if LOG_DB == nil {
 		return TokenRecordRecentSnapshot{}, errors.New("log db is not initialized")
 	}
 
+	if hours <= 0 {
+		hours = 24
+	}
+
 	currentBucketStartAt, _ := getTokenRecordHourBucket(currentTimestamp)
-	rangeStartAt := currentBucketStartAt - 23*3600
-	hours := buildTokenRecordHours(rangeStartAt, currentBucketStartAt)
+	rangeStartAt := currentBucketStartAt - (hours-1)*3600
+	hoursList := buildTokenRecordHours(rangeStartAt, currentBucketStartAt)
 
 	var records []TokenRecord
 	err := LOG_DB.Model(&TokenRecord{}).
@@ -295,8 +307,8 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 		return TokenRecordRecentSnapshot{}, errors.New("查询模型日志失败")
 	}
 
-	hourIndexMap := make(map[int64]int, len(hours))
-	for i, hour := range hours {
+	hourIndexMap := make(map[int64]int, len(hoursList))
+	for i, hour := range hoursList {
 		hourIndexMap[hour.BucketStartAt] = i
 	}
 
@@ -311,7 +323,7 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 		if !ok {
 			item = &TokenRecordRecentItem{
 				ModelName: record.ModelName,
-				Cells:     buildEmptyTokenRecordCells(hours),
+				Cells:     buildEmptyTokenRecordCells(hoursList),
 			}
 			itemsMap[record.ModelName] = item
 		}
@@ -327,7 +339,7 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 			AvgTPS:           calcTokenRecordAvgTPS(record.CompletionTokens, record.TotalUseTime),
 			FailedCount:      record.FailedCount,
 			FailedDetail:     parseFailedDetail(record.FailedDetail),
-			IsCurrent:        hours[hourIndex].IsCurrent,
+			IsCurrent:        hoursList[hourIndex].IsCurrent,
 		}
 
 		item.Summary.RequestCount += record.RequestCount
@@ -365,8 +377,76 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64) (TokenRecordRecentSnap
 	}
 
 	return TokenRecordRecentSnapshot{
-		Hours:   hours,
+		Hours:   hoursList,
 		Items:   items,
 		Summary: &overallSummary,
 	}, nil
+}
+
+func GetDailyTokenSummary(startTime, endTime int64) ([]TokenRecordDailyItem, error) {
+	if LOG_DB == nil {
+		return nil, errors.New("log db is not initialized")
+	}
+
+	var dateExpr string
+	if common.UsingSQLite {
+		dateExpr = "DATE(ROUND(bucket_start_at), 'unixepoch')"
+	} else if common.UsingPostgreSQL {
+		dateExpr = "TO_TIMESTAMP(bucket_start_at)::DATE"
+	} else {
+		dateExpr = "DATE(FROM_UNIXTIME(bucket_start_at))"
+	}
+
+	var items []TokenRecordDailyItem
+	err := LOG_DB.Model(&TokenRecord{}).
+		Select(fmt.Sprintf("%s as date, SUM(prompt_tokens) as prompt_tokens, SUM(completion_tokens) as completion_tokens, SUM(total_tokens) as total_tokens", dateExpr)).
+		Where("bucket_start_at >= ? AND bucket_start_at <= ?", startTime, endTime).
+		Group(dateExpr).
+		Order("date ASC").
+		Scan(&items).Error
+
+	if err != nil {
+		common.SysError("failed to query daily token summary: " + err.Error())
+		return nil, errors.New("查询每日使用量失败")
+	}
+
+	if items == nil {
+		items = []TokenRecordDailyItem{}
+	}
+
+	return items, nil
+}
+
+func GetUserDailyTokenSummary(userId int, startTime, endTime int64) ([]TokenRecordDailyItem, error) {
+	if DB == nil {
+		return nil, errors.New("db is not initialized")
+	}
+
+	var dateExpr string
+	if common.UsingSQLite {
+		dateExpr = "DATE(ROUND(created_at), 'unixepoch')"
+	} else if common.UsingPostgreSQL {
+		dateExpr = "TO_TIMESTAMP(created_at)::DATE"
+	} else {
+		dateExpr = "DATE(FROM_UNIXTIME(created_at))"
+	}
+
+	var items []TokenRecordDailyItem
+	err := DB.Table("quota_data").
+		Select(fmt.Sprintf("%s as date, SUM(token_used) as total_tokens, 0 as prompt_tokens, 0 as completion_tokens", dateExpr)).
+		Where("user_id = ? AND created_at >= ? AND created_at <= ?", userId, startTime, endTime).
+		Group(dateExpr).
+		Order("date ASC").
+		Scan(&items).Error
+
+	if err != nil {
+		common.SysError("failed to query user daily token summary: " + err.Error())
+		return nil, errors.New("查询用户每日使用量失败")
+	}
+
+	if items == nil {
+		items = []TokenRecordDailyItem{}
+	}
+
+	return items, nil
 }

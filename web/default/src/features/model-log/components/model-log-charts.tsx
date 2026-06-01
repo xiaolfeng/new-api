@@ -11,7 +11,6 @@ import {
 import type {
   ChartTab,
   TokenRecordRecentItem,
-  ChartDataPoint,
 } from '../types'
 
 // Reuse theme chart colors from dashboard

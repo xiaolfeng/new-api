@@ -17,7 +17,15 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { ChannelAffinityInfo } from '../types'
 
@@ -38,6 +46,8 @@ interface UsageLogsContextValue {
   setAutoRefresh: (enabled: boolean) => void
   countdown: number
   disableAutoRefresh: () => void
+  isDetailOpen: boolean
+  setIsDetailOpen: (open: boolean) => void
 }
 
 const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
@@ -53,8 +63,12 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
   const [sensitiveVisible, setSensitiveVisible] = useState(true)
   const [autoRefresh, setAutoRefreshState] = useState(false)
   const [countdown, setCountdown] = useState(AUTO_REFRESH_INTERVAL_SECONDS)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [pageVisible, setPageVisible] = useState(true)
+  const consecutiveFailuresRef = useRef(0)
 
   const queryClient = useQueryClient()
+  const isPausedRef = useRef(false)
 
   const setAutoRefresh = useCallback((enabled: boolean) => {
     setAutoRefreshState(enabled)
@@ -69,17 +83,44 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    isPausedRef.current = isDetailOpen || !pageVisible
+  }, [isDetailOpen, pageVisible])
+
+  useEffect(() => {
+    const handler = () => setPageVisible(document.visibilityState === 'visible')
+    document.addEventListener('visibilitychange', handler)
+    return () => document.removeEventListener('visibilitychange', handler)
+  }, [])
+
+  useEffect(() => {
     if (!autoRefresh) return
 
     setCountdown(AUTO_REFRESH_INTERVAL_SECONDS)
 
     const refreshIntervalId = setInterval(() => {
-      queryClient.invalidateQueries({ queryKey: ['logs'] })
-      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+      if (isPausedRef.current) return
+      Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] }),
+      ])
+        .then(() => {
+          consecutiveFailuresRef.current = 0
+        })
+        .catch(() => {
+          const next = consecutiveFailuresRef.current + 1
+          consecutiveFailuresRef.current = next
+          if (next >= 3) {
+            setTimeout(() => {
+              setAutoRefreshState(false)
+              setCountdown(AUTO_REFRESH_INTERVAL_SECONDS)
+            }, 0)
+          }
+        })
       setCountdown(AUTO_REFRESH_INTERVAL_SECONDS)
     }, AUTO_REFRESH_INTERVAL_SECONDS * 1000)
 
     const countdownIntervalId = setInterval(() => {
+      if (isPausedRef.current) return
       setCountdown((prev) => {
         if (prev <= 1) {
           return AUTO_REFRESH_INTERVAL_SECONDS
@@ -111,6 +152,8 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
         setAutoRefresh,
         countdown,
         disableAutoRefresh,
+        isDetailOpen,
+        setIsDetailOpen,
       }}
     >
       {children}

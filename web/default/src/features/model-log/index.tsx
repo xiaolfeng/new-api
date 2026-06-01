@@ -9,6 +9,7 @@ import {
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -21,8 +22,16 @@ import { useModelLogData } from './hooks/use-model-log-data'
 import { SummaryCards } from './components/summary-cards'
 import { ModelFilter } from './components/model-filter'
 import { ModelLogCharts, getChartColors } from './components/model-log-charts'
+import { TokenHeatmap } from './components/token-heatmap'
 import { SORT_OPTIONS } from './constants'
 import type { SortField, TokenRecordRecentItem } from './types'
+
+const TIME_RANGE_OPTIONS = [
+  { value: '1', labelKey: '1h' },
+  { value: '6', labelKey: '6h' },
+  { value: '24', labelKey: '24h' },
+  { value: '168', labelKey: '7d' },
+]
 
 function sortItems(
   items: TokenRecordRecentItem[],
@@ -79,8 +88,19 @@ function SummaryCardsSkeleton() {
 
 export function ModelLogPage() {
   const { t } = useTranslation()
-  const { loading, refreshing, items, summary, lastUpdatedAt, refreshData } =
-    useModelLogData()
+  const {
+    loading,
+    refreshing,
+    items,
+    summary,
+    lastUpdatedAt,
+    refreshData,
+    timeRange,
+    setTimeRange,
+    autoRefresh,
+    setAutoRefresh,
+    countdown,
+  } = useModelLogData()
 
   const [sortField, setSortField] = useState<SortField>('total_tokens')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
@@ -140,12 +160,12 @@ export function ModelLogPage() {
     setSelectedModels(new Set())
   }, [])
 
-  const handleSort = (field: string) => {
-    const f = field as SortField
-    if (f === sortField) {
+  const handleSort = (field: SortField | null) => {
+    if (!field) return
+    if (field === sortField) {
       setSortDirection((prev) => (prev === 'asc' ? 'desc' : 'asc'))
     } else {
-      setSortField(f)
+      setSortField(field)
       setSortDirection('desc')
     }
   }
@@ -158,11 +178,6 @@ export function ModelLogPage() {
           {t('Model Log')}
         </div>
       </SectionPageLayout.Title>
-      <SectionPageLayout.Description>
-        {t(
-          'Showing successful request output token aggregation, cumulative time, and average TPS for the last 24 hours.'
-        )}
-      </SectionPageLayout.Description>
       <SectionPageLayout.Actions>
         <div className='flex flex-wrap items-center gap-2'>
           {lastUpdatedAt > 0 && (
@@ -171,6 +186,21 @@ export function ModelLogPage() {
               {new Date(lastUpdatedAt * 1000).toLocaleString()}
             </span>
           )}
+          <Select
+            value={String(timeRange)}
+            onValueChange={(value) => setTimeRange(Number(value))}
+          >
+            <SelectTrigger className='h-8 w-[90px]'>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TIME_RANGE_OPTIONS.map((opt) => (
+                <SelectItem key={opt.value} value={opt.value}>
+                  {opt.labelKey}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           <Select value={sortField} onValueChange={handleSort}>
             <SelectTrigger className='h-8 w-[130px]'>
               <SelectValue />
@@ -211,6 +241,21 @@ export function ModelLogPage() {
             />
             {t('Refresh')}
           </Button>
+          <div className='flex items-center gap-1.5'>
+            <Switch
+              size='sm'
+              checked={autoRefresh}
+              onCheckedChange={setAutoRefresh}
+            />
+            <span className='text-muted-foreground text-xs'>
+              {t('Auto refresh')}
+            </span>
+            {autoRefresh && (
+              <span className='text-muted-foreground/60 font-mono text-xs tabular-nums'>
+                {countdown}s
+              </span>
+            )}
+          </div>
         </div>
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
@@ -221,13 +266,19 @@ export function ModelLogPage() {
             <SummaryCards summary={summary} />
           ) : null}
 
+          {!loading && (
+            <div className='mt-4'>
+              <TokenHeatmap />
+            </div>
+          )}
+
           {loading ? (
             <div className='flex justify-center py-16'>
               <RefreshCw className='text-muted-foreground size-8 animate-spin' />
             </div>
           ) : items.length === 0 ? (
             <div className='text-muted-foreground flex justify-center py-16 text-sm'>
-              {t('No model log data in the last 24 hours')}
+              {t('No model log data in the selected time range')}
             </div>
           ) : (
             <div className='space-y-3'>

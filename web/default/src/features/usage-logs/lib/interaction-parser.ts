@@ -167,7 +167,7 @@ function inferOpenAIStructuredInteractionType(
   const hasToolResponse = toolResponses.length > 0
   const hasTextOutput = responseBlocks.some(
     (block) =>
-      (block.type === 'content' || block.type === 'reasoning') &&
+      (block.type === 'content' || block.type === 'reasoning' || block.type === 'output_text') &&
       typeof block.content === 'string' &&
       block.content.trim() !== ''
   )

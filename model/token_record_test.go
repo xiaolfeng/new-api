@@ -94,7 +94,7 @@ func TestGetRecentTokenRecordSnapshotBackfillsHours(t *testing.T) {
 	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 40, 10, 5, currentBucketStartAt+120))
 	require.NoError(t, RecordTokenRecord("gpt-5", 70, 30, 0, currentBucketStartAt+300))
 
-	snapshot, err := GetRecentTokenRecordSnapshot(currentBucketStartAt + 900)
+	snapshot, err := GetRecentTokenRecordSnapshot(currentBucketStartAt+900, 24)
 	require.NoError(t, err)
 	require.Len(t, snapshot.Hours, 24)
 	require.Len(t, snapshot.Items, 2)
