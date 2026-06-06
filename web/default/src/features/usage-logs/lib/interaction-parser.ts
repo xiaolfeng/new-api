@@ -173,10 +173,10 @@ function inferOpenAIStructuredInteractionType(
   )
   const hasToolUse = responseBlocks.some((block) => block.type === 'tool_call')
 
-  if (hasToolResponse) return 'callback'
-  if (hasToolUse) return 'callback'
-  if (!hasRequestInput && hasTextOutput) return 'output'
   if (hasRequestInput) return 'input'
+  if (hasToolUse) return 'callback'
+  if (hasTextOutput) return 'output'
+  if (hasToolResponse) return 'callback'
   if (responseBlocks.length > 0) return 'callback'
 
   return null

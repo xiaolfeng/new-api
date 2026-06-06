@@ -408,16 +408,14 @@ func inferOpenAIStructuredInteractionType(
 	}
 
 	switch {
-	case hasRequestInput && !hasToolResponse && !hasToolUse:
+	case hasRequestInput:
 		return "输入"
 	case hasToolUse:
 		return "回调"
+	case hasTextOutput:
+		return "输出"
 	case hasToolResponse:
 		return "回调"
-	case !hasRequestInput && hasTextOutput:
-		return "输出"
-	case hasRequestInput:
-		return "输入"
 	case len(responseBlocks) > 0:
 		return "回调"
 	default:

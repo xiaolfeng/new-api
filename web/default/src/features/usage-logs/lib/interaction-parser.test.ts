@@ -128,7 +128,7 @@ describe('parseInteractionType', () => {
     expect(parseInteractionType(record)).toBe('output')
   })
 
-  it('prioritizes openai tool calls as callback over request input', () => {
+  it('prioritizes request input over openai tool calls', () => {
     const record = {
       openaiRequestBlocks: [
         { type: 'text', role: 'user', text: 'Run command' },
@@ -139,7 +139,18 @@ describe('parseInteractionType', () => {
         { type: 'tool_call', id: 'call_1', name: 'exec_command' },
       ],
     }
-    expect(parseInteractionType(record)).toBe('callback')
+    expect(parseInteractionType(record)).toBe('input')
+  })
+
+  it('detects openai tool response with text output as output', () => {
+    const record = {
+      openaiRequestBlocks: [],
+      openaiToolResponses: [
+        { type: 'tool', role: 'tool', toolCallId: 'call_1' },
+      ],
+      openaiResponseBlocks: [{ type: 'content', content: 'Task done' }],
+    }
+    expect(parseInteractionType(record)).toBe('output')
   })
 
   it('detects openai tool responses as callback', () => {
