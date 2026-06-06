@@ -131,7 +131,7 @@ func TestExtractLogDetailSummariesOpenAIToolCallIsCallback(t *testing.T) {
 	require.NoError(t, err)
 
 	_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
-	require.Equal(t, "回调", interactionType)
+	require.Equal(t, "输入", interactionType)
 }
 
 func TestAppendAdminLogSummaries(t *testing.T) {
@@ -248,7 +248,7 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 			expected: "输出",
 		},
 		{
-			name: "有用户输入且有tool use → 回调",
+			name: "有用户输入且有tool use → 输入",
 			requestBlocks: []OpenAIRequestBlock{
 				{Type: "text", Role: "user", Text: "执行命令"},
 			},
@@ -257,7 +257,7 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 				{Type: "content", Content: "我来处理"},
 				{Type: "tool_call", ID: "call_1", Name: "exec_command"},
 			},
-			expected: "回调",
+			expected: "输入",
 		},
 		{
 			name:          "有tool use和tool response但无requestBlocks → 回调",
@@ -278,6 +278,17 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 				{Type: "content", Content: ""},
 			},
 			expected: "回调",
+		},
+		{
+			name:          "有tool response且无tool use有文本输出 → 输出",
+			requestBlocks: nil,
+			toolResponses: []OpenAIToolResponseBlock{
+				{ToolCallID: "call_1", Name: "exec", Type: "tool", Role: "tool"},
+			},
+			responseBlocks: []OpenAIResponseBlock{
+				{Type: "content", Content: "任务完成了"},
+			},
+			expected: "输出",
 		},
 		{
 			name: "requestBlock有空text → 不算有输入",
