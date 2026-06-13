@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
+import dayjs from '@/lib/dayjs'
 import { useEffect, useState, useMemo } from 'react'
 import type { TokenRecordDailyItem } from '../types'
 
@@ -39,7 +40,7 @@ function getLevel(value: number, thresholds: number[]): number {
 }
 
 export function TokenHeatmap() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const [data, setData] = useState<TokenRecordDailyItem[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -88,13 +89,14 @@ export function TokenHeatmap() {
     const weeks: DayCell[][] = []
     const seenMonths = new Set<string>()
     const monthLabels: { weekIndex: number; month: string }[] = []
+    const monthFormatter = new Intl.DateTimeFormat(i18n.language, { month: 'short' })
 
     for (let week = 0; week < 52; week++) {
       const days: DayCell[] = []
       for (let day = 0; day < 7; day++) {
         const d = new Date(startDate)
         d.setDate(d.getDate() + week * 7 + day)
-        const dateStr = d.toISOString().slice(0, 10)
+        const dateStr = dayjs(d).format('YYYY-MM-DD')
         const tokens = dataMap.get(dateStr)?.total_tokens || 0
 
         days.push({
@@ -106,21 +108,33 @@ export function TokenHeatmap() {
       weeks.push(days)
 
       const firstDayOfWeek = days[0].date
-      const d = new Date(firstDayOfWeek)
-      if (d.getDate() <= 7) {
-        const monthKey = `${d.getFullYear()}-${d.getMonth()}`
+      const firstDay = dayjs(firstDayOfWeek)
+      if (firstDay.date() <= 7) {
+        const monthKey = firstDay.format('YYYY-M')
         if (!seenMonths.has(monthKey)) {
           seenMonths.add(monthKey)
           monthLabels.push({
             weekIndex: week,
-            month: d.toLocaleString('en-US', { month: 'short' }),
+            month: monthFormatter.format(firstDay.toDate()),
+          })
+        }
+      }
+
+      // Mark the first month even if its first visible day is after the 7th
+      if (week === 0) {
+        const firstMonthKey = firstDay.format('YYYY-M')
+        if (!seenMonths.has(firstMonthKey)) {
+          seenMonths.add(firstMonthKey)
+          monthLabels.unshift({
+            weekIndex: 0,
+            month: monthFormatter.format(firstDay.toDate()),
           })
         }
       }
     }
 
     return { weeks, monthLabels }
-  }, [data])
+  }, [data, i18n.language])
 
   if (loading) {
     return (
@@ -133,6 +147,14 @@ export function TokenHeatmap() {
 
   const gridHeight = 7 * 11 + 6 * 3
 
+  // Generate localized short weekday names (Mon, Wed, Fri equivalents)
+  const weekdayFormatter = new Intl.DateTimeFormat(i18n.language, { weekday: 'short' })
+  const monLabel = weekdayFormatter.format(new Date(2024, 0, 1)) // Jan 1, 2024 = Monday
+  const wedLabel = weekdayFormatter.format(new Date(2024, 0, 3)) // Jan 3, 2024 = Wednesday
+  const friLabel = weekdayFormatter.format(new Date(2024, 0, 5)) // Jan 5, 2024 = Friday
+
+  const hasActivity = data.some((item) => item.total_tokens > 0)
+
   return (
     <div className='rounded-xl border bg-card p-4'>
       <h3 className='mb-3 text-sm font-medium'>{t('Token Usage Heatmap')}</h3>
@@ -142,9 +164,9 @@ export function TokenHeatmap() {
           className='text-muted-foreground flex flex-col justify-between py-0 pr-2 text-[10px] leading-[11px]'
           style={{ height: `${gridHeight}px` }}
         >
-          <span>Mon</span>
-          <span>Wed</span>
-          <span>Fri</span>
+          <span>{monLabel}</span>
+          <span>{wedLabel}</span>
+          <span>{friLabel}</span>
         </div>
 
         <div className='overflow-x-auto'>
@@ -174,12 +196,17 @@ export function TokenHeatmap() {
               <div
                 key={i}
                 className={`h-[11px] w-[11px] rounded-sm ${HEATMAP_COLORS[day.level]}`}
-                title={`${day.date}: ${day.tokens.toLocaleString()} tokens`}
+                title={`${day.date}: ${day.tokens.toLocaleString()} ${t('tokens')}`}
               />
             ))}
           </div>
         </div>
       </div>
+      {!hasActivity && (
+        <p className='mt-3 text-center text-xs text-muted-foreground'>
+          {t('No token usage data in this period')}
+        </p>
+      )}
     </div>
   )
 }
