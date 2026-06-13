@@ -70,4 +70,10 @@ const (
 	// ContextKeyEmptyResponse 标记上游返回空响应（completion_tokens = 0）
 	// 用于触发空响应重试逻辑
 	ContextKeyEmptyResponse ContextKey = "empty_response"
+
+	// ContextKeyAuditLogged marks that the current request has already recorded
+	// a manage/operation audit log inside the handler. When set, the admin-audit
+	// fallback in authHelper (finishAdminAudit) skips its record to avoid
+	// duplicate entries.
+	ContextKeyAuditLogged ContextKey = "audit_logged"
 )
