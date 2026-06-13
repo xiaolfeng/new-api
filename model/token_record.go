@@ -418,8 +418,8 @@ func GetDailyTokenSummary(startTime, endTime int64) ([]TokenRecordDailyItem, err
 }
 
 func GetUserDailyTokenSummary(userId int, startTime, endTime int64) ([]TokenRecordDailyItem, error) {
-	if DB == nil {
-		return nil, errors.New("db is not initialized")
+	if LOG_DB == nil {
+		return nil, errors.New("log db is not initialized")
 	}
 
 	var dateExpr string
@@ -432,9 +432,9 @@ func GetUserDailyTokenSummary(userId int, startTime, endTime int64) ([]TokenReco
 	}
 
 	var items []TokenRecordDailyItem
-	err := DB.Table("quota_data").
-		Select(fmt.Sprintf("%s as date, SUM(token_used) as total_tokens, 0 as prompt_tokens, 0 as completion_tokens", dateExpr)).
-		Where("user_id = ? AND created_at >= ? AND created_at <= ?", userId, startTime, endTime).
+	err := LOG_DB.Table("logs").
+		Select(fmt.Sprintf("%s as date, SUM(prompt_tokens) as prompt_tokens, SUM(completion_tokens) as completion_tokens, SUM(prompt_tokens) + SUM(completion_tokens) as total_tokens", dateExpr)).
+		Where("user_id = ? AND type = ? AND created_at >= ? AND created_at <= ?", userId, LogTypeConsume, startTime, endTime).
 		Group(dateExpr).
 		Order("date ASC").
 		Scan(&items).Error
