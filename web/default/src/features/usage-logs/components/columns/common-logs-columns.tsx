@@ -562,15 +562,17 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           if (other?.client_source && typeof other.client_source === 'string') {
             const color = stringToHslColor(other.client_source)
             return (
-              <span
-                className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center'
-                style={{
-                  backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
-                  color: color,
-                }}
-              >
-                {other.client_source}
-              </span>
+              <div className='flex justify-center'>
+                <span
+                  className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center'
+                  style={{
+                    backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+                    color: color,
+                  }}
+                >
+                  {other.client_source}
+                </span>
+              </div>
             )
           }
 
@@ -589,15 +591,17 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           if (source.name === '-') return null
           const color = stringToHslColor(source.name)
           return (
-            <span
-              className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center'
-              style={{
-                backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
-                color: color,
-              }}
-            >
-              {source.name}
-            </span>
+            <div className='flex justify-center'>
+              <span
+                className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center'
+                style={{
+                  backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+                  color: color,
+                }}
+              >
+                {source.name}
+              </span>
+            </div>
           )
         } catch {
           return null
@@ -629,7 +633,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const subAgentName = other.agent_name
 
         return (
-          <div className='flex flex-col items-start gap-0.5'>
+          <div className='flex flex-col items-center gap-0.5'>
             {mainSessionName && (() => {
               const badge = getBadgeStyle(`session-${mainSessionName}`)
               return (
@@ -688,11 +692,13 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const badge = getBadgeStyle(`interaction-type-${interactionType}`)
 
         return (
-          <span
-            className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center ${badge.bg} ${badge.text}`}
-          >
-            {labelMap[interactionType] || interactionType}
-          </span>
+          <div className='flex justify-center'>
+            <span
+              className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center ${badge.bg} ${badge.text}`}
+            >
+              {labelMap[interactionType] || interactionType}
+            </span>
+          </div>
         )
       },
       meta: { label: t('Interaction'), mobileHidden: true },

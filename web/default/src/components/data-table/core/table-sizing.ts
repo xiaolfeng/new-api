@@ -26,5 +26,5 @@ export function getTableSizeStyle<TData>(
     .getVisibleLeafColumns()
     .reduce((total, column) => total + column.getSize(), 0)
 
-  return { minWidth: width, tableLayout: 'fixed', width: '100%' }
+  return { minWidth: width, width: '100%' }
 }
