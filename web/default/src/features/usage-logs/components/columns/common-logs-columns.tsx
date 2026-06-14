@@ -21,6 +21,7 @@ import { type ColumnDef } from '@tanstack/react-table'
 import { CircleAlert, Sparkles, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
+import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import {
   formatUseTime,
@@ -53,7 +54,6 @@ import {
   type InteractionType,
 } from '../../lib/interaction-parser'
 import { parseClientSource } from '../../lib/source-parser'
-import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -564,7 +564,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             return (
               <div className='flex justify-center'>
                 <span
-                  className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center'
+                  className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-center text-xs font-medium'
                   style={{
                     backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
                     color: color,
@@ -593,7 +593,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           return (
             <div className='flex justify-center'>
               <span
-                className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center'
+                className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-center text-xs font-medium'
                 style={{
                   backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
                   color: color,
@@ -621,29 +621,37 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (!isDisplayableLogType(log.type)) return null
 
         const other = parseLogOther(log.other)
-        if (!other?.session_name && !other?.agent_name && !other?.parent_session_id) return null
+        if (
+          !other?.session_name &&
+          !other?.agent_name &&
+          !other?.parent_session_id
+        )
+          return null
 
         // When parent_session_id exists, the parent is the main conversation
         // and the current session is the sub-agent/child session.
         // When no parent, session_name is the main conversation and
         // agent_name is the sub-agent.
         const hasParent = !!other.parent_session_name
-        const mainSessionName = hasParent ? other.parent_session_name : other.session_name
+        const mainSessionName = hasParent
+          ? other.parent_session_name
+          : other.session_name
         const subSessionName = hasParent ? other.session_name : null
         const subAgentName = other.agent_name
 
         return (
           <div className='flex flex-col items-center gap-0.5'>
-            {mainSessionName && (() => {
-              const badge = getBadgeStyle(`session-${mainSessionName}`)
-              return (
-                <span
-                  className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
-                >
-                  {mainSessionName}
-                </span>
-              )
-            })()}
+            {mainSessionName &&
+              (() => {
+                const badge = getBadgeStyle(`session-${mainSessionName}`)
+                return (
+                  <span
+                    className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
+                  >
+                    {mainSessionName}
+                  </span>
+                )
+              })()}
             {subSessionName && (
               <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                 ↳ {subSessionName}
@@ -694,7 +702,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         return (
           <div className='flex justify-center'>
             <span
-              className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium text-center ${badge.bg} ${badge.text}`}
+              className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-center text-xs font-medium ${badge.bg} ${badge.text}`}
             >
               {labelMap[interactionType] || interactionType}
             </span>
@@ -726,20 +734,27 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         if (!hasValidTps && avgTps == null) return null
 
+        // When the upstream-reported tps is missing, fall back to the
+        // tokens/time derived average so the colored display is still filled.
+        const displayTps = hasValidTps ? (tps as number) : avgTps
+
         let colorClass = 'text-red-600 dark:text-red-400'
-        if (hasValidTps) {
-          if (tps >= 81) colorClass = 'text-green-600 dark:text-green-400'
-          else if (tps >= 51) colorClass = 'text-lime-600 dark:text-lime-400'
-          else if (tps >= 11) colorClass = 'text-yellow-600 dark:text-yellow-400'
+        if (displayTps != null) {
+          if (displayTps >= 81)
+            colorClass = 'text-green-600 dark:text-green-400'
+          else if (displayTps >= 51)
+            colorClass = 'text-lime-600 dark:text-lime-400'
+          else if (displayTps >= 11)
+            colorClass = 'text-yellow-600 dark:text-yellow-400'
         }
 
         return (
           <div className='flex flex-col gap-0.5'>
-            {hasValidTps && (
+            {displayTps != null && (
               <span
                 className={`font-mono text-sm font-medium tabular-nums ${colorClass}`}
               >
-                {tps.toFixed(1)}
+                {displayTps.toFixed(1)}
               </span>
             )}
             {avgTps != null && (
@@ -827,7 +842,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <Tooltip>
                       <TooltipTrigger
                         render={
-                          <CircleAlert className='size-3 text-red-500 shrink-0' />
+                          <CircleAlert className='size-3 shrink-0 text-red-500' />
                         }
                       ></TooltipTrigger>
                       <TooltipContent>
