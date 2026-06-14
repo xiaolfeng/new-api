@@ -212,6 +212,46 @@ func TestExtractLogDetailSummariesSessionAffinityPriority(t *testing.T) {
 	require.Equal(t, "agent_claudecode", agentId)
 }
 
+func TestExtractLogDetailSummariesWithGenericSessionId(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":   "curl/8.0.0",
+			"X-Session-Id": "76784d45-5425-4221-aa69-8c2faadf44ec",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "来自通用客户端的请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	_, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "76784d45-5425-4221-aa69-8c2faadf44ec", sessionId)
+	require.Empty(t, parentSessionId)
+}
+
+func TestExtractLogDetailSummariesWithGenericSessionPriority(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":               "custom-agent/1.0",
+			"X-Session-Id":             "generic-session",
+			"X-Claude-Code-Session-Id": "claude-session",
+			"X-Session-Affinity":       "opencode-session",
+			"X-Claude-Code-Agent-Id":   "agent-123",
+			"X-Parent-Session-Id":      "parent-session",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "优先级测试"},
+		},
+	})
+	require.NoError(t, err)
+
+	_, _, agentId, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	// X-Session-Affinity 最高优先级，应覆盖 X-Claude-Code-Session-Id 和 X-Session-Id
+	require.Equal(t, "opencode-session", sessionId)
+	require.Equal(t, "agent-123", agentId)
+	require.Equal(t, "parent-session", parentSessionId)
+}
+
 func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 	tests := []struct {
 		name           string

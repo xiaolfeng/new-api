@@ -97,12 +97,16 @@ func parseAgentSessionFromHeaders(headers map[string]string) (agentId, sessionId
 	if len(headers) == 0 {
 		return "", "", ""
 	}
-	// OpenCode headers (priority over ClaudeCode)
+	// OpenCode headers (highest priority)
 	sessionId = getHeaderIgnoreCase(headers, "X-Session-Affinity")
 	parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Session-Id")
 	// ClaudeCode headers (fallback)
 	if sessionId == "" {
 		sessionId = getHeaderIgnoreCase(headers, "X-Claude-Code-Session-Id")
+	}
+	// Generic session header (lowest priority, any client can opt in)
+	if sessionId == "" {
+		sessionId = getHeaderIgnoreCase(headers, "X-Session-Id")
 	}
 	agentId = getHeaderIgnoreCase(headers, "X-Claude-Code-Agent-Id")
 	return agentId, sessionId, parentSessionId
