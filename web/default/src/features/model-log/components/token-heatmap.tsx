@@ -52,7 +52,13 @@ export function TokenHeatmap() {
         const res = await api.get('/api/token_record/daily')
         if (!cancelled && res.data?.success !== false) {
           const payload = res.data?.data ?? res.data
-          setData(Array.isArray(payload) ? payload : [])
+          const raw = Array.isArray(payload) ? payload : []
+          // Normalize date to YYYY-MM-DD (PostgreSQL may return "2026-03-26T00:00:00Z")
+          const normalized = raw.map((item) => ({
+            ...item,
+            date: item.date ? dayjs(item.date).format('YYYY-MM-DD') : item.date,
+          }))
+          setData(normalized)
         }
       } catch (err) {
         if (!cancelled) {
