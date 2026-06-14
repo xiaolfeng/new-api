@@ -102,7 +102,12 @@ export function UserHeatmap() {
           data: TokenRecordDailyItem[]
         }>('/api/token_record/daily/self')
         if (!cancelled && res.data?.success !== false) {
-          setData(res.data?.data ?? [])
+          const raw = res.data?.data ?? []
+          const normalized = raw.map((item) => ({
+            ...item,
+            date: item.date ? dayjs(item.date).format('YYYY-MM-DD') : item.date,
+          }))
+          setData(normalized)
         }
       } catch (err) {
         if (!cancelled) {

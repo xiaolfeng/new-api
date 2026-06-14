@@ -340,7 +340,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <div className='flex max-w-[160px] flex-col gap-0.5' />
+                    <div className='flex max-w-[130px] flex-col gap-0.5' />
                   }
                 >
                   <div className='relative inline-flex w-fit'>
@@ -412,6 +412,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             </TooltipProvider>
           )
         },
+        size: 130,
       },
       {
         id: 'user',
@@ -466,6 +467,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             </button>
           )
         },
+        size: 120,
       }
     )
   }
@@ -544,6 +546,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { mobileTitle: true },
+      size: 160,
     },
     {
       id: 'source',
@@ -601,6 +604,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         }
       },
       meta: { label: t('Source'), mobileHidden: true },
+      size: 100,
     },
 
     {
@@ -650,6 +654,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { label: t('Session'), mobileHidden: true },
+      size: 120,
     },
 
     {
@@ -691,6 +696,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { label: t('Interaction'), mobileHidden: true },
+      size: 90,
     },
 
     {
@@ -744,6 +750,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { label: t('TPS'), mobileHidden: true },
+      size: 80,
     },
 
     {
@@ -806,13 +813,10 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   />
                 ))}
             </div>
-            <div className='flex items-center gap-1 [font-family:var(--font-body)] !text-xs leading-none'>
-              <span className='text-muted-foreground/60 [font-family:var(--font-body)] !text-xs leading-none'>
-                {log.is_stream ? t('Stream') : t('Non-stream')}
-              </span>
-              {log.is_stream &&
-                other?.stream_status &&
-                other.stream_status.status !== 'ok' && (
+            {log.is_stream &&
+              other?.stream_status &&
+              other.stream_status.status !== 'ok' && (
+                <div className='flex items-center gap-1 [font-family:var(--font-body)] !text-xs leading-none'>
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger
@@ -836,11 +840,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                )}
-            </div>
+                </div>
+              )}
           </div>
         )
       },
+      size: 110,
     },
 
     {
@@ -889,6 +894,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           </div>
         )
       },
+      size: 110,
     },
 
     {
@@ -941,6 +947,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           </div>
         )
       },
+      size: 90,
     },
 
     {

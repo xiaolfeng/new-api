@@ -392,14 +392,14 @@ func GetDailyTokenSummary(startTime, endTime int64) ([]TokenRecordDailyItem, err
 	if common.UsingSQLite {
 		dateExpr = "DATE(ROUND(bucket_start_at), 'unixepoch')"
 	} else if common.UsingPostgreSQL {
-		dateExpr = "TO_TIMESTAMP(bucket_start_at)::DATE"
+		dateExpr = "TO_CHAR(TO_TIMESTAMP(bucket_start_at)::DATE, 'YYYY-MM-DD')"
 	} else {
 		dateExpr = "DATE(FROM_UNIXTIME(bucket_start_at))"
 	}
 
 	var items []TokenRecordDailyItem
 	err := LOG_DB.Model(&TokenRecord{}).
-		Select(fmt.Sprintf("%s as date, SUM(prompt_tokens) as prompt_tokens, SUM(completion_tokens) as completion_tokens, SUM(total_tokens) as total_tokens", dateExpr)).
+		Select(fmt.Sprintf("%s as date, SUM(prompt_tokens) as prompt_tokens, SUM(completion_tokens) as completion_tokens, SUM(prompt_tokens) + SUM(completion_tokens) as total_tokens", dateExpr)).
 		Where("bucket_start_at >= ? AND bucket_start_at <= ?", startTime, endTime).
 		Group(dateExpr).
 		Order("date ASC").
@@ -426,7 +426,7 @@ func GetUserDailyTokenSummary(userId int, startTime, endTime int64) ([]TokenReco
 	if common.UsingSQLite {
 		dateExpr = "DATE(ROUND(created_at), 'unixepoch')"
 	} else if common.UsingPostgreSQL {
-		dateExpr = "TO_TIMESTAMP(created_at)::DATE"
+		dateExpr = "TO_CHAR(TO_TIMESTAMP(created_at)::DATE, 'YYYY-MM-DD')"
 	} else {
 		dateExpr = "DATE(FROM_UNIXTIME(created_at))"
 	}
