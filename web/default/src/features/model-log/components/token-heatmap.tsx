@@ -1,7 +1,7 @@
+import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import { api } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
-import { useEffect, useState, useMemo } from 'react'
 import type { TokenRecordDailyItem } from '../types'
 
 interface DayCell {
@@ -95,7 +95,9 @@ export function TokenHeatmap() {
     const weeks: DayCell[][] = []
     const seenMonths = new Set<string>()
     const monthLabels: { weekIndex: number; month: string }[] = []
-    const monthFormatter = new Intl.DateTimeFormat(i18n.language, { month: 'short' })
+    const monthFormatter = new Intl.DateTimeFormat(i18n.language, {
+      month: 'short',
+    })
 
     for (let week = 0; week < 52; week++) {
       const days: DayCell[] = []
@@ -144,17 +146,20 @@ export function TokenHeatmap() {
 
   if (loading) {
     return (
-    <div className='rounded-xl border bg-card p-4' data-testid='system-heatmap'>
+      <div
+        className='bg-card rounded-lg border p-4'
+        data-testid='system-heatmap'
+      >
         <div className='bg-muted mb-3 h-4 w-40 animate-pulse rounded' />
         <div className='bg-muted h-[110px] animate-pulse rounded' />
       </div>
     )
   }
 
-  const gridHeight = 7 * 11 + 6 * 3
-
   // Generate localized short weekday names (Mon, Wed, Fri equivalents)
-  const weekdayFormatter = new Intl.DateTimeFormat(i18n.language, { weekday: 'short' })
+  const weekdayFormatter = new Intl.DateTimeFormat(i18n.language, {
+    weekday: 'short',
+  })
   const monLabel = weekdayFormatter.format(new Date(2024, 0, 1)) // Jan 1, 2024 = Monday
   const wedLabel = weekdayFormatter.format(new Date(2024, 0, 3)) // Jan 3, 2024 = Wednesday
   const friLabel = weekdayFormatter.format(new Date(2024, 0, 5)) // Jan 5, 2024 = Friday
@@ -162,17 +167,23 @@ export function TokenHeatmap() {
   const hasActivity = data.some((item) => item.total_tokens > 0)
 
   return (
-    <div className='rounded-xl border bg-card p-4'>
+    <div className='bg-card rounded-lg border p-4'>
       <h3 className='mb-3 text-sm font-medium'>{t('Token Usage Heatmap')}</h3>
 
       <div className='flex items-start'>
-        <div
-          className='text-muted-foreground flex flex-col justify-between py-0 pr-2 text-[10px] leading-[11px]'
-          style={{ height: `${gridHeight}px` }}
-        >
-          <span>{monLabel}</span>
-          <span>{wedLabel}</span>
-          <span>{friLabel}</span>
+        <div className='text-muted-foreground flex flex-col gap-[3px] pt-5 pr-2 text-[10px]'>
+          <span className='flex h-[11px] items-center leading-[11px]'>
+            {monLabel}
+          </span>
+          <span className='h-[11px]' />
+          <span className='flex h-[11px] items-center leading-[11px]'>
+            {wedLabel}
+          </span>
+          <span className='h-[11px]' />
+          <span className='flex h-[11px] items-center leading-[11px]'>
+            {friLabel}
+          </span>
+          <span className='h-[11px]' />
         </div>
 
         <div className='overflow-x-auto'>
@@ -209,7 +220,7 @@ export function TokenHeatmap() {
         </div>
       </div>
       {!hasActivity && (
-        <p className='mt-3 text-center text-xs text-muted-foreground'>
+        <p className='text-muted-foreground mt-3 text-center text-xs'>
           {t('No token usage data in this period')}
         </p>
       )}
