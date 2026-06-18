@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	appconstant "github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/relay/bamboo"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -67,6 +69,43 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
 	}
 
+	// Responses→ChatCompletions 旁路：无论 bamboo 开关都走原生。
+	// 这个旁路依赖 adaptor 错误探测，bamboo 路径无法替代，必须保留。
+	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
+	if info.RelayMode != relayconstant.RelayModeResponsesCompact &&
+		!passThroughGlobal &&
+		!info.ChannelSetting.PassThroughBodyEnabled &&
+		openaicompat.ShouldResponsesUseChatCompletionsCached(info) {
+		return originalResponsesRelay(c, info, request, responsesReq)
+	}
+
+	// bamboo 中继桥：灰度开启时由 bamboo 替代协议转换三段式内核
+	if model_setting.GetBambooSettings().EnableBambooRelay {
+		bodyBytes, mErr := common.Marshal(request)
+		if mErr != nil {
+			return types.NewError(mErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		usage, relayErr := bamboo.ChatRelay(c, info, types.RelayFormatOpenAIResponses, bodyBytes)
+		if relayErr != nil {
+			if errors.Is(relayErr, bamboo.ErrUnsupportedProvider) {
+				return originalResponsesRelay(c, info, request, responsesReq)
+			}
+			return relayErr
+		}
+		postResponsesUsageQuota(c, info, usage)
+		return nil
+	}
+
+	return originalResponsesRelay(c, info, request, responsesReq)
+}
+
+// originalResponsesRelay 是 new-api 原生三段式中继，作为 bamboo 未覆盖渠道的 fallback。
+//
+// 含 ConvertOpenAIResponsesRequest→DoRequest→DoResponse 完整三段式，
+// 以及 Responses→ChatCompletions 动态降级（错误探测）机制。
+// bamboo 灰度关闭或 ErrUnsupportedProvider 时调用，行为与改造前完全一致。
+func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
+	request *dto.OpenAIResponsesRequest, responsesReq *dto.OpenAIResponsesRequest) (newAPIError *types.NewAPIError) {
 	adaptor := GetAdaptor(info.ApiType)
 	if adaptor == nil {
 		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
