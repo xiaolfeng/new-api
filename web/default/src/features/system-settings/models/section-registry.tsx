@@ -166,6 +166,10 @@ const MODELS_SECTIONS = [
             responses_to_chat_completions_enabled:
               settings['global.responses_to_chat_completions_enabled'] ?? false,
           },
+          bamboo: {
+            enable_bamboo_relay:
+              settings['bamboo.enable_bamboo_relay'] ?? false,
+          },
           retry_setting: {
             record_consume_log_detail_enabled:
               settings['retry_setting.record_consume_log_detail_enabled'] ??
