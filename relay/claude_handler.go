@@ -2,6 +2,7 @@ package relay
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/relay/bamboo"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
@@ -131,6 +133,45 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			}
 		}
 	}
+
+	// chatCompletionsViaResponses 旁路：无论 bamboo 开关都走原生，确保行为不变
+	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
+		!info.ChannelSetting.PassThroughBodyEnabled &&
+		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		return originalClaudeRelay(c, info, request)
+	}
+
+	// bamboo 中继桥：灰度开启时由 bamboo 替代协议转换三段式内核
+	if model_setting.GetBambooSettings().EnableBambooRelay {
+		bodyBytes, mErr := common.Marshal(request)
+		if mErr != nil {
+			return types.NewError(mErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+		}
+		usage, relayErr := bamboo.ChatRelay(c, info, types.RelayFormatClaude, bodyBytes)
+		if relayErr != nil {
+			if errors.Is(relayErr, bamboo.ErrUnsupportedProvider) {
+				return originalClaudeRelay(c, info, request)
+			}
+			return relayErr
+		}
+		service.PostTextConsumeQuota(c, info, usage, nil)
+		return nil
+	}
+
+	return originalClaudeRelay(c, info, request)
+}
+
+// originalClaudeRelay 是 new-api 原生三段式中继，作为 bamboo 未覆盖渠道的 fallback。
+//
+// 含 ConvertClaudeRequest→DoRequest→DoResponse 完整三段式，
+// 以及 pass-through / chatCompletionsViaResponses 旁路的原始实现。
+// bamboo 灰度关闭或 ErrUnsupportedProvider 时调用，行为与改造前完全一致。
+func originalClaudeRelay(c *gin.Context, info *relaycommon.RelayInfo, request *dto.ClaudeRequest) (newAPIError *types.NewAPIError) {
+	adaptor := GetAdaptor(info.ApiType)
+	if adaptor == nil {
+		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
+	}
+	adaptor.Init(info)
 
 	if !model_setting.GetGlobalSettings().PassThroughRequestEnabled &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
