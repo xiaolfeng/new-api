@@ -41,6 +41,9 @@ const customizationSchema = z.object({
   global: z.object({
     responses_to_chat_completions_enabled: z.boolean(),
   }),
+  bamboo: z.object({
+    enable_bamboo_relay: z.boolean(),
+  }),
   retry_setting: z.object({
     record_consume_log_detail_enabled: z.boolean(),
     full_log_consume_enabled: z.boolean(),
@@ -154,6 +157,31 @@ export function CustomizationSection({
                   <FormDescription>
                     {t(
                       "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API."
+                    )}
+                  </FormDescription>
+                </div>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </FormItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='bamboo.enable_bamboo_relay'
+            render={({ field }) => (
+              <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
+                <div className='space-y-0.5'>
+                  <FormLabel className='text-base'>
+                    {t('Bamboo Relay Bridge')}
+                  </FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.'
                     )}
                   </FormDescription>
                 </div>
