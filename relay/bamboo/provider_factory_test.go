@@ -2,24 +2,32 @@ package bamboo
 
 import (
 	"errors"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/types"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
 )
 
 // makeInfo 构造一个最小可用的 RelayInfo（补 apiKey/baseURL 避免 provider 空值 panic）。
 // 注意：RelayInfo 通过指针嵌入 *ChannelMeta（relay_info.go:198），
 // 必须显式初始化 ChannelMeta，否则访问 ApiType/ApiKey 等提升字段会 nil 解引用 panic。
 func makeInfo(apiType int) *relaycommon.RelayInfo {
-	info := &relaycommon.RelayInfo{
+	return makeInfoWithBaseURL(apiType, "https://api.example.com")
+}
+
+// makeInfoWithBaseURL 构造指定 baseURL 的 RelayInfo，用于测试 coding-plan 快捷 URL。
+func makeInfoWithBaseURL(apiType int, baseURL string) *relaycommon.RelayInfo {
+	return &relaycommon.RelayInfo{
 		ChannelMeta: &relaycommon.ChannelMeta{
-			ApiType:         apiType,
-			ApiKey:          "test-key",
-			ChannelBaseUrl:  "https://api.example.com",
+			ApiType:        apiType,
+			ApiKey:         "test-key",
+			ChannelBaseUrl: baseURL,
 		},
 	}
-	return info
 }
 
 func TestNewProvider_SupportedOpenAICompatible(t *testing.T) {
@@ -41,7 +49,7 @@ func TestNewProvider_SupportedOpenAICompatible(t *testing.T) {
 	}
 	for _, apiType := range supportedTypes {
 		info := makeInfo(apiType)
-		p, err := newProvider(info)
+		p, err := newProvider(nil, info)
 		if err != nil {
 			t.Errorf("APIType %d: expected nil err, got %v", apiType, err)
 			continue
@@ -60,7 +68,7 @@ func TestNewProvider_SupportedNativeProtocols(t *testing.T) {
 	}
 	for _, apiType := range nativeTypes {
 		info := makeInfo(apiType)
-		p, err := newProvider(info)
+		p, err := newProvider(nil, info)
 		if err != nil {
 			t.Errorf("APIType %d: expected nil err, got %v", apiType, err)
 			continue
@@ -85,7 +93,7 @@ func TestNewProvider_UnsupportedReturnsFallback(t *testing.T) {
 	}
 	for _, apiType := range unsupportedTypes {
 		info := makeInfo(apiType)
-		p, err := newProvider(info)
+		p, err := newProvider(nil, info)
 		if p != nil {
 			t.Errorf("APIType %d: expected nil provider for unsupported", apiType)
 			continue
@@ -99,4 +107,112 @@ func TestNewProvider_UnsupportedReturnsFallback(t *testing.T) {
 			t.Errorf("APIType %d: expected ErrUnsupportedProvider in chain, got %v", apiType, err)
 		}
 	}
+}
+
+// === S1: coding-plan 快捷 URL 映射 — OpenAI 格式 ===
+
+func TestResolveBaseURL_CodingPlanOpenAI(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		format   types.RelayFormat
+		expected string
+	}{
+		{
+			name:     "glm-coding-plan OpenAI",
+			baseURL:  "glm-coding-plan",
+			format:   types.RelayFormatOpenAI,
+			expected: "https://open.bigmodel.cn/api/coding/paas/v4",
+		},
+		{
+			name:     "kimi-coding-plan OpenAI",
+			baseURL:  "kimi-coding-plan",
+			format:   types.RelayFormatOpenAI,
+			expected: "https://api.kimi.com/coding/v1",
+		},
+		{
+			name:     "doubao-coding-plan OpenAI",
+			baseURL:  "doubao-coding-plan",
+			format:   types.RelayFormatOpenAI,
+			expected: "https://ark.cn-beijing.volces.com/api/coding/v3",
+		},
+		{
+			name:     "glm-coding-plan-international OpenAI",
+			baseURL:  "glm-coding-plan-international",
+			format:   types.RelayFormatOpenAI,
+			expected: "https://api.z.ai/api/coding/paas/v4",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := makeInfoWithBaseURL(constant.APITypeZhipuV4, tt.baseURL)
+			info.RelayFormat = tt.format
+			got := resolveBaseURL(info)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// === S2: coding-plan 快捷 URL 映射 — Claude 格式 ===
+
+func TestResolveBaseURL_CodingPlanClaude(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		expected string
+	}{
+		{
+			name:     "glm-coding-plan Claude",
+			baseURL:  "glm-coding-plan",
+			expected: "https://open.bigmodel.cn/api/anthropic",
+		},
+		{
+			name:     "kimi-coding-plan Claude",
+			baseURL:  "kimi-coding-plan",
+			expected: "https://api.kimi.com/coding",
+		},
+		{
+			name:     "doubao-coding-plan Claude",
+			baseURL:  "doubao-coding-plan",
+			expected: "https://ark.cn-beijing.volces.com/api/coding",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := makeInfoWithBaseURL(constant.APITypeZhipuV4, tt.baseURL)
+			info.RelayFormat = types.RelayFormatClaude
+			got := resolveBaseURL(info)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// === S4: 普通 URL 不受影响 ===
+
+func TestResolveBaseURL_NormalURL(t *testing.T) {
+	info := makeInfoWithBaseURL(constant.APITypeOpenAI, "https://api.openai.com")
+	info.RelayFormat = types.RelayFormatOpenAI
+	got := resolveBaseURL(info)
+	assert.Equal(t, "https://api.openai.com", got)
+}
+
+// === S3: 自定义 header 透传 ===
+
+func TestNewProvider_CustomHeadersForwarded(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	w := httptest.NewRecorder()
+	c, _ := gin.CreateTestContext(w)
+	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+
+	info := makeInfo(constant.APITypeOpenAI)
+	info.HeadersOverride = map[string]interface{}{
+		"X-Tenant-Id": "tenant-123",
+		"X-Trace-Id":  "trace-456",
+	}
+
+	p, err := newProvider(c, info)
+	if err != nil {
+		t.Fatalf("expected no error, got: %v (type: %T)", err, err)
+	}
+	assert.NotNil(t, p)
 }
