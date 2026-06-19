@@ -169,6 +169,8 @@ const MODELS_SECTIONS = [
           bamboo: {
             enable_bamboo_relay:
               settings['bamboo.enable_bamboo_relay'] ?? false,
+            enable_bamboo_debug_log:
+              settings['bamboo.enable_bamboo_debug_log'] ?? false,
           },
           retry_setting: {
             record_consume_log_detail_enabled:

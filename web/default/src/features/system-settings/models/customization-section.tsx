@@ -43,6 +43,7 @@ const customizationSchema = z.object({
   }),
   bamboo: z.object({
     enable_bamboo_relay: z.boolean(),
+    enable_bamboo_debug_log: z.boolean(),
   }),
   retry_setting: z.object({
     record_consume_log_detail_enabled: z.boolean(),
@@ -194,6 +195,33 @@ export function CustomizationSection({
               </FormItem>
             )}
           />
+
+          {form.watch('bamboo.enable_bamboo_relay') && (
+            <FormField
+              control={form.control}
+              name='bamboo.enable_bamboo_debug_log'
+              render={({ field }) => (
+                <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-800 dark:bg-amber-950/50'>
+                  <div className='space-y-0.5'>
+                    <FormLabel className='text-base'>
+                      {t('Bamboo Debug Log')}
+                    </FormLabel>
+                    <FormDescription>
+                      {t(
+                        'Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.'
+                      )}
+                    </FormDescription>
+                  </div>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+          )}
 
           <div className='space-y-4'>
             <FormField
