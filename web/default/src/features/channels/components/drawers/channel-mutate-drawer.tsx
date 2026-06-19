@@ -104,6 +104,7 @@ import {
   SecureVerificationDialog,
   useSecureVerification,
 } from '@/features/auth/secure-verification'
+import { useSystemOptions } from '@/features/system-settings/hooks/use-system-options'
 import {
   fetchModels,
   getAllModels,
@@ -301,6 +302,14 @@ export function ChannelMutateDrawer({
 
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
+
+  const { data: systemOptionsData } = useSystemOptions()
+  const bambooRelayEnabled = useMemo(() => {
+    const opt = systemOptionsData?.data?.find(
+      (o) => o.key === 'bamboo.enable_bamboo_relay'
+    )
+    return opt?.value === 'true'
+  }, [systemOptionsData])
 
   // Fetch channel details if editing
   const { data: channelData, isLoading: isChannelLoading } = useQuery({
@@ -3192,6 +3201,54 @@ export function ChannelMutateDrawer({
                             </FormItem>
                           )}
                         />
+
+                        {bambooRelayEnabled && (
+                          <FormField
+                            control={form.control}
+                            name='bamboo_upstream_format'
+                            render={({ field }) => (
+                              <FormItem className='space-y-2 px-4 py-3'>
+                                <div className='space-y-0.5'>
+                                  <FormLabel>
+                                    {t('Bamboo Upstream Format')}
+                                  </FormLabel>
+                                  <FormDescription>
+                                    {t(
+                                      'Override the upstream protocol format used by bamboo relay. Auto detects based on channel type. Use this to force a specific protocol (e.g., send Anthropic format to an OpenAI-compatible endpoint).'
+                                    )}
+                                  </FormDescription>
+                                </div>
+                                <Select
+                                  value={field.value ?? 'auto'}
+                                  onValueChange={field.onChange}
+                                >
+                                  <FormControl>
+                                    <SelectTrigger className='w-full'>
+                                      <SelectValue />
+                                    </SelectTrigger>
+                                  </FormControl>
+                                  <SelectContent alignItemWithTrigger={false}>
+                                    <SelectItem value='auto'>
+                                      {t('Auto (by channel type)')}
+                                    </SelectItem>
+                                    <SelectItem value='openai'>
+                                      {t('OpenAI Chat Completions')}
+                                    </SelectItem>
+                                    <SelectItem value='anthropic'>
+                                      {t('Anthropic Messages')}
+                                    </SelectItem>
+                                    <SelectItem value='gemini'>
+                                      {t('Google Gemini')}
+                                    </SelectItem>
+                                    <SelectItem value='responses'>
+                                      {t('OpenAI Responses')}
+                                    </SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </FormItem>
+                            )}
+                          />
+                        )}
                       </div>
 
                       <FormField

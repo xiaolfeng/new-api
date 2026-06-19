@@ -1836,7 +1836,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Projets liés",
     "footer.defaultCopyright": "Tous droits réservés.",
-    "footer.new\u0061pi.projectAttributionSuffix": "Tous droits réservés. Conçu et développé par les contributeurs du projet.",
+    "footer.newapi.projectAttributionSuffix": "Tous droits réservés. Conçu et développé par les contributeurs du projet.",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "Pour les canaux ajoutés après le 10 mai 2025, pas besoin de supprimer \".\" des noms de modèles lors du déploiement",
     "For private deployments, format: https://fastgpt.run/api/openapi": "Pour les déploiements privés, format : https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "Imposer une réponse JSON syntaxiquement valide",
@@ -4648,6 +4648,17 @@
     "Zero retention": "Aucune rétention",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Bamboo Relay Bridge": "Pont de relais Bamboo",
+    "Bamboo Debug Log": "Journaux de débogage Bamboo",
+    "Bamboo Upstream Format": "Format amont Bamboo",
+    "Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.": "Activer le relais indépendant du protocole : acheminer les requêtes de chat via le codec unifié bamboo-messages, afin que tout format entrant (OpenAI / Claude / Gemini / Responses) puisse être librement converti vers n'importe quel protocole amont. Les amonts non pris en charge retombent automatiquement vers le chemin de relais natif.",
+    "Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.": "Afficher les journaux de débogage détaillés de la couche provider bamboo-messages, y compris les en-têtes et le corps des requêtes amont (tronqués). Réservé au développement et au débogage — désactiver en production.",
+    "Override the upstream protocol format used by bamboo relay. Auto detects based on channel type. Use this to force a specific protocol (e.g., send Anthropic format to an OpenAI-compatible endpoint).": "Remplacer le format de protocole amont utilisé par le relais bamboo. Auto détecte en fonction du type de canal. Utilisez ceci pour forcer un protocole spécifique (ex. : envoyer le format Anthropic à un endpoint compatible OpenAI).",
+    "Auto (by channel type)": "Auto (par type de canal)",
+    "OpenAI Chat Completions": "OpenAI Chat Completions",
+    "Anthropic Messages": "Anthropic Messages",
+    "Google Gemini": "Google Gemini",
+    "OpenAI Responses": "OpenAI Responses"
   }
 }

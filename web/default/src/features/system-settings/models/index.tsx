@@ -34,6 +34,7 @@ const defaultModelSettings: ModelSettings = {
   'global.chat_completions_to_responses_policy': '{}',
   'global.responses_to_chat_completions_enabled': false,
   'bamboo.enable_bamboo_relay': false,
+  'bamboo.enable_bamboo_debug_log': false,
   'general_setting.ping_interval_enabled': false,
   'general_setting.ping_interval_seconds': 60,
   'gemini.safety_settings': '',

@@ -1836,7 +1836,7 @@
     "footer.columns.related.links.oneApi": "1つのAPI",
     "footer.columns.related.title": "関連プロジェクト",
     "footer.defaultCopyright": "すべての権利を留保します。",
-    "footer.new\u0061pi.projectAttributionSuffix": "すべての権利を留保します。プロジェクトコントリビューターにより設計・開発されています。",
+    "footer.newapi.projectAttributionSuffix": "すべての権利を留保します。プロジェクトコントリビューターにより設計・開発されています。",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "2025 年 5 月 10 日以降に追加されたチャネルの場合、デプロイ時にモデル名から「.」を削除する必要はありません",
     "For private deployments, format: https://fastgpt.run/api/openapi": "プライベートデプロイメントの場合、形式: https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "構文的に有効な JSON 応答を強制",
@@ -4648,6 +4648,17 @@
     "Zero retention": "データ保持なし",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V 4",
-    "Zoom": "ズーム"
+    "Zoom": "ズーム",
+    "Bamboo Relay Bridge": "Bamboo リレーブリッジ",
+    "Bamboo Debug Log": "Bamboo デバッグログ",
+    "Bamboo Upstream Format": "Bamboo 上游フォーマット",
+    "Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.": "プロトコル非依存リレーを有効化：チャットリクエストを bamboo-messages 統合コーデック経由でルーティングし、任意のインバウンド形式（OpenAI / Claude / Gemini / Responses）を任意のアップストリームプロトコルに自由に変換できます。未対応のアップストリームは自動的にネイティブリレーパスにフォールバックします。",
+    "Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.": "bamboo-messages プロバイダーレイヤーの詳細なデバッグログを出力します（アップストリームリクエストヘッダーとボディを含む、途中で切り捨て）。開発・デバッグ専用です。本番環境では無効にしてください。",
+    "Override the upstream protocol format used by bamboo relay. Auto detects based on channel type. Use this to force a specific protocol (e.g., send Anthropic format to an OpenAI-compatible endpoint).": "Bamboo リレーが使用するアップストリームプロトコル形式を上書きします。チャネルタイプに基づいて自動検出されます。特定のプロトコルを強制する場合に使用します（例：OpenAI 互換エンドポイントに Anthropic 形式を送信）。",
+    "Auto (by channel type)": "自動（チャネルタイプ別）",
+    "OpenAI Chat Completions": "OpenAI Chat Completions",
+    "Anthropic Messages": "Anthropic Messages",
+    "Google Gemini": "Google Gemini",
+    "OpenAI Responses": "OpenAI Responses"
   }
 }

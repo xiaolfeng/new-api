@@ -195,6 +195,9 @@ export const channelFormSchema = z
     allow_inference_geo: z.boolean().optional(), // OpenAI/Anthropic: inference geography
     allow_speed: z.boolean().optional(), // Anthropic: speed mode control
     claude_beta_query: z.boolean().optional(), // Anthropic: beta query passthrough
+    bamboo_upstream_format: z
+      .enum(['auto', 'openai', 'anthropic', 'gemini', 'responses'])
+      .optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -313,6 +316,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   allow_inference_geo: false,
   allow_speed: false,
   claude_beta_query: false,
+  bamboo_upstream_format: 'auto',
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
@@ -370,6 +374,7 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateCheckEnabled = false
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
+  let bambooUpstreamFormat: 'auto' | 'openai' | 'anthropic' | 'gemini' | 'responses' = 'auto'
 
   if (channel.settings) {
     try {
@@ -394,6 +399,14 @@ export function transformChannelToFormDefaults(
       )
         ? parsed.upstream_model_update_ignored_models.join(',')
         : ''
+      if (
+        parsed.bamboo_upstream_format === 'openai' ||
+        parsed.bamboo_upstream_format === 'anthropic' ||
+        parsed.bamboo_upstream_format === 'gemini' ||
+        parsed.bamboo_upstream_format === 'responses'
+      ) {
+        bambooUpstreamFormat = parsed.bamboo_upstream_format
+      }
     } catch (error) {
       // eslint-disable-next-line no-console
       console.error('Failed to parse channel settings:', error)
@@ -443,6 +456,7 @@ export function transformChannelToFormDefaults(
     upstream_model_update_check_enabled: upstreamModelUpdateCheckEnabled,
     upstream_model_update_auto_sync_enabled: upstreamModelUpdateAutoSyncEnabled,
     upstream_model_update_ignored_models: upstreamModelUpdateIgnoredModels,
+    bamboo_upstream_format: bambooUpstreamFormat,
   }
 }
 
@@ -565,6 +579,13 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     if (typeof settingsObj.upstream_model_update_last_check_time !== 'number') {
       settingsObj.upstream_model_update_last_check_time = 0
     }
+  }
+
+  // Bamboo upstream format override (applies to all channel types when bamboo relay is enabled)
+  if (formData.bamboo_upstream_format && formData.bamboo_upstream_format !== 'auto') {
+    settingsObj.bamboo_upstream_format = formData.bamboo_upstream_format
+  } else {
+    delete settingsObj.bamboo_upstream_format
   }
 
   return JSON.stringify(settingsObj)

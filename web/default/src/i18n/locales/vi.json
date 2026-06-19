@@ -1836,7 +1836,7 @@
     "footer.columns.related.links.oneApi": "One API",
     "footer.columns.related.title": "Các Dự Án Liên Quan",
     "footer.defaultCopyright": "Bản quyền được bảo lưu.",
-    "footer.new\u0061pi.projectAttributionSuffix": "Bản quyền được bảo lưu. Được thiết kế và phát triển bởi các cộng tác viên dự án.",
+    "footer.newapi.projectAttributionSuffix": "Bản quyền được bảo lưu. Được thiết kế và phát triển bởi các cộng tác viên dự án.",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "Đối với các kênh được thêm sau ngày 10 tháng 5 năm 2025, không cần loại bỏ \".\" khỏi tên mô hình trong quá trình triển khai",
     "For private deployments, format: https://fastgpt.run/api/openapi": "Đối với các triển khai riêng tư, định dạng: https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "Buộc phản hồi JSON hợp lệ về cú pháp",
@@ -4648,6 +4648,17 @@
     "Zero retention": "Không lưu dữ liệu",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Bamboo Relay Bridge": "Cầu chuyển tiếp Bamboo",
+    "Bamboo Debug Log": "Nhật ký gỡ lỗi Bamboo",
+    "Bamboo Upstream Format": "Định dạng thượng nguồn Bamboo",
+    "Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.": "Bật chuyển tiếp không phụ thuộc giao thức: định tuyến các yêu cầu trò chuyện thông qua bộ codec thống nhất bamboo-messages, để bất kỳ định dạng đầu vào nào (OpenAI / Claude / Gemini / Responses) đều có thể tự do chuyển đổi sang bất kỳ giao thức thượng nguồn nào. Các thượng nguồn không được hỗ trợ sẽ tự động dự phòng về đường chuyển tiếp gốc.",
+    "Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.": "Xuất nhật ký gỡ lỗi chi tiết cho lớp nhà cung cấp bamboo-messages, bao gồm tiêu đề và nội dung yêu cầu thượng nguồn (cắt ngắn). Chỉ dành cho phát triển và gỡ lỗi — tắt trong môi trường sản xuất.",
+    "Override the upstream protocol format used by bamboo relay. Auto detects based on channel type. Use this to force a specific protocol (e.g., send Anthropic format to an OpenAI-compatible endpoint).": "Ghi đè định dạng giao thức thượng nguồn được sử dụng bởi chuyển tiếp bamboo. Tự động phát hiện dựa trên loại kênh. Sử dụng để buộc một giao thức cụ thể (ví dụ: gửi định dạng Anthropic đến một điểm cuối tương thích OpenAI).",
+    "Auto (by channel type)": "Tự động (theo loại kênh)",
+    "OpenAI Chat Completions": "OpenAI Chat Completions",
+    "Anthropic Messages": "Anthropic Messages",
+    "Google Gemini": "Google Gemini",
+    "OpenAI Responses": "OpenAI Responses"
   }
 }

@@ -1836,7 +1836,7 @@
     "footer.columns.related.links.oneApi": "Один API",
     "footer.columns.related.title": "Связанные проекты",
     "footer.defaultCopyright": "Все права защищены.",
-    "footer.new\u0061pi.projectAttributionSuffix": "Все права защищены. Разработано участниками проекта.",
+    "footer.newapi.projectAttributionSuffix": "Все права защищены. Разработано участниками проекта.",
     "For channels added after May 10, 2025, no need to remove \".\" from model names during deployment": "Для каналов, добавленных после 10 мая 2025 г., не нужно удалять \".\" из имён моделей при развёртывании",
     "For private deployments, format: https://fastgpt.run/api/openapi": "Для частных развертываний, формат: https://fastgpt.run/api/openapi",
     "Force a syntactically valid JSON response": "Принудительно возвращать синтаксически корректный JSON",
@@ -4648,6 +4648,17 @@
     "Zero retention": "Без хранения данных",
     "Zhipu": "Zhipu",
     "Zhipu V4": "Zhipu V4",
-    "Zoom": "Zoom"
+    "Zoom": "Zoom",
+    "Bamboo Relay Bridge": "Мост ретрансляции Bamboo",
+    "Bamboo Debug Log": "Журнал отладки Bamboo",
+    "Bamboo Upstream Format": "Формат восходящего потока Bamboo",
+    "Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.": "Включить ретрансляцию независимо от протокола: маршрутизируйте чат-запросы через унифицированный кодек bamboo-messages, чтобы любой входящий формат (OpenAI / Claude / Gemini / Responses) мог свободно конвертироваться в любой восходящий протокол. Неподдерживаемые восходящие потоки автоматически возвращаются к нативному пути ретрансляции.",
+    "Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.": "Выводить подробные журналы отладки уровня провайдера bamboo-messages, включая заголовки и тело восходящих запросов (сокращённо). Только для разработки и отладки — отключите в продакшене.",
+    "Override the upstream protocol format used by bamboo relay. Auto detects based on channel type. Use this to force a specific protocol (e.g., send Anthropic format to an OpenAI-compatible endpoint).": "Переопределить формат восходящего протокола, используемый ретрансляцией bamboo. Автоопределение по типу канала. Используйте для принудительного выбора протокола (например, отправка формата Anthropic на OpenAI-совместимую конечную точку).",
+    "Auto (by channel type)": "Авто (по типу канала)",
+    "OpenAI Chat Completions": "OpenAI Chat Completions",
+    "Anthropic Messages": "Anthropic Messages",
+    "Google Gemini": "Google Gemini",
+    "OpenAI Responses": "OpenAI Responses"
   }
 }
