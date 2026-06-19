@@ -40,17 +40,30 @@ func newProvider(info *relaycommon.RelayInfo) (provider.Provider, *types.NewAPIE
 			bambooresponses.WithBaseURL(baseURL),
 		), nil
 
-	case constant.APITypeOpenAI,
-		constant.APITypeDeepSeek, constant.APITypeMoonshot,
-		constant.APITypeSiliconFlow, constant.APITypeMistral,
-		constant.APITypeXai, constant.APITypeZhipuV4,
-		constant.APITypePerplexity, constant.APITypeCohere,
-		constant.APITypeMiniMax, constant.APITypeBaiduV2,
-		constant.APITypeOpenRouter, constant.APITypeXinference:
-		// OpenAI Chat Completions 兼容渠道统一走 completions provider
+	case constant.APITypeOpenAI, constant.APITypeXai:
+		// OpenAI 官方 + xAI grok-3-mini 支持 max_completion_tokens + reasoning_effort，
+		// 行为对齐最新 OpenAI 标准（openai/adaptor.go:317-320 / xai/adaptor.go:77-79 均做
+		// MaxTokens→MaxCompletionTokens 转换），不需要 legacy 兼容模式。
 		return bamboocompletions.NewCompletionsProviderWithOptions(
 			bamboocompletions.WithAPIKey(apiKey),
 			bamboocompletions.WithBaseURL(baseURL),
+		), nil
+
+	case constant.APITypeDeepSeek, constant.APITypeMoonshot,
+		constant.APITypeSiliconFlow, constant.APITypeMistral,
+		constant.APITypeZhipuV4,
+		constant.APITypePerplexity, constant.APITypeCohere,
+		constant.APITypeMiniMax, constant.APITypeBaiduV2,
+		constant.APITypeOpenRouter, constant.APITypeXinference:
+		// 其余 OpenAI 兼容渠道统一使用 max_tokens（旧字段名），需要 Legacy 兼容模式：
+		//   - 使用 max_tokens 而非 max_completion_tokens（各适配器均用 MaxTokens 字段）
+		//   - parallel_tool_calls 仅在有工具时发送（避免不支持该参数的端点报错）
+		//   - 跳过 reasoning_effort 自动映射（这些服务商均不支持该字段）
+		//   - 保留 thinking 透传（DeepSeek-V4 / SiliconFlow 等需要）
+		return bamboocompletions.NewCompletionsProviderWithOptions(
+			bamboocompletions.WithAPIKey(apiKey),
+			bamboocompletions.WithBaseURL(baseURL),
+			bamboocompletions.WithLegacyCompat(),
 		), nil
 
 	default:
