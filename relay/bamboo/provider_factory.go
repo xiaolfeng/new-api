@@ -9,7 +9,9 @@ import (
 	bambooresponses "github.com/bamboo-services/bamboo-messages/provider/openai/responses"
 	"github.com/bamboo-services/bamboo-messages/provider"
 
+	"github.com/QuantumNous/new-api/constant"
 	channelconstant "github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
@@ -38,11 +40,31 @@ func resolveBaseURL(info *relaycommon.RelayInfo) string {
 	return baseURL
 }
 
-// newProvider 根据 RelayInfo.ApiType 构造对应的 bamboo provider。
+// resolveUpstreamFormat 决定 bamboo 实际使用的上游 provider 类型。
 //
-// ApiKey/ChannelBaseUrl 经 *ChannelMeta 嵌入提升访问（relay_info.go:74-92,198）。
-// 未覆盖的 ApiType（AWS/讯飞/腾讯/智谱v3/Coze/Dify/百度v1/阿里等）返回包裹
-// ErrUnsupportedProvider 的错误，调用方（ChatRelay）据此 fallback 到原生链路。
+// 优先级：渠道 ChannelOtherSettings.BambooUpstreamFormat 手动覆盖 > ApiType 自动推断。
+// 当用户在渠道设置中手动指定了 "openai"/"anthropic"/"gemini"/"responses" 时，
+// 强制使用对应协议与上游通信（覆盖自动推断），适用于"OpenAI 兼容渠道实发 Anthropic 格式"等场景。
+// 为空或 "auto" 时走 ApiType 自动推断逻辑（原行为不变）。
+func resolveUpstreamFormat(info *relaycommon.RelayInfo) dto.BambooUpstreamFormatType {
+	manual := dto.BambooUpstreamFormatType(info.ChannelOtherSettings.BambooUpstreamFormat)
+	switch manual {
+	case dto.BambooUpstreamFormatOpenAI, dto.BambooUpstreamFormatAnthropic,
+		dto.BambooUpstreamFormatGemini, dto.BambooUpstreamFormatResponses:
+		return manual
+	default:
+		return dto.BambooUpstreamFormatAuto
+	}
+}
+
+// newProvider 根据 RelayInfo（含渠道级上游格式覆盖）构造对应的 bamboo provider。
+//
+// 流程：
+//  1. 读取渠道 ChannelOtherSettings.BambooUpstreamFormat，若手动指定了 openai/anthropic/gemini/responses，
+//     则强制使用对应协议（覆盖 ApiType 自动推断）
+//  2. 否则按 info.ApiType 自动分发到 native provider
+//  3. 未覆盖的 ApiType（AWS/讯飞/腾讯/智谱v3/Coze/Dify/百度v1/阿里等）返回包裹
+//     ErrUnsupportedProvider 的错误，调用方（ChatRelay）据此 fallback 到原生链路
 //
 // c 用于解析 header passthrough/placeholder 规则（与原生 DoApiRequest 一致），
 // 传入 nil 时仅应用 ChannelsOverride 中的显式 header。
@@ -50,7 +72,6 @@ func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider
 	apiKey := info.ApiKey
 	baseURL := resolveBaseURL(info)
 
-	// 解析自定义 header（与原生链路 api_request.go:325 一致，支持 passthrough/regex/placeholder）
 	var headers map[string]string
 	if c != nil {
 		resolved, err := channel.ResolveHeaderOverride(info, c)
@@ -60,60 +81,120 @@ func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider
 		headers = resolved
 	}
 
-	switch info.ApiType {
-	case channelconstant.APITypeAnthropic:
-		opts := []bambooanthropic.Option{
-			bambooanthropic.WithAPIKey(apiKey),
-			bambooanthropic.WithBaseURL(baseURL),
-		}
-		for k, v := range headers {
-			opts = append(opts, bambooanthropic.WithHeader(k, v))
-		}
-		return bambooanthropic.NewProviderWithOptions(opts...), nil
+	upstreamFmt := resolveUpstreamFormat(info)
 
-	case channelconstant.APITypeGemini:
-		opts := []bamboogemini.Option{
-			bamboogemini.WithAPIKey(apiKey),
-			bamboogemini.WithBaseURL(baseURL),
-		}
-		for k, v := range headers {
-			opts = append(opts, bamboogemini.WithHeader(k, v))
-		}
-		return bamboogemini.NewProviderWithOptions(opts...), nil
+	// 手动指定上游格式：跳过 ApiType 自动推断，直接用用户选择的协议构造 provider
+	if upstreamFmt != dto.BambooUpstreamFormatAuto {
+		return buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, info.ApiType)
+	}
 
-	case channelconstant.APITypeCodex:
-		opts := []bambooresponses.Option{
-			bambooresponses.WithAPIKey(apiKey),
-			bambooresponses.WithBaseURL(baseURL),
-		}
-		for k, v := range headers {
-			opts = append(opts, bambooresponses.WithHeader(k, v))
-		}
-		return bambooresponses.NewResponsesProviderWithOptions(opts...), nil
+	return buildProviderByApiType(info.ApiType, apiKey, baseURL, headers)
+}
 
-	case channelconstant.APITypeOpenAI, channelconstant.APITypeXai:
-		// OpenAI 官方 + xAI grok-3-mini 支持 max_completion_tokens + reasoning_effort，
-		// 行为对齐最新 OpenAI 标准（openai/adaptor.go:317-320 / xai/adaptor.go:77-79 均做
-		// MaxTokens→MaxCompletionTokens 转换），不需要 legacy 兼容模式。
+// buildProviderByFormat 按用户手动指定的上游协议格式构造 provider。
+//
+// legacyCompat 推断：当用户强制选择 openai 格式但渠道本身的 ApiType 属于
+// Legacy 兼容列表（DeepSeek/Moonshot 等）时，保留 Legacy 行为以兼容旧字段名。
+func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL string,
+	headers map[string]string, originalApiType int) (provider.Provider, *types.NewAPIError) {
+
+	switch fmt {
+	case dto.BambooUpstreamFormatAnthropic:
+		return newAnthropicProvider(apiKey, baseURL, headers), nil
+	case dto.BambooUpstreamFormatGemini:
+		return newGeminiProvider(apiKey, baseURL, headers), nil
+	case dto.BambooUpstreamFormatResponses:
+		return newResponsesProvider(apiKey, baseURL, headers), nil
+	case dto.BambooUpstreamFormatOpenAI:
+		legacyCompat := isLegacyCompatApiType(originalApiType)
+		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat), nil
+	default:
+		return nil, types.NewError(ErrUnsupportedProvider, types.ErrorCodeInvalidApiType)
+	}
+}
+
+// buildProviderByApiType 按渠道 ApiType 自动推断上游协议（原 newProvider switch 逻辑）。
+func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[string]string) (provider.Provider, *types.NewAPIError) {
+	switch apiType {
+	case constant.APITypeAnthropic:
+		return newAnthropicProvider(apiKey, baseURL, headers), nil
+
+	case constant.APITypeGemini:
+		return newGeminiProvider(apiKey, baseURL, headers), nil
+
+	case constant.APITypeCodex:
+		return newResponsesProvider(apiKey, baseURL, headers), nil
+
+	case constant.APITypeOpenAI, constant.APITypeXai:
 		return buildCompletionsProvider(apiKey, baseURL, headers, false), nil
 
-	case channelconstant.APITypeDeepSeek, channelconstant.APITypeMoonshot,
-		channelconstant.APITypeSiliconFlow, channelconstant.APITypeMistral,
-		channelconstant.APITypeZhipuV4,
-		channelconstant.APITypePerplexity, channelconstant.APITypeCohere,
-		channelconstant.APITypeMiniMax, channelconstant.APITypeBaiduV2,
-		channelconstant.APITypeOpenRouter, channelconstant.APITypeXinference:
-		// 其余 OpenAI 兼容渠道统一使用 max_tokens（旧字段名），需要 Legacy 兼容模式：
-		//   - 使用 max_tokens 而非 max_completion_tokens（各适配器均用 MaxTokens 字段）
-		//   - parallel_tool_calls 仅在有工具时发送（避免不支持该参数的端点报错）
-		//   - 跳过 reasoning_effort 自动映射（这些服务商均不支持该字段）
-		//   - 保留 thinking 透传（DeepSeek-V4 / SiliconFlow 等需要）
+	case constant.APITypeDeepSeek, constant.APITypeMoonshot,
+		constant.APITypeSiliconFlow, constant.APITypeMistral,
+		constant.APITypeZhipuV4,
+		constant.APITypePerplexity, constant.APITypeCohere,
+		constant.APITypeMiniMax, constant.APITypeBaiduV2,
+		constant.APITypeOpenRouter, constant.APITypeXinference:
 		return buildCompletionsProvider(apiKey, baseURL, headers, true), nil
 
 	default:
-		// AWS/讯飞/腾讯/智谱v3/Coze/Dify 等特殊协议，bamboo 不覆盖
 		return nil, types.NewError(ErrUnsupportedProvider, types.ErrorCodeInvalidApiType)
 	}
+}
+
+// isLegacyCompatApiType 判断 ApiType 是否属于 Legacy 兼容渠道列表。
+//
+// Legacy 渠道使用 max_tokens（旧字段名）而非 max_completion_tokens，
+// 且不支持 reasoning_effort / parallel_tool_calls 无工具时发送。
+func isLegacyCompatApiType(apiType int) bool {
+	switch apiType {
+	case constant.APITypeDeepSeek, constant.APITypeMoonshot,
+		constant.APITypeSiliconFlow, constant.APITypeMistral,
+		constant.APITypeZhipuV4,
+		constant.APITypePerplexity, constant.APITypeCohere,
+		constant.APITypeMiniMax, constant.APITypeBaiduV2,
+		constant.APITypeOpenRouter, constant.APITypeXinference:
+		return true
+	default:
+		return false
+	}
+}
+
+// --- 以下为各 provider 的工厂方法 ---
+// debug 开关由全局 provider.SetDebug()（经 model_setting.SyncDebugToProvider）统一管理，
+// 不在 provider 构造时调用 WithDebug()——后者会强制 provider.SetDebug(true) 覆盖全局开关，
+// 导致用户在系统设置中关闭 debug 后日志仍无法关闭。
+
+func newAnthropicProvider(apiKey, baseURL string, headers map[string]string) provider.Provider {
+	opts := []bambooanthropic.Option{
+		bambooanthropic.WithAPIKey(apiKey),
+		bambooanthropic.WithBaseURL(baseURL),
+	}
+	for k, v := range headers {
+		opts = append(opts, bambooanthropic.WithHeader(k, v))
+	}
+	return bambooanthropic.NewProviderWithOptions(opts...)
+}
+
+func newGeminiProvider(apiKey, baseURL string, headers map[string]string) provider.Provider {
+	opts := []bamboogemini.Option{
+		bamboogemini.WithAPIKey(apiKey),
+		bamboogemini.WithBaseURL(baseURL),
+	}
+	for k, v := range headers {
+		opts = append(opts, bamboogemini.WithHeader(k, v))
+	}
+	return bamboogemini.NewProviderWithOptions(opts...)
+}
+
+func newResponsesProvider(apiKey, baseURL string, headers map[string]string) provider.Provider {
+	opts := []bambooresponses.Option{
+		bambooresponses.WithAPIKey(apiKey),
+		bambooresponses.WithBaseURL(baseURL),
+	}
+	for k, v := range headers {
+		opts = append(opts, bambooresponses.WithHeader(k, v))
+	}
+	return bambooresponses.NewResponsesProviderWithOptions(opts...)
 }
 
 // buildCompletionsProvider 构造 OpenAI Completions provider，附加自定义 header。
