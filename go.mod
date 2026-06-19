@@ -61,7 +61,7 @@ require (
 )
 
 require (
-	github.com/bamboo-services/bamboo-messages v0.3.2
+	github.com/bamboo-services/bamboo-messages v0.3.3
 	github.com/waffo-com/waffo-pancake-sdk-go v0.3.1
 )
 
