@@ -62,7 +62,7 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 
 	// ② 上游侧：根据 ApiType 构造 bamboo provider
-	p, provErr := newProvider(info)
+	p, provErr := newProvider(c, info)
 	if provErr != nil {
 		return nil, provErr // 含 ErrUnsupportedProvider，调用方判 errors.Is 做 fallback
 	}
