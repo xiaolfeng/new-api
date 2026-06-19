@@ -44,6 +44,7 @@ import {
   Settings,
   SlidersHorizontal,
   Wand2,
+  Layers,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -3201,16 +3202,22 @@ export function ChannelMutateDrawer({
                             </FormItem>
                           )}
                         />
+                      </div>
 
-                        {bambooRelayEnabled && (
+                      {bambooRelayEnabled && (
+                        <div className='border-border/60 flex flex-col gap-3 border-y py-4'>
+                          <SubHeading
+                            title={t('Bamboo Relay Adapter')}
+                            icon={<Layers className='h-3.5 w-3.5' />}
+                          />
                           <FormField
                             control={form.control}
                             name='bamboo_upstream_format'
                             render={({ field }) => (
-                              <FormItem className='space-y-2 px-4 py-3'>
+                              <FormItem className='space-y-2'>
                                 <div className='space-y-0.5'>
                                   <FormLabel>
-                                    {t('Bamboo Upstream Format')}
+                                    {t('Upstream Protocol Format')}
                                   </FormLabel>
                                   <FormDescription>
                                     {t(
@@ -3248,8 +3255,8 @@ export function ChannelMutateDrawer({
                               </FormItem>
                             )}
                           />
-                        )}
-                      </div>
+                        </div>
+                      )}
 
                       <FormField
                         control={form.control}

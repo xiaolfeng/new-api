@@ -4659,6 +4659,8 @@
     "OpenAI Chat Completions": "OpenAI Chat Completions",
     "Anthropic Messages": "Anthropic Messages",
     "Google Gemini": "Google Gemini",
-    "OpenAI Responses": "OpenAI Responses"
+    "OpenAI Responses": "OpenAI Responses",
+    "Bamboo Relay Adapter": "Адаптер ретрансляции Bamboo",
+    "Upstream Protocol Format": "Формат восходящего протокола"
   }
 }
