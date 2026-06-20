@@ -496,6 +496,7 @@
     "Backup codes regenerated successfully": "备份代码重新生成成功",
     "Backup codes remaining: {{count}}": "剩余备份代码：{{count}}",
     "Bad Request": "参数错误",
+    "Bamboo Debug": "Bamboo 调试",
     "Bamboo Relay Bridge": "Bamboo 中继桥",
     "Bamboo Debug Log": "Bamboo 调试日志",
     "Bamboo Upstream Format": "Bamboo 上游格式方案",

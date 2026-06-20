@@ -4651,6 +4651,7 @@
     "Zoom": "ズーム",
     "Bamboo Relay Bridge": "Bamboo リレーブリッジ",
     "Bamboo Debug Log": "Bamboo デバッグログ",
+    "Bamboo Debug": "Bamboo デバッグ",
     "Bamboo Upstream Format": "Bamboo 上游フォーマット",
     "Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.": "プロトコル非依存リレーを有効化：チャットリクエストを bamboo-messages 統合コーデック経由でルーティングし、任意のインバウンド形式（OpenAI / Claude / Gemini / Responses）を任意のアップストリームプロトコルに自由に変換できます。未対応のアップストリームは自動的にネイティブリレーパスにフォールバックします。",
     "Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.": "bamboo-messages プロバイダーレイヤーの詳細なデバッグログを出力します（アップストリームリクエストヘッダーとボディを含む、途中で切り捨て）。開発・デバッグ専用です。本番環境では無効にしてください。",

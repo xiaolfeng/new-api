@@ -160,9 +160,8 @@ func isLegacyCompatApiType(apiType int) bool {
 }
 
 // --- 以下为各 provider 的工厂方法 ---
-// debug 开关由全局 provider.SetDebug()（经 model_setting.SyncDebugToProvider）统一管理，
-// 不在 provider 构造时调用 WithDebug()——后者会强制 provider.SetDebug(true) 覆盖全局开关，
-// 导致用户在系统设置中关闭 debug 后日志仍无法关闭。
+// debug 信息由 bridge.go 通过 FormatRelayInput/FormatRelayParsed/FormatDebugRequest
+// 收集到 RelayInfo.BambooDebug，不再调用 provider.SetDebug()。
 
 func newAnthropicProvider(apiKey, baseURL string, headers map[string]string) provider.Provider {
 	opts := []bambooanthropic.Option{

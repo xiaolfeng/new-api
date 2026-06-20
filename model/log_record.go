@@ -33,6 +33,7 @@ type LogDetailRecord struct {
 	ResponsesResponseBlocks []ResponsesResponseBlock     `json:"responsesResponseBlocks,omitempty"`
 	OpenAIRequestBlocks     []OpenAIRequestBlock         `json:"openaiRequestBlocks,omitempty"`
 	OpenAIToolResponses     []OpenAIToolResponseBlock    `json:"openaiToolResponses,omitempty"`
+	BambooDebug             string                       `json:"bambooDebug,omitempty"`
 }
 
 type LogToolInvokeRecord struct {

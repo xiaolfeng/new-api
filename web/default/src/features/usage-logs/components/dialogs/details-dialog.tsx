@@ -32,6 +32,7 @@ import {
   Cloud,
   Globe,
   ShieldCheck,
+  Terminal,
   UserCog,
   Info,
   LogIn,
@@ -506,6 +507,7 @@ function StructuredLogContent(props: {
   const hasToolUses = sections.toolUses.length > 0
   const hasRequestBlocks = sections.requestBlocks.length > 0
   const hasToolResponses = sections.toolResponses.length > 0
+  const hasBambooDebug = sections.bambooDebug.trim() !== ''
 
   const copyAllText = JSON.stringify(
     {
@@ -683,6 +685,33 @@ function StructuredLogContent(props: {
               )}
             </Button>
             <ToolUseTable rows={sections.toolUses} />
+          </div>
+        </DetailSection>
+      )}
+
+      {hasBambooDebug && (
+        <DetailSection
+          icon={<Terminal className='size-3.5' aria-hidden='true' />}
+          label={t('Bamboo Debug')}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() => copyToClipboard(sections.bambooDebug)}
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText === sections.bambooDebug ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <pre className='bg-background/60 max-h-64 overflow-auto rounded-md border p-2 text-xs whitespace-pre-wrap break-all font-mono'>
+              {sections.bambooDebug}
+            </pre>
           </div>
         </DetailSection>
       )}
