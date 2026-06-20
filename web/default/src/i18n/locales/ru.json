@@ -4651,6 +4651,7 @@
     "Zoom": "Zoom",
     "Bamboo Relay Bridge": "Мост ретрансляции Bamboo",
     "Bamboo Debug Log": "Журнал отладки Bamboo",
+    "Bamboo Debug": "Отладка Bamboo",
     "Bamboo Upstream Format": "Формат восходящего потока Bamboo",
     "Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.": "Включить ретрансляцию независимо от протокола: маршрутизируйте чат-запросы через унифицированный кодек bamboo-messages, чтобы любой входящий формат (OpenAI / Claude / Gemini / Responses) мог свободно конвертироваться в любой восходящий протокол. Неподдерживаемые восходящие потоки автоматически возвращаются к нативному пути ретрансляции.",
     "Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.": "Выводить подробные журналы отладки уровня провайдера bamboo-messages, включая заголовки и тело восходящих запросов (сокращённо). Только для разработки и отладки — отключите в продакшене.",

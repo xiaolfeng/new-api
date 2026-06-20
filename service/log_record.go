@@ -141,6 +141,11 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		record.ToolInvokes = buildToolInvokeRecords(relayInfo)
 	}
 
+	// 5. Bamboo debug（走 bamboo relay 路径时由 bridge.go 写入）
+	if relayInfo != nil && relayInfo.BambooDebug != "" {
+		record.BambooDebug = relayInfo.BambooDebug
+	}
+
 	// 如果所有字段都为空，返回空字符串
 	if len(record.Prompt) == 0 &&
 		record.Completion == "" &&
@@ -154,7 +159,8 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		len(record.ClaudeResponseBlocks) == 0 &&
 		len(record.ResponsesRequestBlocks) == 0 &&
 		len(record.ResponsesToolResponses) == 0 &&
-		len(record.ResponsesResponseBlocks) == 0 {
+		len(record.ResponsesResponseBlocks) == 0 &&
+		record.BambooDebug == "" {
 		return ""
 	}
 

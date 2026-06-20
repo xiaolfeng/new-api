@@ -4651,6 +4651,7 @@
     "Zoom": "Zoom",
     "Bamboo Relay Bridge": "Cầu chuyển tiếp Bamboo",
     "Bamboo Debug Log": "Nhật ký gỡ lỗi Bamboo",
+    "Bamboo Debug": "Gỡ lỗi Bamboo",
     "Bamboo Upstream Format": "Định dạng thượng nguồn Bamboo",
     "Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.": "Bật chuyển tiếp không phụ thuộc giao thức: định tuyến các yêu cầu trò chuyện thông qua bộ codec thống nhất bamboo-messages, để bất kỳ định dạng đầu vào nào (OpenAI / Claude / Gemini / Responses) đều có thể tự do chuyển đổi sang bất kỳ giao thức thượng nguồn nào. Các thượng nguồn không được hỗ trợ sẽ tự động dự phòng về đường chuyển tiếp gốc.",
     "Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.": "Xuất nhật ký gỡ lỗi chi tiết cho lớp nhà cung cấp bamboo-messages, bao gồm tiêu đề và nội dung yêu cầu thượng nguồn (cắt ngắn). Chỉ dành cho phát triển và gỡ lỗi — tắt trong môi trường sản xuất.",

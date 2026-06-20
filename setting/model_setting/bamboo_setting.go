@@ -1,8 +1,6 @@
 package model_setting
 
 import (
-	"github.com/bamboo-services/bamboo-messages/provider"
-
 	"github.com/QuantumNous/new-api/setting/config"
 )
 
@@ -20,11 +18,11 @@ type BambooSettings struct {
 	// 关闭时 TextHelper/ClaudeHelper/GeminiHelper/ResponsesHelper 走原生三段式。
 	EnableBambooRelay bool `json:"enable_bamboo_relay"`
 
-	// EnableBambooDebugLog 控制 bamboo-messages provider 层的 debug 日志输出。
-	// 开启后，provider.SetDebug(true) 会让 bamboo 在每次上游请求时打印
-	// provider 类型、目标端点、请求头和请求体（截断至 MaxDebugBodyLen），
-	// 用于开发/调试阶段排查"参数有误""协议不兼容"等问题。
-	// 仅在 EnableBambooRelay 开启时有意义；生产环境建议关闭。
+	// EnableBambooDebugLog 控制 bamboo-messages 的 debug 信息收集。
+	// 开启后，bridge.go 会用 FormatRelayInput/FormatRelayParsed/FormatDebugRequest
+	// 收集格式化 debug 字符串，写入 RelayInfo.BambooDebug，
+	// 最终在消费日志详情的 "Bamboo" 板块展示。
+	// 不再调用 provider.SetDebug(true)，避免 log.Printf 刷屏。
 	EnableBambooDebugLog bool `json:"enable_bamboo_debug_log"`
 }
 
@@ -45,13 +43,4 @@ func init() {
 // GetBambooSettings 返回 bamboo 中继设置的当前实例（指针，运行时可热更新）。
 func GetBambooSettings() *BambooSettings {
 	return &bambooSettings
-}
-
-// SyncDebugToProvider 将当前 EnableBambooDebugLog 的值同步到
-// bamboo-messages provider 包的全局 debug 开关。
-//
-// 该方法应在应用启动初始化阶段调用一次，以及在 options 配置热更新
-// 回调中调用，确保运行时修改开关立即生效。
-func (s *BambooSettings) SyncDebugToProvider() {
-	provider.SetDebug(s.EnableBambooDebugLog)
 }

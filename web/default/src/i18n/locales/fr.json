@@ -4651,6 +4651,7 @@
     "Zoom": "Zoom",
     "Bamboo Relay Bridge": "Pont de relais Bamboo",
     "Bamboo Debug Log": "Journaux de débogage Bamboo",
+    "Bamboo Debug": "Débogage Bamboo",
     "Bamboo Upstream Format": "Format amont Bamboo",
     "Enable protocol-agnostic relay: route chat requests through the bamboo-messages unified codec, so any inbound format (OpenAI / Claude / Gemini / Responses) can be freely converted to any upstream protocol. Unsupported upstreams automatically fall back to the native relay path.": "Activer le relais indépendant du protocole : acheminer les requêtes de chat via le codec unifié bamboo-messages, afin que tout format entrant (OpenAI / Claude / Gemini / Responses) puisse être librement converti vers n'importe quel protocole amont. Les amonts non pris en charge retombent automatiquement vers le chemin de relais natif.",
     "Output detailed debug logs for bamboo-messages provider layer, including upstream request headers and body (truncated). For development and debugging only — disable in production.": "Afficher les journaux de débogage détaillés de la couche provider bamboo-messages, y compris les en-têtes et le corps des requêtes amont (tronqués). Réservé au développement et au débogage — désactiver en production.",

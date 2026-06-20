@@ -204,6 +204,9 @@ type RelayInfo struct {
 	ResponseBody string
 	// ToolInvokes 存储 Claude/Anthropic 工具调用信息，用于日志详细记录
 	ToolInvokes []ToolInvokeInfo
+	// BambooDebug 存储 bamboo-messages 的格式化 debug 字符串，
+	// 仅在 EnableBambooDebugLog 开启且走 bamboo relay 路径时非空。
+	BambooDebug string
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {

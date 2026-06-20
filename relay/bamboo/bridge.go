@@ -4,11 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
 	bamboosdk "github.com/bamboo-services/bamboo-messages/bamboo"
 	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
+	bamboorelay "github.com/bamboo-services/bamboo-messages/bamboo/relay"
+	"github.com/bamboo-services/bamboo-messages/provider"
 	// 空白 import 触发各 codec 子包的 init() 注册。
 	// codec.Get 依赖包级变量（registry.go:9-21）由子包 init() 赋值，
 	// 不显式 import 子包会导致 codec.Get 返回 nil。
@@ -18,6 +21,7 @@ import (
 	_ "github.com/bamboo-services/bamboo-messages/bamboo/codec/responses"
 
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/types"
@@ -56,16 +60,45 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	if gerr != nil || entryCodec == nil {
 		return nil, types.NewError(fmt.Errorf("bamboo codec not registered: %s", codecFmt), types.ErrorCodeInvalidRequest)
 	}
+
+	// debug 收集：当 EnableBambooDebugLog 开启时，用 FormatRelayInput/FormatRelayParsed
+	// 收集格式化 debug 字符串，写入 context key 供日志详情展示。
+	// 不再调用 provider.SetDebug(true)，避免 log.Printf 刷屏。
+	debugEnabled := model_setting.GetBambooSettings().EnableBambooDebugLog
+	var debugBuf strings.Builder
+
+	if debugEnabled {
+		debugBuf.WriteString(bamboorelay.FormatRelayInput("ChatRelay", codecFmt, codecFmt, requestBody))
+		debugBuf.WriteByte('\n')
+	}
+
 	relayReq, parseErr := entryCodec.ParseRequest(requestBody)
 	if parseErr != nil {
+		flushBambooDebug(info, &debugBuf, debugEnabled)
 		return nil, translateCodecError(parseErr) // 内部 errors.As 断言 *CodecError
+	}
+
+	if debugEnabled {
+		debugBuf.WriteString(bamboorelay.FormatRelayParsed("ChatRelay", codecFmt, relayReq))
+		debugBuf.WriteByte('\n')
 	}
 
 	// ② 上游侧：根据 ApiType 构造 bamboo provider
 	p, provErr := newProvider(c, info)
 	if provErr != nil {
+		flushBambooDebug(info, &debugBuf, debugEnabled)
 		return nil, provErr // 含 ErrUnsupportedProvider，调用方判 errors.Is 做 fallback
 	}
+
+	if debugEnabled {
+		debugBuf.WriteString(provider.FormatDebugRequest(
+			"bamboo-bridge",
+			fmt.Sprintf("upstream provider=%T model=%s", p, relayReq.Config.Model),
+			nil, relayReq.Config,
+		))
+	}
+	flushBambooDebug(info, &debugBuf, debugEnabled)
+
 	client := bamboosdk.NewClient(p)
 
 	// ③ 出口侧：按入口 codec 序列化响应
@@ -73,6 +106,12 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		return doStreamRelay(c, info, client, entryCodec, relayReq)
 	}
 	return doCompleteRelay(c, client, entryCodec, relayReq)
+}
+
+func flushBambooDebug(info *relaycommon.RelayInfo, buf *strings.Builder, enabled bool) {
+	if enabled && buf.Len() > 0 {
+		info.BambooDebug = buf.String()
+	}
 }
 
 // doStreamRelay 消费 bamboo StreamEvent，按入口 codec 序列化为出口 SSE。
@@ -124,10 +163,16 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 		}
 		c.Writer.Flush()
 
-		// 从 message_delta 提取 usage
+		// 从 message_delta 提取 usage（含缓存 token）
+		//
+		// Anthropic 的 input_tokens 不含 cache token（cache_read/cache_creation 是独立计费项），
+		// 与 native Claude relay 的 PromptTokens 语义一致，可直接赋值。
+		// bamboo SDK v0.4.3+ 已在 provider 层正确传递 cache token。
 		if event.Type == bamboosdk.EventMessageDelta && event.Usage != nil {
 			usage.PromptTokens = int(event.Usage.InputTokens)
 			usage.CompletionTokens = int(event.Usage.OutputTokens)
+			usage.PromptTokensDetails.CachedTokens = int(event.Usage.CacheReadInputTokens)
+			usage.PromptTokensDetails.CachedCreationTokens = int(event.Usage.CacheCreationInputTokens)
 		}
 	}
 
@@ -183,5 +228,9 @@ func doCompleteRelay(c *gin.Context, client bamboosdk.BambooClient,
 		PromptTokens:     int(resp.Usage.InputTokens),
 		CompletionTokens: int(resp.Usage.OutputTokens),
 		TotalTokens:      int(resp.Usage.InputTokens + resp.Usage.OutputTokens),
+		PromptTokensDetails: dto.InputTokenDetails{
+			CachedTokens:         int(resp.Usage.CacheReadInputTokens),
+			CachedCreationTokens: int(resp.Usage.CacheCreationInputTokens),
+		},
 	}, nil
 }

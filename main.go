@@ -290,9 +290,6 @@ func InitResources() error {
 	// Initialize options, should after model.InitDB()
 	model.InitOptionMap()
 
-	// Sync bamboo debug log switch to provider SDK after options loaded
-	model_setting.GetBambooSettings().SyncDebugToProvider()
-
 	// 清理旧的磁盘缓存文件
 	common.CleanupOldCacheFiles()
 
