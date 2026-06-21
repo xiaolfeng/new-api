@@ -57,7 +57,64 @@ func resolveUpstreamFormat(info *relaycommon.RelayInfo) dto.BambooUpstreamFormat
 	}
 }
 
+// bambooUpstreamFormatToRelayFormat 将渠道配置的 BambooUpstreamFormat 转为 RelayFormat。
+// BambooUpstreamFormatAuto / 空字符串 返回 ""，语义为"未覆盖，由调用方回退到入口格式"。
+func bambooUpstreamFormatToRelayFormat(fmt dto.BambooUpstreamFormatType) types.RelayFormat {
+	switch fmt {
+	case dto.BambooUpstreamFormatOpenAI:
+		return types.RelayFormatOpenAI
+	case dto.BambooUpstreamFormatAnthropic:
+		return types.RelayFormatClaude
+	case dto.BambooUpstreamFormatGemini:
+		return types.RelayFormatGemini
+	case dto.BambooUpstreamFormatResponses:
+		return types.RelayFormatOpenAIResponses
+	default:
+		return ""
+	}
+}
+
+// apiTypeToRelayFormat 从渠道 ApiType 推断上游 RelayFormat。
+// 用于 BambooUpstreamFormatAuto 时，保持与 buildProviderByApiType 一致的格式推断。
+// 未知 ApiType 返回 ""。
+func apiTypeToRelayFormat(apiType int) types.RelayFormat {
+	switch apiType {
+	case constant.APITypeAnthropic:
+		return types.RelayFormatClaude
+	case constant.APITypeGemini:
+		return types.RelayFormatGemini
+	case constant.APITypeCodex:
+		return types.RelayFormatOpenAIResponses
+	case constant.APITypeOpenAI, constant.APITypeXai:
+		return types.RelayFormatOpenAI
+	case constant.APITypeDeepSeek, constant.APITypeMoonshot,
+		constant.APITypeSiliconFlow, constant.APITypeMistral,
+		constant.APITypeZhipuV4,
+		constant.APITypePerplexity, constant.APITypeCohere,
+		constant.APITypeMiniMax, constant.APITypeBaiduV2,
+		constant.APITypeOpenRouter, constant.APITypeXinference:
+		return types.RelayFormatOpenAI
+	default:
+		return ""
+	}
+}
+
+// resolveUpstreamRelayFormat 解析实际上游 RelayFormat，供 bridge.go 更新格式链路。
+// 优先级：手动指定 BambooUpstreamFormat > ApiType 自动推断。
+// 返回 "" 表示无法确定（调用方回退到入口格式）。
+func resolveUpstreamRelayFormat(info *relaycommon.RelayInfo) types.RelayFormat {
+	upstreamFmt := resolveUpstreamFormat(info)
+	if upstreamFmt != dto.BambooUpstreamFormatAuto {
+		return bambooUpstreamFormatToRelayFormat(upstreamFmt)
+	}
+	return apiTypeToRelayFormat(info.ApiType)
+}
+
 // newProvider 根据 RelayInfo（含渠道级上游格式覆盖）构造对应的 bamboo provider。
+//
+// 返回 (provider, upstreamRelayFormat, error)。
+// upstreamRelayFormat 为解析出的实际上游协议格式（openai/claude/gemini/openai_responses），
+// 空字符串表示无法推断（调用方回退到入口格式）。
 //
 // 流程：
 //  1. 读取渠道 ChannelOtherSettings.BambooUpstreamFormat，若手动指定了 openai/anthropic/gemini/responses，
@@ -68,7 +125,7 @@ func resolveUpstreamFormat(info *relaycommon.RelayInfo) dto.BambooUpstreamFormat
 //
 // c 用于解析 header passthrough/placeholder 规则（与原生 DoApiRequest 一致），
 // 传入 nil 时仅应用 ChannelsOverride 中的显式 header。
-func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider, *types.NewAPIError) {
+func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider, types.RelayFormat, *types.NewAPIError) {
 	apiKey := info.ApiKey
 	baseURL := resolveBaseURL(info)
 
@@ -76,19 +133,28 @@ func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider
 	if c != nil {
 		resolved, err := channel.ResolveHeaderOverride(info, c)
 		if err != nil {
-			return nil, types.NewError(err, types.ErrorCodeChannelHeaderOverrideInvalid)
+			return nil, "", types.NewError(err, types.ErrorCodeChannelHeaderOverrideInvalid)
 		}
 		headers = resolved
 	}
 
-	upstreamFmt := resolveUpstreamFormat(info)
+	// 解析上游格式（手动覆盖 > ApiType 推断），与 provider 构造逻辑共享
+	upstreamRelayFormat := resolveUpstreamRelayFormat(info)
 
-	// 手动指定上游格式：跳过 ApiType 自动推断，直接用用户选择的协议构造 provider
+	upstreamFmt := resolveUpstreamFormat(info)
 	if upstreamFmt != dto.BambooUpstreamFormatAuto {
-		return buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, info.ApiType)
+		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, info.ApiType)
+		if apiErr != nil {
+			return nil, "", apiErr
+		}
+		return p, upstreamRelayFormat, nil
 	}
 
-	return buildProviderByApiType(info.ApiType, apiKey, baseURL, headers)
+	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers)
+	if apiErr != nil {
+		return nil, "", apiErr
+	}
+	return p, upstreamRelayFormat, nil
 }
 
 // buildProviderByFormat 按用户手动指定的上游协议格式构造 provider。

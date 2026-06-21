@@ -69,11 +69,6 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	debugEnabled := model_setting.GetBambooSettings().EnableBambooDebugLog
 	var debugBuf strings.Builder
 
-	if debugEnabled {
-		debugBuf.WriteString(bamboorelay.FormatRelayInput("ChatRelay", codecFmt, codecFmt, requestBody))
-		debugBuf.WriteByte('\n')
-	}
-
 	relayReq, parseErr := entryCodec.ParseRequest(requestBody)
 	if parseErr != nil {
 		flushBambooDebug(info, &debugBuf, debugEnabled)
@@ -86,16 +81,31 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 
 	// ② 上游侧：根据 ApiType 构造 bamboo provider
-	p, provErr := newProvider(c, info)
+	p, upstreamRelayFormat, provErr := newProvider(c, info)
 	if provErr != nil {
 		flushBambooDebug(info, &debugBuf, debugEnabled)
 		return nil, provErr // 含 ErrUnsupportedProvider，调用方判 errors.Is 做 fallback
 	}
 
+	// 确定有效的上游格式：provider 解析结果优先，为空时回退到入口格式
+	effectiveUpstreamFormat := upstreamRelayFormat
+	if effectiveUpstreamFormat == "" {
+		effectiveUpstreamFormat = entryFormat
+	}
+
+	// 更新 RelayInfo 格式链路，供 billing/log/relay-output 下游消费
+	info.AppendRequestConversion(effectiveUpstreamFormat)
+	info.FinalRequestRelayFormat = effectiveUpstreamFormat
+
 	if debugEnabled {
+		// 使用真实上游格式作为 out 参数（而非入口格式）
+		outCodecFmt, _ := relayFormatToCodec(effectiveUpstreamFormat)
+		debugBuf.WriteString(bamboorelay.FormatRelayInput("ChatRelay", codecFmt, outCodecFmt, requestBody))
+		debugBuf.WriteByte('\n')
+
 		debugBuf.WriteString(provider.FormatDebugRequest(
 			"bamboo-bridge",
-			fmt.Sprintf("upstream provider=%T model=%s", p, relayReq.Config.Model),
+			fmt.Sprintf("upstream provider=%T model=%s relayFormat=%s", p, relayReq.Config.Model, effectiveUpstreamFormat),
 			nil, relayReq.Config,
 		))
 	}
