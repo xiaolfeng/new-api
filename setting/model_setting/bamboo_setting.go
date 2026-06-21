@@ -24,6 +24,10 @@ type BambooSettings struct {
 	// 最终在消费日志详情的 "Bamboo" 板块展示。
 	// 不再调用 provider.SetDebug(true)，避免 log.Printf 刷屏。
 	EnableBambooDebugLog bool `json:"enable_bamboo_debug_log"`
+
+	// SmoothLevel 流式平滑缓冲档位，全局生效。
+	// 空字符串/"off" 关闭（直接透传）；gentle/smooth/typewriter 启用 SmoothPacer。
+	SmoothLevel string `json:"smooth_level"`
 }
 
 // 默认配置

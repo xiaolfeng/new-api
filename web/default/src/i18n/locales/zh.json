@@ -4662,6 +4662,12 @@
     "Zhipu V4": "智谱 V4",
     "Zoom": "缩放",
     "Bamboo Relay Adapter": "Bamboo 中继适配器",
-    "Upstream Protocol Format": "上游协议格式"
+    "Upstream Protocol Format": "上游协议格式",
+    "Streaming Smooth Strategy": "流式平滑策略",
+    "Controls the pacing of streamed SSE chunks to smooth out burst arrivals from upstream. Off disables buffering and passes events through directly.": "控制流式 SSE 数据块的输出节奏，平滑上游突发批量到达。关闭则直接透传上游事件。",
+    "Off (direct passthrough)": "关闭（直接透传）",
+    "Gentle": "轻柔",
+    "Smooth": "平滑",
+    "Typewriter": "打字机"
   }
 }

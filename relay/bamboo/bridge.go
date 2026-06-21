@@ -115,7 +115,7 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 
 	// ③ 出口侧：按入口 codec 序列化响应
 	if relayReq.IsStream {
-		return doStreamRelay(c, info, client, entryCodec, relayReq)
+		return doStreamRelay(c, info, client, entryCodec, codecFmt, relayReq)
 	}
 	return doCompleteRelay(c, client, entryCodec, relayReq)
 }
@@ -127,16 +127,16 @@ func flushBambooDebug(info *relaycommon.RelayInfo, buf *strings.Builder, enabled
 }
 
 // doStreamRelay 消费 bamboo StreamEvent，按入口 codec 序列化为出口 SSE。
+//
+// 当渠道配置了平滑缓冲（BambooSmoothLevel != off）时，序列化后的 SSE 帧
+// 经 SmoothPacer 切分为微帧并按自适应间隔匀速释放，再写入 HTTP Response；
+// 否则直接透传上游事件。
 func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk.BambooClient,
-	entryCodec bamboocodec.Codec, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
+	entryCodec bamboocodec.Codec, outFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
 
-	// goroutine 泄漏防护：派生可取消 context。
-	// 当客户端断开（c.Request.Context().Done()）或函数返回时取消，
-	// 通知 bamboo provider 的 Chat channel 消费循环及时退出，避免泄漏。
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
 
-	// 监听客户端断开，主动取消上游 context
 	go func() {
 		<-c.Request.Context().Done()
 		cancel()
@@ -154,32 +154,58 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	serializer := entryCodec.NewSerializer()
 	var usage dto.Usage
 
+	// 平滑缓冲：当渠道配置了有效档位时，序列化输出经 SmoothPacer 匀速释放
+	smoothLevel := resolveSmoothLevel()
+	var smooth *smoothBufferWriter
+	if smoothLevel != dto.BambooSmoothLevelOff {
+		writeFn := func(data []byte) bool {
+			if _, werr := c.Writer.Write(data); werr != nil {
+				return false
+			}
+			c.Writer.Flush()
+			return true
+		}
+		smooth = startSmoothBuffer(ctx, outFmt, smoothLevel, writeFn)
+	}
+
+	// writeSSE 写入一帧 SSE 数据（平滑缓冲时推入 pacer，否则直接写）
+	writeSSE := func(data []byte) bool {
+		if smooth != nil {
+			smooth.push(data)
+			return true
+		}
+		if _, werr := c.Writer.Write(data); werr != nil {
+			return false
+		}
+		c.Writer.Flush()
+		return true
+	}
+
 	for event := range eventCh {
 		if event.Type == bamboosdk.EventError {
 			cause := errStreamErrorNoDetail
 			if event.Error != nil {
-				cause = event.Error // *BambooError 已实现 error 接口（bamboo/errors.go:46）
+				cause = event.Error
+			}
+			if smooth != nil {
+				smooth.wait()
 			}
 			return nil, types.NewError(cause, types.ErrorCodeBadResponseBody)
 		}
 
-		// 累计 thinking delta 的 reasoning token
 		accumulateReasoningFromEvent(info.OriginModelName, &usage, &event)
 
 		data, serr := serializer.Serialize(event)
 		if serr != nil {
+			if smooth != nil {
+				smooth.wait()
+			}
 			return nil, translateCodecError(serr)
 		}
-		if _, werr := c.Writer.Write(data); werr != nil {
-			break // 客户端断开
+		if !writeSSE(data) {
+			break
 		}
-		c.Writer.Flush()
 
-		// 从 message_delta 提取 usage（含缓存 token）
-		//
-		// Anthropic 的 input_tokens 不含 cache token（cache_read/cache_creation 是独立计费项），
-		// 与 native Claude relay 的 PromptTokens 语义一致，可直接赋值。
-		// bamboo SDK v0.4.3+ 已在 provider 层正确传递 cache token。
 		if event.Type == bamboosdk.EventMessageDelta && event.Usage != nil {
 			usage.PromptTokens = int(event.Usage.InputTokens)
 			usage.CompletionTokens = int(event.Usage.OutputTokens)
@@ -191,17 +217,17 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	// flush 剩余缓冲（如 OpenAI codec 的 [DONE] 终止符）
 	tail, _ := serializer.Flush()
 	if len(tail) > 0 {
-		c.Writer.Write(tail)
-		c.Writer.Flush()
+		writeSSE(tail)
+	}
+
+	// 通知 pacer 上游结束，等待所有微帧排空
+	if smooth != nil {
+		smooth.signalEnd()
+		smooth.wait()
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 
-	// 流式路径不在此处设置 ContextKeyEmptyResponse：
-	// 1. 流式响应已开始向客户端推送，无法像非流式一样整体重试；
-	// 2. 流式空内容通常由 EventError / 零 usage 等机制在消费侧处理；
-	// 3. 若上游返回了空 delta，completion_tokens 也会是 0，但 SSE 数据已发出，
-	//    重试会导致客户端收到重复的流片段，因此仅对非流式路径做标记。
 	return &usage, nil
 }
 
