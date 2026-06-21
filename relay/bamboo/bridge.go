@@ -20,6 +20,8 @@ import (
 	_ "github.com/bamboo-services/bamboo-messages/bamboo/codec/openai"
 	_ "github.com/bamboo-services/bamboo-messages/bamboo/codec/responses"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
@@ -184,6 +186,12 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+
+	// 流式路径不在此处设置 ContextKeyEmptyResponse：
+	// 1. 流式响应已开始向客户端推送，无法像非流式一样整体重试；
+	// 2. 流式空内容通常由 EventError / 零 usage 等机制在消费侧处理；
+	// 3. 若上游返回了空 delta，completion_tokens 也会是 0，但 SSE 数据已发出，
+	//    重试会导致客户端收到重复的流片段，因此仅对非流式路径做标记。
 	return &usage, nil
 }
 
@@ -217,6 +225,14 @@ func doCompleteRelay(c *gin.Context, client bamboosdk.BambooClient,
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed)
 	}
+
+	// 空响应检测：content 为空且 output_tokens 为 0 时标记，供 controller 触发重试。
+	// 参考 service/text_quota.go 的 CompletionTokens==0 && PromptTokens>0 判断，
+	// 这里在 bamboo 非流式结果上通过 Response.Content 长度 + Usage.OutputTokens 检测。
+	if len(resp.Content) == 0 && resp.Usage.OutputTokens == 0 {
+		common.SetContextKey(c, constant.ContextKeyEmptyResponse, true)
+	}
+
 	body, serr := entryCodec.SerializeResponse(resp)
 	if serr != nil {
 		return nil, translateCodecError(serr)
