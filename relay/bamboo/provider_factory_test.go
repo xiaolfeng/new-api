@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/gin-gonic/gin"
@@ -49,7 +50,7 @@ func TestNewProvider_SupportedOpenAICompatible(t *testing.T) {
 	}
 	for _, apiType := range supportedTypes {
 		info := makeInfo(apiType)
-		p, err := newProvider(nil, info)
+		p, _, err := newProvider(nil, info)
 		if err != nil {
 			t.Errorf("APIType %d: expected nil err, got %v", apiType, err)
 			continue
@@ -68,7 +69,7 @@ func TestNewProvider_SupportedNativeProtocols(t *testing.T) {
 	}
 	for _, apiType := range nativeTypes {
 		info := makeInfo(apiType)
-		p, err := newProvider(nil, info)
+		p, _, err := newProvider(nil, info)
 		if err != nil {
 			t.Errorf("APIType %d: expected nil err, got %v", apiType, err)
 			continue
@@ -93,7 +94,7 @@ func TestNewProvider_UnsupportedReturnsFallback(t *testing.T) {
 	}
 	for _, apiType := range unsupportedTypes {
 		info := makeInfo(apiType)
-		p, err := newProvider(nil, info)
+		p, _, err := newProvider(nil, info)
 		if p != nil {
 			t.Errorf("APIType %d: expected nil provider for unsupported", apiType)
 			continue
@@ -205,14 +206,96 @@ func TestNewProvider_CustomHeadersForwarded(t *testing.T) {
 	c.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
 
 	info := makeInfo(constant.APITypeOpenAI)
-	info.HeadersOverride = map[string]interface{}{
+	info.HeadersOverride = map[string]any{
 		"X-Tenant-Id": "tenant-123",
 		"X-Trace-Id":  "trace-456",
 	}
 
-	p, err := newProvider(c, info)
+	p, _, err := newProvider(c, info)
 	if err != nil {
 		t.Fatalf("expected no error, got: %v (type: %T)", err, err)
 	}
 	assert.NotNil(t, p)
+}
+
+func TestBambooUpstreamFormatToRelayFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    dto.BambooUpstreamFormatType
+		expected types.RelayFormat
+	}{
+		{"OpenAI", dto.BambooUpstreamFormatOpenAI, types.RelayFormatOpenAI},
+		{"Anthropic", dto.BambooUpstreamFormatAnthropic, types.RelayFormatClaude},
+		{"Gemini", dto.BambooUpstreamFormatGemini, types.RelayFormatGemini},
+		{"Responses", dto.BambooUpstreamFormatResponses, types.RelayFormatOpenAIResponses},
+		{"Auto(empty)", dto.BambooUpstreamFormatAuto, ""},
+		{"Unknown", "unknown_format", ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := bambooUpstreamFormatToRelayFormat(tt.input)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestApiTypeToRelayFormat(t *testing.T) {
+	tests := []struct {
+		name     string
+		apiType  int
+		expected types.RelayFormat
+	}{
+		{"Anthropic", constant.APITypeAnthropic, types.RelayFormatClaude},
+		{"Gemini", constant.APITypeGemini, types.RelayFormatGemini},
+		{"Codex(Responses)", constant.APITypeCodex, types.RelayFormatOpenAIResponses},
+		{"OpenAI", constant.APITypeOpenAI, types.RelayFormatOpenAI},
+		{"Xai", constant.APITypeXai, types.RelayFormatOpenAI},
+		{"DeepSeek", constant.APITypeDeepSeek, types.RelayFormatOpenAI},
+		{"Moonshot", constant.APITypeMoonshot, types.RelayFormatOpenAI},
+		{"SiliconFlow", constant.APITypeSiliconFlow, types.RelayFormatOpenAI},
+		{"Mistral", constant.APITypeMistral, types.RelayFormatOpenAI},
+		{"ZhipuV4", constant.APITypeZhipuV4, types.RelayFormatOpenAI},
+		{"Perplexity", constant.APITypePerplexity, types.RelayFormatOpenAI},
+		{"Cohere", constant.APITypeCohere, types.RelayFormatOpenAI},
+		{"MiniMax", constant.APITypeMiniMax, types.RelayFormatOpenAI},
+		{"BaiduV2", constant.APITypeBaiduV2, types.RelayFormatOpenAI},
+		{"OpenRouter", constant.APITypeOpenRouter, types.RelayFormatOpenAI},
+		{"Xinference", constant.APITypeXinference, types.RelayFormatOpenAI},
+		{"Unknown(9999)", 9999, ""},
+		{"Aws(unsupported)", constant.APITypeAws, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := apiTypeToRelayFormat(tt.apiType)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+func TestResolveUpstreamRelayFormat(t *testing.T) {
+	tests := []struct {
+		name           string
+		bambooUpstream string
+		apiType        int
+		expected       types.RelayFormat
+	}{
+		{"manual OpenAI", "openai", constant.APITypeAnthropic, types.RelayFormatOpenAI},
+		{"manual Anthropic", "anthropic", constant.APITypeOpenAI, types.RelayFormatClaude},
+		{"manual Gemini", "gemini", constant.APITypeOpenAI, types.RelayFormatGemini},
+		{"manual Responses", "responses", constant.APITypeOpenAI, types.RelayFormatOpenAIResponses},
+		{"auto empty + OpenAI ApiType", "", constant.APITypeOpenAI, types.RelayFormatOpenAI},
+		{"auto + Anthropic ApiType", "auto", constant.APITypeAnthropic, types.RelayFormatClaude},
+		{"auto + Gemini ApiType", "", constant.APITypeGemini, types.RelayFormatGemini},
+		{"auto + Codex ApiType", "", constant.APITypeCodex, types.RelayFormatOpenAIResponses},
+		{"auto + Legacy(DeepSeek)", "", constant.APITypeDeepSeek, types.RelayFormatOpenAI},
+		{"auto + Unknown ApiType", "", 9999, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := makeInfo(tt.apiType)
+			info.ChannelOtherSettings.BambooUpstreamFormat = tt.bambooUpstream
+			got := resolveUpstreamRelayFormat(info)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
 }
