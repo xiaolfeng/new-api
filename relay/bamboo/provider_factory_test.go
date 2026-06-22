@@ -170,7 +170,7 @@ func TestResolveBaseURL_CodingPlanClaude(t *testing.T) {
 		{
 			name:     "kimi-coding-plan Claude",
 			baseURL:  "kimi-coding-plan",
-			expected: "https://api.kimi.com/coding",
+			expected: "https://api.kimi.com/coding/",
 		},
 		{
 			name:     "doubao-coding-plan Claude",
@@ -182,10 +182,44 @@ func TestResolveBaseURL_CodingPlanClaude(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			info := makeInfoWithBaseURL(constant.APITypeZhipuV4, tt.baseURL)
 			info.RelayFormat = types.RelayFormatClaude
+			info.ChannelOtherSettings.BambooUpstreamFormat = "anthropic"
 			got := resolveBaseURL(info)
 			assert.Equal(t, tt.expected, got)
 		})
 	}
+}
+
+// === Bug 修复核心：入口=Claude 但显式指定上游=OpenAI ===
+
+func TestResolveBaseURL_ExplicitUpstreamOpenAI(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		expected string
+	}{
+		{"glm-coding-plan", "glm-coding-plan", "https://open.bigmodel.cn/api/coding/paas/v4"},
+		{"kimi-coding-plan", "kimi-coding-plan", "https://api.kimi.com/coding/v1"},
+		{"doubao-coding-plan", "doubao-coding-plan", "https://ark.cn-beijing.volces.com/api/coding/v3"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := makeInfoWithBaseURL(constant.APITypeAnthropic, tt.baseURL)
+			info.RelayFormat = types.RelayFormatClaude
+			info.ChannelOtherSettings.BambooUpstreamFormat = "openai"
+			got := resolveBaseURL(info)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// 入口=OpenAI 但显式指定上游=Anthropic
+
+func TestResolveBaseURL_ExplicitUpstreamAnthropic(t *testing.T) {
+	info := makeInfoWithBaseURL(constant.APITypeOpenAI, "glm-coding-plan")
+	info.RelayFormat = types.RelayFormatOpenAI
+	info.ChannelOtherSettings.BambooUpstreamFormat = "anthropic"
+	got := resolveBaseURL(info)
+	assert.Equal(t, "https://open.bigmodel.cn/api/anthropic", got)
 }
 
 // === S4: 普通 URL 不受影响 ===
@@ -195,6 +229,20 @@ func TestResolveBaseURL_NormalURL(t *testing.T) {
 	info.RelayFormat = types.RelayFormatOpenAI
 	got := resolveBaseURL(info)
 	assert.Equal(t, "https://api.openai.com", got)
+}
+
+func TestResolveBaseURL_PlainURL(t *testing.T) {
+	info := makeInfoWithBaseURL(constant.APITypeOpenAI, "https://custom.example.com")
+	info.RelayFormat = types.RelayFormatOpenAI
+	got := resolveBaseURL(info)
+	assert.Equal(t, "https://custom.example.com", got)
+}
+
+func TestResolveBaseURL_EmptyURL(t *testing.T) {
+	info := makeInfoWithBaseURL(constant.APITypeOpenAI, "")
+	info.RelayFormat = types.RelayFormatOpenAI
+	got := resolveBaseURL(info)
+	assert.Equal(t, "", got)
 }
 
 // === S3: 自定义 header 透传 ===
@@ -295,6 +343,42 @@ func TestResolveUpstreamRelayFormat(t *testing.T) {
 			info := makeInfo(tt.apiType)
 			info.ChannelOtherSettings.BambooUpstreamFormat = tt.bambooUpstream
 			got := resolveUpstreamRelayFormat(info)
+			assert.Equal(t, tt.expected, got)
+		})
+	}
+}
+
+// === ensureOpenAIBaseURL: /v1 自动补全 ===
+
+func TestEnsureOpenAIBaseURL(t *testing.T) {
+	tests := []struct {
+		name     string
+		baseURL  string
+		expected string
+	}{
+		// 纯域名 → 自动补 /v1
+		{"plain domain", "https://ai.akass.cn", "https://ai.akass.cn/v1"},
+		{"plain domain with trailing slash", "https://ai.akass.cn/", "https://ai.akass.cn/v1"},
+
+		// 已有版本号 → 原样返回
+		{"has /v1", "https://api.openai.com/v1", "https://api.openai.com/v1"},
+		{"has /v4", "https://open.bigmodel.cn/api/coding/paas/v4", "https://open.bigmodel.cn/api/coding/paas/v4"},
+		{"has /v3", "https://ark.cn-beijing.volces.com/api/coding/v3", "https://ark.cn-beijing.volces.com/api/coding/v3"},
+		{"has /v1 with trailing slash", "https://api.openai.com/v1/", "https://api.openai.com/v1/"},
+
+		// 空字符串 → 原样返回
+		{"empty string", "", ""},
+
+		// http 协议
+		{"http plain domain", "http://localhost:8080", "http://localhost:8080/v1"},
+		{"http with port and /v1", "http://localhost:8080/v1", "http://localhost:8080/v1"},
+
+		// 带路径但无版本号 → 补 /v1
+		{"path without version", "https://api.example.com/openai", "https://api.example.com/openai/v1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ensureOpenAIBaseURL(tt.baseURL)
 			assert.Equal(t, tt.expected, got)
 		})
 	}
