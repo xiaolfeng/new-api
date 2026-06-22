@@ -117,7 +117,7 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	if relayReq.IsStream {
 		return doStreamRelay(c, info, client, entryCodec, codecFmt, relayReq)
 	}
-	return doCompleteRelay(c, client, entryCodec, relayReq)
+	return doCompleteRelay(c, info, client, entryCodec, relayReq)
 }
 
 func flushBambooDebug(info *relaycommon.RelayInfo, buf *strings.Builder, enabled bool) {
@@ -202,6 +202,12 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			}
 			return nil, translateCodecError(serr)
 		}
+
+		// TTFT：首个有效事件序列化成功后记录首次响应时间（幂等，仅首次生效）。
+		// 与原生路径 stream_scanner.go 行为一致：在上游数据到达时标记，而非客户端实际收到时。
+		// 即使 SmoothPacer 开启（输出被缓冲延迟），TTFT 仍反映上游真实首字延迟。
+		info.SetFirstResponseTime()
+
 		if !writeSSE(data) {
 			break
 		}
@@ -254,13 +260,15 @@ func accumulateReasoningFromEvent(modelName string, usage *dto.Usage, event *bam
 }
 
 // doCompleteRelay 非流式中继。
-func doCompleteRelay(c *gin.Context, client bamboosdk.BambooClient,
+func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk.BambooClient,
 	entryCodec bamboocodec.Codec, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
 
 	resp, err := client.Complete(c.Request.Context(), req.Messages, req.System, req.Config)
 	if err != nil {
 		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed)
 	}
+
+	info.SetFirstResponseTime()
 
 	// 空响应检测：content 为空且 output_tokens 为 0 时标记，供 controller 触发重试。
 	// 参考 service/text_quota.go 的 CompletionTokens==0 && PromptTokens>0 判断，

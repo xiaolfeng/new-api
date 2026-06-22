@@ -34,6 +34,7 @@ type BambooSettings struct {
 var defaultBambooSettings = BambooSettings{
 	EnableBambooRelay:    false,
 	EnableBambooDebugLog: false,
+	SmoothLevel:          "off",
 }
 
 // 全局实例

@@ -167,6 +167,7 @@ export function ModelMutateDrawer({
       'global.responses_to_chat_completions_enabled': false,
       'bamboo.enable_bamboo_relay': false,
       'bamboo.enable_bamboo_debug_log': false,
+      'bamboo.smooth_level': 'off',
       'general_setting.ping_interval_enabled': false,
       'general_setting.ping_interval_seconds': 60,
       'gemini.safety_settings': '',

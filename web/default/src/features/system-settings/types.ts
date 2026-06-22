@@ -179,6 +179,7 @@ export type ModelSettings = {
   'global.responses_to_chat_completions_enabled': boolean
   'bamboo.enable_bamboo_relay': boolean
   'bamboo.enable_bamboo_debug_log': boolean
+  'bamboo.smooth_level': string
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
   'gemini.safety_settings': string
