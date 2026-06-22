@@ -1,6 +1,9 @@
 package bamboo
 
 import (
+	"regexp"
+	"strings"
+
 	"github.com/gin-gonic/gin"
 
 	bambooanthropic "github.com/bamboo-services/bamboo-messages/provider/anthropic"
@@ -17,10 +20,14 @@ import (
 	"github.com/QuantumNous/new-api/types"
 )
 
+// versionRegex 匹配 URL path 以 /v + 数字 结尾的模式（如 /v1, /v4）。
+var versionRegex = regexp.MustCompile(`/v\d+$`)
+
 // resolveBaseURL 将渠道配置的 BaseURL 解析为实际请求 URL。
 //
 // 对 coding-plan 快捷键（glm-coding-plan / kimi-coding-plan / doubao-coding-plan 等）
-// 查 ChannelSpecialBases 映射表，按入口 RelayFormat 选择对应的 Claude 或 OpenAI 端点。
+// 查 ChannelSpecialBases 映射表，按上游格式（resolveUpstreamRelayFormat）选择对应的
+// Claude 或 OpenAI 端点。auto 模式（upstreamRelayFormat 为空）时回退到入口 RelayFormat。
 // 普通完整 URL 直接原样返回。
 func resolveBaseURL(info *relaycommon.RelayInfo) string {
 	baseURL := info.ChannelBaseUrl
@@ -31,13 +38,46 @@ func resolveBaseURL(info *relaycommon.RelayInfo) string {
 	if !ok {
 		return baseURL
 	}
-	if info.RelayFormat == types.RelayFormatClaude && specialPlan.ClaudeBaseURL != "" {
+	// 按上游格式选 BaseURL（手动覆盖 > ApiType 推断 > 入口格式回退）
+	upstreamFmt := resolveUpstreamRelayFormat(info)
+	if upstreamFmt == "" {
+		upstreamFmt = info.RelayFormat // auto 模式回退到入口格式（旧行为）
+	}
+	if upstreamFmt == types.RelayFormatClaude && specialPlan.ClaudeBaseURL != "" {
 		return specialPlan.ClaudeBaseURL
 	}
+	if upstreamFmt == types.RelayFormatOpenAIResponses && specialPlan.OpenAIBaseURL != "" {
+		return specialPlan.OpenAIBaseURL
+	}
+	if upstreamFmt == types.RelayFormatGemini && specialPlan.ClaudeBaseURL != "" {
+		return specialPlan.ClaudeBaseURL // Gemini 无 special plan，走 Claude 端点
+	}
+	// 默认 OpenAI（含 OpenAI/OpenAIResponses）
 	if specialPlan.OpenAIBaseURL != "" {
 		return specialPlan.OpenAIBaseURL
 	}
 	return baseURL
+}
+
+// ensureOpenAIBaseURL 确保 OpenAI Provider 的 BaseURL 包含 /v1 版本路径。
+//
+// openai-go SDK 会在 BaseURL 后自动拼接 /chat/completions，
+// 如果用户只配了纯域名（如 https://ai.akass.cn），SDK 拼出 https://ai.akass.cn/chat/completions
+// → 缺少 /v1 前缀 → 上游返回 text/html 错误页面。
+//
+// 规则：
+//   - 空字符串 → 原样返回
+//   - path 以 /v + 数字 结尾（如 /v1, /v4, /v3）→ 原样返回
+//   - 其他 → 去除尾部斜杠后追加 /v1
+func ensureOpenAIBaseURL(baseURL string) string {
+	if baseURL == "" {
+		return baseURL
+	}
+	trimmed := strings.TrimRight(baseURL, "/")
+	if versionRegex.MatchString(trimmed) {
+		return baseURL
+	}
+	return trimmed + "/v1"
 }
 
 // resolveUpstreamFormat 决定 bamboo 实际使用的上游 provider 类型。
@@ -252,6 +292,7 @@ func newGeminiProvider(apiKey, baseURL string, headers map[string]string) provid
 }
 
 func newResponsesProvider(apiKey, baseURL string, headers map[string]string) provider.Provider {
+	baseURL = ensureOpenAIBaseURL(baseURL)
 	opts := []bambooresponses.Option{
 		bambooresponses.WithAPIKey(apiKey),
 		bambooresponses.WithBaseURL(baseURL),
@@ -264,6 +305,7 @@ func newResponsesProvider(apiKey, baseURL string, headers map[string]string) pro
 
 // buildCompletionsProvider 构造 OpenAI Completions provider，附加自定义 header。
 func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string, legacyCompat bool) provider.Provider {
+	baseURL = ensureOpenAIBaseURL(baseURL)
 	opts := []bamboocompletions.Option{
 		bamboocompletions.WithAPIKey(apiKey),
 		bamboocompletions.WithBaseURL(baseURL),
