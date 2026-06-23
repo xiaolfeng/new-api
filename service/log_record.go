@@ -81,7 +81,7 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	}
 
 	// 1. Prompt (从 relayInfo.Request 获取 messages)
-	// Bamboo 路径已在步骤 0 从 N2N 中间态填充了 record.Prompt / ClaudeRequestBlocks / ClaudeToolResponses，
+	// Bamboo 路径已在步骤 0 从 N2N 中间态填充了 record.Prompt / BambooRequestBlocks / BambooToolResponses，
 	// 跳过此处避免被入口格式覆盖。
 	if relayInfo != nil && relayInfo.Request != nil && relayInfo.BambooRelayData == nil {
 		switch req := relayInfo.Request.(type) {
@@ -142,7 +142,9 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	}
 
 	// 4. Tool invokes (Claude/Anthropic tool_use + tool_result)
-	if len(record.OpenAIResponseBlocks) > 0 {
+	if len(record.BambooResponseBlocks) > 0 {
+		record.ToolInvokes = buildBambooToolInvokeRecordsFromBlocks(record.BambooResponseBlocks)
+	} else if len(record.OpenAIResponseBlocks) > 0 {
 		record.ToolInvokes = buildOpenAIToolInvokeRecordsFromBlocks(record.OpenAIResponseBlocks)
 	} else if len(record.ClaudeResponseBlocks) > 0 {
 		record.ToolInvokes = buildClaudeToolInvokeRecordsFromBlocks(record.ClaudeResponseBlocks)
@@ -171,6 +173,9 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		len(record.ResponsesRequestBlocks) == 0 &&
 		len(record.ResponsesToolResponses) == 0 &&
 		len(record.ResponsesResponseBlocks) == 0 &&
+		len(record.BambooResponseBlocks) == 0 &&
+		len(record.BambooRequestBlocks) == 0 &&
+		len(record.BambooToolResponses) == 0 &&
 		record.BambooDebug == "" {
 		return ""
 	}
@@ -219,8 +224,8 @@ func buildBambooStructuredRecord(record *model.LogDetailRecord, data *relaycommo
 		return
 	}
 
-	requestBlocks := make([]model.ClaudeRequestBlock, 0, len(lastUserMsg.Blocks))
-	toolResponses := make([]model.ClaudeToolResponseBlock, 0)
+	requestBlocks := make([]model.BambooRequestBlock, 0, len(lastUserMsg.Blocks))
+	toolResponses := make([]model.BambooToolResponseBlock, 0)
 	textParts := make([]string, 0, len(lastUserMsg.Blocks))
 
 	for _, block := range lastUserMsg.Blocks {
@@ -230,7 +235,7 @@ func buildBambooStructuredRecord(record *model.LogDetailRecord, data *relaycommo
 			if strings.TrimSpace(text) == "" {
 				continue
 			}
-			requestBlocks = append(requestBlocks, model.ClaudeRequestBlock{
+			requestBlocks = append(requestBlocks, model.BambooRequestBlock{
 				Type: "text",
 				Text: text,
 			})
@@ -241,14 +246,14 @@ func buildBambooStructuredRecord(record *model.LogDetailRecord, data *relaycommo
 				continue
 			}
 			name := strings.TrimSpace(block.ToolName)
-			toolResponses = append(toolResponses, model.ClaudeToolResponseBlock{
+			toolResponses = append(toolResponses, model.BambooToolResponseBlock{
 				ToolUseID: toolUseID,
 				Name:      name,
 				Type:      "tool_result",
 				Role:      "user",
 			})
 		case "image", "document":
-			requestBlocks = append(requestBlocks, model.ClaudeRequestBlock{
+			requestBlocks = append(requestBlocks, model.BambooRequestBlock{
 				Type: block.Type,
 			})
 		}
@@ -258,8 +263,8 @@ func buildBambooStructuredRecord(record *model.LogDetailRecord, data *relaycommo
 		return
 	}
 
-	record.ClaudeRequestBlocks = requestBlocks
-	record.ClaudeToolResponses = toolResponses
+	record.BambooRequestBlocks = requestBlocks
+	record.BambooToolResponses = toolResponses
 
 	prompt := make(map[string]interface{})
 	prompt["role"] = "user"
@@ -279,27 +284,32 @@ func buildBambooResponseBlocks(record *model.LogDetailRecord, relayInfo *relayco
 	// 优先使用 N2N 中间态——携带完整的结构化数据（含 thinking 块），
 	// 不会因格式序列化或 ResponseBody 截断而丢失。
 	if relayInfo.BambooRelayData != nil && len(relayInfo.BambooRelayData.ResponseBlocks) > 0 {
-		claudeBlocks := make([]model.ClaudeResponseBlock, 0, len(relayInfo.BambooRelayData.ResponseBlocks))
+		bambooBlocks := make([]model.BambooResponseBlock, 0, len(relayInfo.BambooRelayData.ResponseBlocks))
 		for _, block := range relayInfo.BambooRelayData.ResponseBlocks {
-			cb := model.ClaudeResponseBlock{Type: block.Type}
+			bb := model.BambooResponseBlock{Type: block.Type}
 			switch block.Type {
 			case "text":
-				cb.Content = safeTruncateUTF8(block.Text, maxCompletionLength)
+				bb.Text = safeTruncateUTF8(block.Text, maxCompletionLength)
 			case "thinking":
-				cb.Content = safeTruncateUTF8(block.Thinking, maxCompletionLength)
+				bb.Thinking = safeTruncateUTF8(block.Thinking, maxCompletionLength)
 			case "tool_use":
-				cb.ID = block.ToolID
-				cb.Name = block.ToolName
+				bb.ToolID = block.ToolID
+				bb.ToolName = block.ToolName
 				if len(block.ToolInput) > 0 {
 					var input interface{}
 					if err := common.Unmarshal(block.ToolInput, &input); err == nil {
-						cb.Input = input
+						bb.ToolInput = input
 					}
 				}
+			case "tool_result":
+				bb.ToolID = block.ToolID
+				bb.ToolName = block.ToolName
+				bb.ToolResult = safeTruncateUTF8(block.ToolResult, maxCompletionLength)
+				bb.IsError = block.IsError
 			}
-			claudeBlocks = append(claudeBlocks, cb)
+			bambooBlocks = append(bambooBlocks, bb)
 		}
-		record.ClaudeResponseBlocks = claudeBlocks
+		record.BambooResponseBlocks = bambooBlocks
 		return
 	}
 	// 回退：从序列化的 ResponseBody 反向解析
@@ -894,6 +904,30 @@ func buildClaudeToolInvokeRecordsFromBlocks(blocks []model.ClaudeResponseBlock) 
 			ID:    block.ID,
 			Name:  block.Name,
 			Input: block.Input,
+		})
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	return records
+}
+
+func buildBambooToolInvokeRecordsFromBlocks(blocks []model.BambooResponseBlock) []model.LogToolInvokeRecord {
+	if len(blocks) == 0 {
+		return nil
+	}
+	records := make([]model.LogToolInvokeRecord, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type != "tool_use" {
+			continue
+		}
+		if strings.TrimSpace(block.ToolID) == "" && strings.TrimSpace(block.ToolName) == "" && block.ToolInput == nil {
+			continue
+		}
+		records = append(records, model.LogToolInvokeRecord{
+			ID:    block.ToolID,
+			Name:  block.ToolName,
+			Input: block.ToolInput,
 		})
 	}
 	if len(records) == 0 {

@@ -30,6 +30,29 @@ export interface ClaudeResponseBlock {
   input?: unknown
 }
 
+export interface BambooResponseBlock {
+  type?: string
+  text?: string
+  thinking?: string
+  toolId?: string
+  toolName?: string
+  toolInput?: unknown
+  toolResult?: string
+  isError?: boolean
+}
+
+export interface BambooRequestBlock {
+  type?: string
+  text?: string
+}
+
+export interface BambooToolResponseBlock {
+  toolUseId?: string
+  name?: string
+  type?: string
+  role?: string
+}
+
 export interface OpenAIRequestBlock {
   type?: string
   role?: string
@@ -99,6 +122,9 @@ export interface LogDetailRecord {
   responsesResponseBlocks?: ResponsesResponseBlock[]
   openaiRequestBlocks?: OpenAIRequestBlock[]
   openaiToolResponses?: OpenAIToolResponseBlock[]
+  bambooResponseBlocks?: BambooResponseBlock[]
+  bambooRequestBlocks?: BambooRequestBlock[]
+  bambooToolResponses?: BambooToolResponseBlock[]
   bambooDebug?: string
 }
 
@@ -129,7 +155,7 @@ export interface ToolResponseRow {
 
 export interface ParsedSections {
   /** Which upstream format produced these sections */
-  format: 'openai' | 'claude' | 'responses' | 'none'
+  format: 'openai' | 'claude' | 'responses' | 'bamboo' | 'none'
 
   /** User text input blocks */
   requestBlocks: Array<{
@@ -246,6 +272,62 @@ export function parseLogDetailRecord(
 
   const bambooDebug = typeof record.bambooDebug === 'string' ? record.bambooDebug : ''
   empty.bambooDebug = bambooDebug
+
+  // Bamboo format — check FIRST (bamboo data takes priority)
+  const bambooResponseBlocks = ensureArray<BambooResponseBlock>(record.bambooResponseBlocks)
+  const bambooRequestBlocks = ensureArray<BambooRequestBlock>(record.bambooRequestBlocks)
+  const bambooToolResponses = ensureArray<BambooToolResponseBlock>(record.bambooToolResponses)
+  const hasBamboo =
+    bambooResponseBlocks.length > 0 ||
+    bambooRequestBlocks.length > 0 ||
+    bambooToolResponses.length > 0
+
+  if (hasBamboo) {
+    const thinkingParts: string[] = []
+    const answerParts: string[] = []
+    const toolUses: ToolUseRow[] = []
+
+    bambooResponseBlocks.forEach((block, index) => {
+      if (!block || typeof block !== 'object') return
+      switch (block.type) {
+        case 'thinking':
+          if (block.thinking) thinkingParts.push(block.thinking)
+          break
+        case 'text':
+          if (block.text) answerParts.push(block.text)
+          break
+        case 'tool_use':
+          toolUses.push({
+            order: toolUses.length + 1,
+            id: block.toolId || `bamboo-tool-${index}`,
+            name: block.toolName || '',
+            input: block.toolInput,
+          })
+          break
+        case 'tool_result':
+          // tool_result blocks don't add to toolUses; they contain results
+          // Results are displayed via toolResponses section
+          break
+      }
+    })
+
+    return {
+      format: 'bamboo',
+      requestBlocks: bambooRequestBlocks
+        .filter((b) => b.text && b.text.trim() !== '')
+        .map((b) => ({ type: b.type || 'text', role: '', text: b.text! })),
+      toolResponses: bambooToolResponses.map((item, index) => ({
+        order: index + 1,
+        name: item.name || '',
+        callId: item.toolUseId || '',
+        type: item.type,
+      })),
+      thinking: thinkingParts.join('\n\n'),
+      answer: answerParts.join('\n\n'),
+      toolUses,
+      bambooDebug,
+    }
+  }
 
   // Claude format
   const claudeRequestBlocks = ensureArray<ClaudeRequestBlock>(record.claudeRequestBlocks)
