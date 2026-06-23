@@ -2,6 +2,7 @@ package bamboo
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -205,6 +206,19 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 		return true
 	}
 
+	// 流式内容块累加器：从 StreamEvent 直接累积 thinking / text / tool_use，
+	// 避免后续从格式化 SSE 字符串反向解析（可能丢失 thinking 块或被截断）。
+	type streamBlockAccum struct {
+		blockType    string
+		textBuf      strings.Builder
+		thinkingBuf  strings.Builder
+		toolID       string
+		toolName     string
+		toolInputBuf strings.Builder
+	}
+	streamBlocks := make(map[int]*streamBlockAccum)
+	var orderedIndices []int
+
 	for event := range eventCh {
 		if event.Type == bamboosdk.EventError {
 			cause := errStreamErrorNoDetail
@@ -220,6 +234,49 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 		collector.observe(event)
 
 		accumulateReasoningFromEvent(info.OriginModelName, &usage, &event)
+
+		switch event.Type {
+		case bamboosdk.EventContentBlockStart:
+			if event.ContentBlock != nil {
+				accum := &streamBlockAccum{blockType: string(event.ContentBlock.BlockType())}
+				switch b := event.ContentBlock.(type) {
+				case *bamboosdk.TextBlock:
+					accum.textBuf.WriteString(b.Text)
+				case *bamboosdk.ThinkingBlock:
+					accum.thinkingBuf.WriteString(b.Thinking)
+				case *bamboosdk.ToolUseBlock:
+					accum.toolID = b.ID
+					accum.toolName = b.Name
+					if len(b.Input) > 0 {
+						accum.toolInputBuf.Write(b.Input)
+					}
+				}
+				streamBlocks[event.Index] = accum
+				orderedIndices = append(orderedIndices, event.Index)
+			}
+		case bamboosdk.EventContentBlockDelta:
+			if event.Delta != nil {
+				if delta, ok := event.Delta.(*bamboosdk.StreamDelta); ok && delta != nil {
+					accum, exists := streamBlocks[event.Index]
+					if !exists {
+						accum = &streamBlockAccum{blockType: "text"}
+						streamBlocks[event.Index] = accum
+						orderedIndices = append(orderedIndices, event.Index)
+					}
+					switch delta.Type {
+					case bamboosdk.DeltaTextDelta:
+						accum.textBuf.WriteString(delta.Text)
+					case bamboosdk.DeltaThinkingDelta:
+						if accum.blockType != "thinking" {
+							accum.blockType = "thinking"
+						}
+						accum.thinkingBuf.WriteString(delta.Thinking)
+					case bamboosdk.DeltaInputJSON:
+						accum.toolInputBuf.WriteString(delta.PartialJSON)
+					}
+				}
+			}
+		}
 
 		data, serr := serializer.Serialize(event)
 		if serr != nil {
@@ -263,6 +320,31 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 	if len(streamItems) > 0 {
 		info.ResponseBody = truncateResponseBody(strings.Join(streamItems, "\n"))
+	}
+
+	// 将累加的流式内容块转换为格式无关的中间表示，供日志记录消费。
+	// 优先于 ResponseBody 反向解析——保留了完整的 thinking / tool_use 结构。
+	if info.BambooRelayData != nil && len(orderedIndices) > 0 {
+		responseBlocks := make([]relaycommon.BambooBlockExtract, 0, len(orderedIndices))
+		for _, idx := range orderedIndices {
+			accum := streamBlocks[idx]
+			if accum == nil {
+				continue
+			}
+			ext := relaycommon.BambooBlockExtract{Type: accum.blockType}
+			switch accum.blockType {
+			case "text":
+				ext.Text = accum.textBuf.String()
+			case "thinking":
+				ext.Thinking = accum.thinkingBuf.String()
+			case "tool_use":
+				ext.ToolID = accum.toolID
+				ext.ToolName = accum.toolName
+				ext.ToolInput = json.RawMessage(accum.toolInputBuf.String())
+			}
+			responseBlocks = append(responseBlocks, ext)
+		}
+		info.BambooRelayData.ResponseBlocks = responseBlocks
 	}
 
 	if timingResult := collector.result(); !timingResult.IsZero() {
@@ -313,6 +395,30 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 	// 这里在 bamboo 非流式结果上通过 Response.Content 长度 + Usage.OutputTokens 检测。
 	if len(resp.Content) == 0 && resp.Usage.OutputTokens == 0 {
 		common.SetContextKey(c, constant.ContextKeyEmptyResponse, true)
+	}
+
+	if info.BambooRelayData != nil && len(resp.Content) > 0 {
+		responseBlocks := make([]relaycommon.BambooBlockExtract, 0, len(resp.Content))
+		for _, block := range resp.Content {
+			ext := relaycommon.BambooBlockExtract{Type: string(block.BlockType())}
+			switch b := block.(type) {
+			case *bamboosdk.TextBlock:
+				ext.Text = b.Text
+			case *bamboosdk.ThinkingBlock:
+				ext.Thinking = b.Thinking
+			case *bamboosdk.ToolUseBlock:
+				ext.ToolID = b.ID
+				ext.ToolName = b.Name
+				ext.ToolInput = b.Input
+			case *bamboosdk.ToolResultBlock:
+				ext.ToolID = b.ToolUseID
+				ext.ToolName = b.ToolName
+				ext.ToolResult = b.Content
+				ext.IsError = b.IsError
+			}
+			responseBlocks = append(responseBlocks, ext)
+		}
+		info.BambooRelayData.ResponseBlocks = responseBlocks
 	}
 
 	body, serr := entryCodec.SerializeResponse(resp)

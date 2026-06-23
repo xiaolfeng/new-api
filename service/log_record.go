@@ -273,7 +273,37 @@ func buildBambooStructuredRecord(record *model.LogDetailRecord, data *relaycommo
 }
 
 func buildBambooResponseBlocks(record *model.LogDetailRecord, relayInfo *relaycommon.RelayInfo) {
-	if relayInfo == nil || strings.TrimSpace(relayInfo.ResponseBody) == "" {
+	if relayInfo == nil {
+		return
+	}
+	// 优先使用 N2N 中间态——携带完整的结构化数据（含 thinking 块），
+	// 不会因格式序列化或 ResponseBody 截断而丢失。
+	if relayInfo.BambooRelayData != nil && len(relayInfo.BambooRelayData.ResponseBlocks) > 0 {
+		claudeBlocks := make([]model.ClaudeResponseBlock, 0, len(relayInfo.BambooRelayData.ResponseBlocks))
+		for _, block := range relayInfo.BambooRelayData.ResponseBlocks {
+			cb := model.ClaudeResponseBlock{Type: block.Type}
+			switch block.Type {
+			case "text":
+				cb.Content = safeTruncateUTF8(block.Text, maxCompletionLength)
+			case "thinking":
+				cb.Content = safeTruncateUTF8(block.Thinking, maxCompletionLength)
+			case "tool_use":
+				cb.ID = block.ToolID
+				cb.Name = block.ToolName
+				if len(block.ToolInput) > 0 {
+					var input interface{}
+					if err := common.Unmarshal(block.ToolInput, &input); err == nil {
+						cb.Input = input
+					}
+				}
+			}
+			claudeBlocks = append(claudeBlocks, cb)
+		}
+		record.ClaudeResponseBlocks = claudeBlocks
+		return
+	}
+	// 回退：从序列化的 ResponseBody 反向解析
+	if strings.TrimSpace(relayInfo.ResponseBody) == "" {
 		return
 	}
 	switch relayInfo.RelayFormat {
