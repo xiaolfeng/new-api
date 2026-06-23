@@ -240,6 +240,24 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       ? (data.openaiToolResponses as unknown[])
       : []
 
+    const bambooResponseBlocks: Array<{ type?: string; text?: string; thinking?: string }> =
+      Array.isArray(data.bambooResponseBlocks)
+        ? (data.bambooResponseBlocks as Array<{
+            type?: string
+            text?: string
+            thinking?: string
+          }>)
+        : []
+
+    const bambooRequestBlocks: Array<{ text?: string }> = Array.isArray(
+      data.bambooRequestBlocks
+    )
+      ? (data.bambooRequestBlocks as Array<{ text?: string }>)
+      : []
+    const bambooToolResponses = Array.isArray(data.bambooToolResponses)
+      ? (data.bambooToolResponses as unknown[])
+      : []
+
     const responsesPromptItems = flattenResponsesPromptInputItems(
       promptObj.input
     )
@@ -284,13 +302,17 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       claudeRequestBlocks.length > 0 ||
       responsesRequestBlocks.length > 0 ||
       openAIRequestBlocks.length > 0 ||
+      bambooRequestBlocks.some(
+        (block) => typeof block.text === 'string' && block.text.trim() !== ''
+      ) ||
       hasPromptObjectContent ||
       (Array.isArray(data.prompt) && data.prompt.length > 0)
 
     const hasToolInput =
       claudeToolResponses.length > 0 ||
       responsesToolResponses.length > 0 ||
-      openaiToolResponses.length > 0
+      openaiToolResponses.length > 0 ||
+      bambooToolResponses.length > 0
 
     const hasTextOutput =
       (typeof completion === 'string' && completion.trim() !== '') ||
@@ -311,6 +333,12 @@ export function parseInteractionType(record: unknown): InteractionType | null {
           (block.type === 'content' || block.type === 'reasoning') &&
           typeof block.content === 'string' &&
           block.content.trim() !== ''
+      ) ||
+      bambooResponseBlocks.some(
+        (block) =>
+          (block.type === 'text' || block.type === 'thinking') &&
+          typeof block.text === 'string' &&
+          block.text.trim() !== ''
       )
 
     const hasAnyOutput =
@@ -322,12 +350,14 @@ export function parseInteractionType(record: unknown): InteractionType | null {
             Object.keys(completion as Record<string, unknown>).length > 0))) ||
       claudeResponseBlocks.length > 0 ||
       responsesResponseBlocks.length > 0 ||
-      openAIResponseBlocks.length > 0
+      openAIResponseBlocks.length > 0 ||
+      bambooResponseBlocks.length > 0
 
     const hasToolUse =
       claudeResponseBlocks.some((block) => block.type === 'tool_use') ||
       responsesResponseBlocks.some((block) => block.type === 'function_call') ||
       openAIResponseBlocks.some((block) => block.type === 'tool_call') ||
+      bambooResponseBlocks.some((block) => block.type === 'tool_use') ||
       legacyToolInvokes.length > 0
 
     if (hasNonToolInput) return 'input'

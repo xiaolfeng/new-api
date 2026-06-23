@@ -50,6 +50,7 @@ export interface BambooToolResponseBlock {
   toolUseId?: string
   name?: string
   type?: string
+  content?: string
   role?: string
 }
 
@@ -277,10 +278,7 @@ export function parseLogDetailRecord(
   const bambooResponseBlocks = ensureArray<BambooResponseBlock>(record.bambooResponseBlocks)
   const bambooRequestBlocks = ensureArray<BambooRequestBlock>(record.bambooRequestBlocks)
   const bambooToolResponses = ensureArray<BambooToolResponseBlock>(record.bambooToolResponses)
-  const hasBamboo =
-    bambooResponseBlocks.length > 0 ||
-    bambooRequestBlocks.length > 0 ||
-    bambooToolResponses.length > 0
+  const hasBamboo = bambooResponseBlocks.length > 0
 
   if (hasBamboo) {
     const thinkingParts: string[] = []
