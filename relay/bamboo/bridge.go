@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
 
@@ -31,6 +32,22 @@ import (
 
 // errStreamErrorNoDetail 用于 event.Error 为 nil 但事件类型为 EventError 的兜底。
 var errStreamErrorNoDetail = errors.New("bamboo stream error event without detail")
+
+// maxResponseBodyLen 限制 info.ResponseBody 的最大长度，防止超大日志撑爆数据库。
+const maxResponseBodyLen = 50000
+
+// truncateResponseBody 按字节截断超长响应体，回退到最后一个合法 UTF-8 边界并追加截断标记。
+func truncateResponseBody(body string) string {
+	if len(body) <= maxResponseBodyLen {
+		return body
+	}
+	cut := maxResponseBodyLen
+	// 回退到最后一个合法的 UTF-8 起始字节，避免截断多字节字符中间
+	for cut > 0 && !utf8.RuneStart(body[cut]) {
+		cut--
+	}
+	return body[:cut] + "\n...[truncated]"
+}
 
 // ChatRelay 对话中继统一内核。
 //
@@ -157,6 +174,8 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 	collector := newBambooTimingCollector()
 
+	var streamItems []string
+
 	// 平滑缓冲：当渠道配置了有效档位时，序列化输出经 SmoothPacer 匀速释放
 	smoothLevel := resolveSmoothLevel()
 	var smooth *smoothBufferWriter
@@ -208,6 +227,8 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			return nil, translateCodecError(serr)
 		}
 
+		streamItems = append(streamItems, string(data))
+
 		// TTFT：首个有效事件序列化成功后记录首次响应时间（幂等，仅首次生效）。
 		// 与原生路径 stream_scanner.go 行为一致：在上游数据到达时标记，而非客户端实际收到时。
 		// 即使 SmoothPacer 开启（输出被缓冲延迟），TTFT 仍反映上游真实首字延迟。
@@ -229,12 +250,17 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	tail, _ := serializer.Flush()
 	if len(tail) > 0 {
 		writeSSE(tail)
+		streamItems = append(streamItems, string(tail))
 	}
 
 	// 通知 pacer 上游结束，等待所有微帧排空
 	if smooth != nil {
 		smooth.signalEnd()
 		smooth.wait()
+	}
+
+	if len(streamItems) > 0 {
+		info.ResponseBody = truncateResponseBody(strings.Join(streamItems, "\n"))
 	}
 
 	if timingResult := collector.result(); !timingResult.IsZero() {
@@ -293,6 +319,8 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 	}
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.Write(body)
+
+	info.ResponseBody = truncateResponseBody(string(body))
 
 	return &dto.Usage{
 		PromptTokens:     int(resp.Usage.InputTokens),

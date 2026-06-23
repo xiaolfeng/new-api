@@ -187,7 +187,7 @@ function PriorityCell({ channel }: { channel: Channel }) {
           onOpenChange={setConfirmOpen}
           title={t('Confirm Batch Update')}
           desc={`This will update the priority to ${pendingValue} for all ${channelCount} channel(s) with tag "${tag}". Continue?`}
-          confirmText='Update'
+          confirmText={t('Update')}
           handleConfirm={() => {
             if (pendingValue !== null) {
               handleUpdateTagField(tag, 'priority', pendingValue, queryClient)
@@ -242,7 +242,7 @@ function WeightCell({ channel }: { channel: Channel }) {
           onOpenChange={setConfirmOpen}
           title={t('Confirm Batch Update')}
           desc={`This will update the weight to ${pendingValue} for all ${channelCount} channel(s) with tag "${tag}". Continue?`}
-          confirmText='Update'
+          confirmText={t('Update')}
           handleConfirm={() => {
             if (pendingValue !== null) {
               handleUpdateTagField(tag, 'weight', pendingValue, queryClient)
@@ -280,7 +280,7 @@ function BalanceCell({ channel }: { channel: Channel }) {
   const [codexUsageResponse, setCodexUsageResponse] =
     useState<CodexUsageDialogData | null>(null)
   const currencyLabel = getCurrencyLabel()
-  const tokenSuffix = currencyLabel === 'Tokens' ? ' Tokens' : ''
+  const tokenSuffix = currencyLabel === 'Tokens' ? ` ${t('Tokens')}` : ''
   const withSuffix = (value: string) =>
     tokenSuffix && value !== '-' ? `${value}${tokenSuffix}` : value
 
@@ -434,7 +434,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           checked={table.getIsAllPageRowsSelected()}
           indeterminate={table.getIsSomePageRowsSelected()}
           onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label='Select all'
+          aria-label={t('Select all')}
         />
       ),
       cell: ({ row }) => {
@@ -449,7 +449,7 @@ export function useChannelsColumns(): ColumnDef<Channel>[] {
           <Checkbox
             checked={row.getIsSelected()}
             onCheckedChange={(value) => row.toggleSelected(!!value)}
-            aria-label='Select row'
+            aria-label={t('Select row')}
           />
         )
       },
