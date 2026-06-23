@@ -228,6 +228,26 @@ func buildBambooStructuredRecord(record *model.LogDetailRecord, data *relaycommo
 	toolResponses := make([]model.BambooToolResponseBlock, 0)
 	textParts := make([]string, 0, len(lastUserMsg.Blocks))
 
+	// Build tool name lookup from assistant tool_use blocks in message history.
+	// tool_result blocks from upstream typically only carry ToolID (no ToolName),
+	// so the name must be resolved from the preceding assistant tool_use block.
+	toolNameMap := make(map[string]string)
+	for _, msg := range data.Messages {
+		if msg.Role != "assistant" {
+			continue
+		}
+		for _, block := range msg.Blocks {
+			if block.Type != "tool_use" {
+				continue
+			}
+			toolID := strings.TrimSpace(block.ToolID)
+			toolName := strings.TrimSpace(block.ToolName)
+			if toolID != "" && toolName != "" {
+				toolNameMap[toolID] = toolName
+			}
+		}
+	}
+
 	for _, block := range lastUserMsg.Blocks {
 		switch block.Type {
 		case "text":
@@ -245,11 +265,16 @@ func buildBambooStructuredRecord(record *model.LogDetailRecord, data *relaycommo
 			if toolUseID == "" {
 				continue
 			}
+			// Resolve tool name: prefer current block, fallback to history lookup
 			name := strings.TrimSpace(block.ToolName)
+			if name == "" {
+				name = toolNameMap[toolUseID]
+			}
 			toolResponses = append(toolResponses, model.BambooToolResponseBlock{
 				ToolUseID: toolUseID,
 				Name:      name,
 				Type:      "tool_result",
+				Content:   safeTruncateUTF8(block.ToolResult, maxCompletionLength),
 				Role:      "user",
 			})
 		case "image", "document":

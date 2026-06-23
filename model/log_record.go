@@ -90,6 +90,7 @@ type BambooToolResponseBlock struct {
 	ToolUseID string `json:"toolUseId,omitempty"`
 	Name      string `json:"name,omitempty"`
 	Type      string `json:"type,omitempty"`
+	Content   string `json:"content,omitempty"`
 	Role      string `json:"role,omitempty"`
 }
 
