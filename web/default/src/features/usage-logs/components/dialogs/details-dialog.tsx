@@ -781,13 +781,13 @@ function LogDetailSheet(props: {
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
       <SheetContent
         side='right'
-        className='w-[92vw] gap-0 p-0 sm:max-w-2xl lg:max-w-3xl'
+        className='h-[100dvh] w-[92vw] gap-0 p-0 sm:max-w-2xl lg:max-w-3xl'
       >
-        <SheetHeader className='border-b pr-12'>
+        <SheetHeader className='flex-shrink-0 border-b pr-12'>
           <SheetTitle>{props.title}</SheetTitle>
           <SheetDescription>{props.description}</SheetDescription>
         </SheetHeader>
-        <ScrollArea className='min-h-0 flex-1'>
+        <ScrollArea className='min-h-0 flex-1 overflow-hidden'>
           <div className='space-y-3 p-4'>
             {isStructured && sections ? (
               <StructuredLogContent sections={sections} rawContent={rawJson} />
