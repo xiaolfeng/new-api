@@ -214,6 +214,41 @@ type RelayInfo struct {
 	// 以及基于字符估算的分阶段 token/s 速率。
 	// 非 bamboo 路径（原生 adaptor 链路）为 nil，下游应做 nil 判断。
 	BambooTiming *BambooTimingResult
+
+	// BambooRelayData 存储 bamboo relay 的 N2N 中间态请求（从 ParseRequest 结果提取）。
+	// 仅在走 bamboo relay 路径（relay/bamboo/bridge.go ChatRelay）时非 nil。
+	// 供日志记录从格式无关的统一中间表示构建结构化记录，
+	// 而非依赖可能被改写的 info.Request / FinalRequestRelayFormat。
+	BambooRelayData *BambooRelayExtract
+}
+
+// BambooRelayExtract 是 bamboo N2N 中间态请求的本地提取副本。
+//
+// relay/common 不直接依赖 bamboo-messages SDK，因此由 bridge.go 的
+// extractBambooRelayData 从 *bamboocodec.RelayRequest 拷贝出简单字段，
+// 供 service/log_record.go 构建结构化日志记录。
+type BambooRelayExtract struct {
+	System   string
+	Messages []BambooMessageExtract
+}
+
+// BambooMessageExtract 对应 bamboo.BambooMessage 的本地副本。
+type BambooMessageExtract struct {
+	Role   string // "user" | "assistant"
+	Blocks []BambooBlockExtract
+}
+
+// BambooBlockExtract 对应 bamboo.ContentBlock 的本地副本。
+// Type 取值："text" | "thinking" | "tool_use" | "tool_result" | "image" | "document"
+type BambooBlockExtract struct {
+	Type       string
+	Text       string
+	Thinking   string
+	ToolID     string
+	ToolName   string
+	ToolInput  json.RawMessage
+	ToolResult string
+	IsError    bool
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {

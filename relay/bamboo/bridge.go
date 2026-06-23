@@ -92,6 +92,8 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		return nil, translateCodecError(parseErr) // 内部 errors.As 断言 *CodecError
 	}
 
+	info.BambooRelayData = extractBambooRelayData(relayReq)
+
 	if debugEnabled {
 		debugBuf.WriteString(bamboorelay.FormatRelayParsed("ChatRelay", codecFmt, relayReq))
 		debugBuf.WriteByte('\n')
@@ -331,4 +333,39 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 			CachedCreationTokens: int(resp.Usage.CacheCreationInputTokens),
 		},
 	}, nil
+}
+
+func extractBambooRelayData(req *bamboocodec.RelayRequest) *relaycommon.BambooRelayExtract {
+	if req == nil {
+		return nil
+	}
+	extract := &relaycommon.BambooRelayExtract{
+		System: req.System,
+	}
+	for _, msg := range req.Messages {
+		msgExt := relaycommon.BambooMessageExtract{
+			Role: string(msg.Role),
+		}
+		for _, block := range msg.Content {
+			ext := relaycommon.BambooBlockExtract{Type: string(block.BlockType())}
+			switch b := block.(type) {
+			case *bamboosdk.TextBlock:
+				ext.Text = b.Text
+			case *bamboosdk.ThinkingBlock:
+				ext.Thinking = b.Thinking
+			case *bamboosdk.ToolUseBlock:
+				ext.ToolID = b.ID
+				ext.ToolName = b.Name
+				ext.ToolInput = b.Input
+			case *bamboosdk.ToolResultBlock:
+				ext.ToolID = b.ToolUseID
+				ext.ToolName = b.ToolName
+				ext.ToolResult = b.Content
+				ext.IsError = b.IsError
+			}
+			msgExt.Blocks = append(msgExt.Blocks, ext)
+		}
+		extract.Messages = append(extract.Messages, msgExt)
+	}
+	return extract
 }
