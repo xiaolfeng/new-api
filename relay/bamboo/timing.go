@@ -1,12 +1,14 @@
 package bamboo
 
 import (
+	"fmt"
 	"math"
 	"time"
 	"unicode"
 
 	bamboosdk "github.com/bamboo-services/bamboo-messages/bamboo"
 
+	"github.com/QuantumNous/new-api/logger"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
@@ -174,9 +176,21 @@ func (tc *bambooTimingCollector) handleDelta(event bamboosdk.StreamEvent, now ti
 func (tc *bambooTimingCollector) result() relaycommon.BambooTimingResult {
 	var stats relaycommon.BambooTimingStats
 
+	// 兜底：observe() 入口会设置 startTime，但 eventCh 提前关闭时仍可能为零。
+	// 用 lastEventTime 退化回填，避免 TotalDuration 为零被 IsZero() 过滤。
+	if tc.startTime.IsZero() && !tc.lastEventTime.IsZero() {
+		tc.startTime = tc.lastEventTime
+	}
+
 	endTime := tc.stopTime
 	if endTime.IsZero() {
 		endTime = tc.lastEventTime
+	}
+
+	// 兜底：无 delta 事件时 firstByteTime 为零，用 startTime 回填使
+	// FirstByteDuration 退化为 0 而非缺失，保证下游消费一致性。
+	if tc.firstByteTime.IsZero() && !tc.startTime.IsZero() {
+		tc.firstByteTime = tc.startTime
 	}
 
 	if !tc.startTime.IsZero() && !endTime.IsZero() {
@@ -218,6 +232,20 @@ func (tc *bambooTimingCollector) result() relaycommon.BambooTimingResult {
 
 	if !tc.toolStart.IsZero() && !endTime.IsZero() {
 		stats.ToolDuration = endTime.Sub(tc.toolStart)
+	}
+
+	// 诊断日志：零值时警告，帮助定位上游事件缺失问题。
+	if stats.TotalDuration == 0 {
+		logger.LogWarn(nil, fmt.Sprintf(
+			"[bamboo-timing] TotalDuration is zero: startTime=%v, stopTime=%v, lastEventTime=%v",
+			tc.startTime, tc.stopTime, tc.lastEventTime,
+		))
+	}
+	if stats.FirstByteDuration == 0 {
+		logger.LogWarn(nil, fmt.Sprintf(
+			"[bamboo-timing] FirstByteDuration is zero: firstByteTime=%v, startTime=%v",
+			tc.firstByteTime, tc.startTime,
+		))
 	}
 
 	var rates relaycommon.BambooTokenRates

@@ -640,7 +640,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const subAgentName = other.agent_name
 
         return (
-          <div className='flex flex-col items-center gap-0.5'>
+          <div className='flex flex-col items-start gap-0.5'>
             {mainSessionName &&
               (() => {
                 const badge = getBadgeStyle(`session-${mainSessionName}`)
@@ -1002,13 +1002,32 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
 
-        const other = parseLogOther(log.other)
-
         const promptTokens = log.prompt_tokens || 0
         const completionTokens = log.completion_tokens || 0
         if (promptTokens === 0 && completionTokens === 0) {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
+
+        return (
+          <div className='flex flex-col gap-0.5'>
+            <span className='font-mono text-xs font-medium tabular-nums'>
+              {promptTokens.toLocaleString()} /{' '}
+              {completionTokens.toLocaleString()}
+            </span>
+          </div>
+        )
+      },
+      size: 110,
+    },
+
+    {
+      id: 'cache_rate',
+      header: t('Cache Rate'),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
+
+        const other = parseLogOther(log.other)
 
         const cacheReadTokens = other?.cache_tokens || 0
         const cacheWrite5m = other?.cache_creation_tokens_5m || 0
@@ -1018,30 +1037,78 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           ? cacheWrite5m + cacheWrite1h
           : other?.cache_creation_tokens || 0
 
+        const promptTokens = log.prompt_tokens || 0
+
+        const cacheRate =
+          promptTokens > 0 && cacheReadTokens > 0
+            ? (cacheReadTokens / promptTokens) * 100
+            : null
+
+        if (cacheRate === null || cacheRate === 0) {
+          return <span className='text-muted-foreground text-xs'>-</span>
+        }
+
+        const rateText = `${cacheRate.toFixed(1)}%`
+
         return (
-          <div className='flex flex-col gap-0.5'>
-            <span className='font-mono text-xs font-medium tabular-nums'>
-              {promptTokens.toLocaleString()} /{' '}
-              {completionTokens.toLocaleString()}
-            </span>
-            {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-              <div className='flex items-center gap-1 text-[11px]'>
-                {cacheReadTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className='font-mono text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400'>
+                    {rateText}
                   </span>
-                )}
-                {cacheWriteTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    ↑ {cacheWriteTokens.toLocaleString()}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+                }
+              />
+              <TooltipContent side='top' className='max-w-[200px] p-2'>
+                <div className='flex flex-col gap-0.5 text-xs'>
+                  {cacheReadTokens > 0 && (
+                    <div className='flex items-center justify-between gap-3'>
+                      <span className='text-muted-foreground'>
+                        {t('Cache Read')}
+                      </span>
+                      <span className='font-mono tabular-nums font-medium'>
+                        ↓ {cacheReadTokens.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  {cacheWriteTokens > 0 && (
+                    <div className='flex items-center justify-between gap-3'>
+                      <span className='text-muted-foreground'>
+                        {t('Cache Write')}
+                      </span>
+                      <span className='font-mono tabular-nums font-medium'>
+                        ↑ {cacheWriteTokens.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  {hasSplitCache && (
+                    <>
+                      {cacheWrite5m > 0 && (
+                        <div className='flex items-center justify-between gap-3 text-[11px] text-muted-foreground/70'>
+                          <span>{t('Cache Creation (5m)')}</span>
+                          <span className='font-mono tabular-nums'>
+                            {cacheWrite5m.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {cacheWrite1h > 0 && (
+                        <div className='flex items-center justify-between gap-3 text-[11px] text-muted-foreground/70'>
+                          <span>{t('Cache Creation (1h)')}</span>
+                          <span className='font-mono tabular-nums'>
+                            {cacheWrite1h.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )
       },
-      size: 110,
+      size: 90,
     },
 
     {
