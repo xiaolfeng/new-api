@@ -230,6 +230,11 @@ type RelayInfo struct {
 type BambooRelayExtract struct {
 	System   string
 	Messages []BambooMessageExtract
+	// ResponseBlocks 存储累计的 assistant 响应内容块（thinking / text / tool_use）。
+	// 由 bridge.go 从上游 StreamEvent 流或非流式 Response 中累积，
+	// 保存的是格式无关的统一中间表示——包括可能在格式序列化中丢失的 thinking 块。
+	// 供日志记录构建结构化响应记录，而非依赖可能被截断/格式特化的 ResponseBody。
+	ResponseBlocks []BambooBlockExtract
 }
 
 // BambooMessageExtract 对应 bamboo.BambooMessage 的本地副本。
