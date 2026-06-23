@@ -155,6 +155,8 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	serializer := entryCodec.NewSerializer()
 	var usage dto.Usage
 
+	collector := newBambooTimingCollector()
+
 	// 平滑缓冲：当渠道配置了有效档位时，序列化输出经 SmoothPacer 匀速释放
 	smoothLevel := resolveSmoothLevel()
 	var smooth *smoothBufferWriter
@@ -194,6 +196,8 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			return nil, types.NewError(cause, types.ErrorCodeBadResponseBody)
 		}
 
+		collector.observe(event)
+
 		accumulateReasoningFromEvent(info.OriginModelName, &usage, &event)
 
 		data, serr := serializer.Serialize(event)
@@ -231,6 +235,11 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	if smooth != nil {
 		smooth.signalEnd()
 		smooth.wait()
+	}
+
+	if timingResult := collector.result(); !timingResult.IsZero() {
+		result := timingResult
+		info.BambooTiming = &result
 	}
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens

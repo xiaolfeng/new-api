@@ -734,8 +734,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         if (!hasValidTps && avgTps == null) return null
 
-        // When the upstream-reported tps is missing, fall back to the
-        // tokens/time derived average so the colored display is still filled.
         const displayTps = hasValidTps ? (tps as number) : avgTps
 
         let colorClass = 'text-red-600 dark:text-red-400'
@@ -748,6 +746,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             colorClass = 'text-yellow-600 dark:text-yellow-400'
         }
 
+        const bt = other?.bamboo_timing
+        const hasBambooRates =
+          bt != null &&
+          ((typeof bt.thinking_tps === 'number' && bt.thinking_tps > 0) ||
+            (typeof bt.output_tps === 'number' && bt.output_tps > 0))
+
         return (
           <div className='flex flex-col gap-0.5'>
             {displayTps != null && (
@@ -757,7 +761,34 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 {displayTps.toFixed(1)}
               </span>
             )}
-            {avgTps != null && (
+            {hasBambooRates ? (
+              <div className='flex flex-col gap-0.5 text-[11px]'>
+                {typeof bt.thinking_tps === 'number' &&
+                  bt.thinking_tps > 0 && (
+                    <span className='flex items-center gap-1 text-muted-foreground/70'>
+                      <span className='text-violet-500/80 dark:text-violet-400/70'>
+                        ◆
+                      </span>
+                      <span className='font-mono tabular-nums'>
+                        {bt.thinking_tps.toFixed(1)}
+                      </span>
+                      <span className='text-[10px]'>t/s</span>
+                    </span>
+                  )}
+                {typeof bt.output_tps === 'number' &&
+                  bt.output_tps > 0 && (
+                    <span className='flex items-center gap-1 text-muted-foreground/70'>
+                      <span className='text-sky-500/80 dark:text-sky-400/70'>
+                        ◆
+                      </span>
+                      <span className='font-mono tabular-nums'>
+                        {bt.output_tps.toFixed(1)}
+                      </span>
+                      <span className='text-[10px]'>t/s</span>
+                    </span>
+                  )}
+              </div>
+            ) : avgTps != null ? (
               <span className='text-muted-foreground/60 text-[11px]'>
                 {log.is_stream ? t('Stream') : t('Non-stream')}
                 {' · '}
@@ -766,7 +797,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 </span>
                 {' t/s'}
               </span>
-            )}
+            ) : null}
           </div>
         )
       },
@@ -785,9 +816,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const other = parseLogOther(log.other)
         const frt = other?.frt
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
-        const frtVariant = frt
-          ? getFirstResponseTimeColor(frt / 1000)
-          : 'neutral'
 
         const timingBgMap: Record<string, string> = {
           success:
@@ -800,6 +828,20 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             'border border-border/60 bg-muted/30 dark:border-border/40 dark:bg-muted/20',
         }
 
+        const bt = other?.bamboo_timing
+        const hasPhaseTiming =
+          bt != null &&
+          ((typeof bt.thinking_ms === 'number' && bt.thinking_ms > 0) ||
+            (typeof bt.content_ms === 'number' && bt.content_ms > 0) ||
+            (typeof bt.tool_ms === 'number' && bt.tool_ms > 0))
+
+        const ttftMs =
+          typeof bt?.ttft_ms === 'number' && bt.ttft_ms > 0
+            ? bt.ttft_ms
+            : typeof frt === 'number'
+              ? frt
+              : null
+
         return (
           <div className='flex flex-col gap-1'>
             <div className='flex items-center gap-1.5'>
@@ -811,16 +853,18 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 className={cn('rounded-md font-mono', timingBgMap[timeVariant])}
               />
               {log.is_stream &&
-                (frt != null && frt > 0 ? (
+                (ttftMs != null && ttftMs > 0 ? (
                   <StatusBadge
-                    label={formatUseTime(frt / 1000)}
-                    variant={frtVariant as StatusBadgeProps['variant']}
+                    label={formatUseTime(ttftMs / 1000)}
+                    variant={
+                      getFirstResponseTimeColor(ttftMs / 1000) as StatusBadgeProps['variant']
+                    }
                     size='sm'
                     showDot={false}
                     copyable={false}
                     className={cn(
                       'rounded-md font-mono',
-                      timingBgMap[frtVariant]
+                      timingBgMap[getFirstResponseTimeColor(ttftMs / 1000)]
                     )}
                   />
                 ) : (
@@ -834,6 +878,35 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   />
                 ))}
             </div>
+            {hasPhaseTiming ? (
+              <div className='flex flex-wrap items-center gap-x-2 gap-y-0.5 [font-family:var(--font-body)] !text-[10px] leading-tight'>
+                {typeof bt.thinking_ms === 'number' &&
+                  bt.thinking_ms > 0 && (
+                    <span className='flex items-center gap-0.5 text-violet-600/80 dark:text-violet-400/70'>
+                      <span>◆</span>
+                      <span className='font-mono tabular-nums'>
+                        {(bt.thinking_ms / 1000).toFixed(1)}s
+                      </span>
+                    </span>
+                  )}
+                {typeof bt.content_ms === 'number' && bt.content_ms > 0 && (
+                  <span className='flex items-center gap-0.5 text-sky-600/80 dark:text-sky-400/70'>
+                    <span>◆</span>
+                    <span className='font-mono tabular-nums'>
+                      {(bt.content_ms / 1000).toFixed(1)}s
+                    </span>
+                  </span>
+                )}
+                {typeof bt.tool_ms === 'number' && bt.tool_ms > 0 && (
+                  <span className='flex items-center gap-0.5 text-amber-600/80 dark:text-amber-400/70'>
+                    <span>◆</span>
+                    <span className='font-mono tabular-nums'>
+                      {(bt.tool_ms / 1000).toFixed(1)}s
+                    </span>
+                  </span>
+                )}
+              </div>
+            ) : null}
             {log.is_stream &&
               other?.stream_status &&
               other.stream_status.status !== 'ok' && (
