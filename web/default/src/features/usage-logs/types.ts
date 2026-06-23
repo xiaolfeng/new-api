@@ -221,6 +221,15 @@ export interface LogOtherData {
   parent_session_id?: string
   parent_session_name?: string
   tps?: number
+  bamboo_timing?: {
+    total_ms?: number
+    ttft_ms?: number
+    thinking_ms?: number
+    content_ms?: number
+    tool_ms?: number
+    thinking_tps?: number
+    output_tps?: number
+  }
 }
 
 /**

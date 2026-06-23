@@ -207,6 +207,13 @@ type RelayInfo struct {
 	// BambooDebug 存储 bamboo-messages 的格式化 debug 字符串，
 	// 仅在 EnableBambooDebugLog 开启且走 bamboo relay 路径时非空。
 	BambooDebug string
+
+	// BambooTiming 存储 bamboo relay 路径的分阶段流式计时数据。
+	// 仅在走 bamboo relay 流式路径（relay/bamboo/bridge.go doStreamRelay）时非 nil。
+	// 包含 ThinkingDuration / ContentDuration / ToolDuration / TTFT 等精确阶段耗时，
+	// 以及基于字符估算的分阶段 token/s 速率。
+	// 非 bamboo 路径（原生 adaptor 链路）为 nil，下游应做 nil 判断。
+	BambooTiming *BambooTimingResult
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
