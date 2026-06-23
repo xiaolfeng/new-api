@@ -727,9 +727,18 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const hasValidTps = typeof tps === 'number' && tps > 0
 
         const useTime = log.use_time
+        const ttftSec = (() => {
+          const btTtft = other?.bamboo_timing?.ttft_ms
+          if (typeof btTtft === 'number' && btTtft > 0) return btTtft / 1000
+          const frtVal = other?.frt
+          if (typeof frtVal === 'number' && frtVal > 0) return frtVal / 1000
+          return 0
+        })()
+        const genTime =
+          log.is_stream && ttftSec > 0 ? useTime - ttftSec : useTime
         const avgTps =
-          useTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / useTime
+          genTime > 0 && log.completion_tokens > 0
+            ? log.completion_tokens / genTime
             : null
 
         if (!hasValidTps && avgTps == null) return null
@@ -747,10 +756,15 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         }
 
         const bt = other?.bamboo_timing
-        const hasBambooRates =
-          bt != null &&
-          ((typeof bt.thinking_tps === 'number' && bt.thinking_tps > 0) ||
-            (typeof bt.output_tps === 'number' && bt.output_tps > 0))
+        const thinkingTps =
+          typeof bt?.thinking_tps === 'number' && bt.thinking_tps > 0
+            ? bt.thinking_tps
+            : null
+        const outputTps =
+          typeof bt?.output_tps === 'number' && bt.output_tps > 0
+            ? bt.output_tps
+            : null
+        const hasBambooRates = thinkingTps != null || outputTps != null
 
         return (
           <div className='flex flex-col gap-0.5'>
@@ -762,40 +776,31 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               </span>
             )}
             {hasBambooRates ? (
-              <div className='flex flex-col gap-0.5 text-[11px]'>
-                {typeof bt.thinking_tps === 'number' &&
-                  bt.thinking_tps > 0 && (
-                    <span className='flex items-center gap-1 text-muted-foreground/70'>
-                      <span className='text-violet-500/80 dark:text-violet-400/70'>
-                        ◆
-                      </span>
-                      <span className='font-mono tabular-nums'>
-                        {bt.thinking_tps.toFixed(1)}
-                      </span>
-                      <span className='text-[10px]'>t/s</span>
+              <div className='flex items-center gap-2 text-[11px]'>
+                {thinkingTps != null && (
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-violet-500/80 dark:text-violet-400/70'>
+                      ◆
                     </span>
-                  )}
-                {typeof bt.output_tps === 'number' &&
-                  bt.output_tps > 0 && (
-                    <span className='flex items-center gap-1 text-muted-foreground/70'>
-                      <span className='text-sky-500/80 dark:text-sky-400/70'>
-                        ◆
-                      </span>
-                      <span className='font-mono tabular-nums'>
-                        {bt.output_tps.toFixed(1)}
-                      </span>
-                      <span className='text-[10px]'>t/s</span>
+                    <span className='font-mono tabular-nums text-violet-600/80 dark:text-violet-400/70'>
+                      {thinkingTps.toFixed(1)}
                     </span>
-                  )}
+                  </span>
+                )}
+                {outputTps != null && (
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-sky-500/80 dark:text-sky-400/70'>
+                      ◆
+                    </span>
+                    <span className='font-mono tabular-nums text-sky-600/80 dark:text-sky-400/70'>
+                      {outputTps.toFixed(1)}
+                    </span>
+                  </span>
+                )}
               </div>
             ) : avgTps != null ? (
-              <span className='text-muted-foreground/60 text-[11px]'>
-                {log.is_stream ? t('Stream') : t('Non-stream')}
-                {' · '}
-                <span className='font-mono tabular-nums'>
-                  {Math.round(avgTps)}
-                </span>
-                {' t/s'}
+              <span className='text-muted-foreground/60 font-mono text-[11px] tabular-nums'>
+                {Math.round(avgTps)}
               </span>
             ) : null}
           </div>
@@ -829,12 +834,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         }
 
         const bt = other?.bamboo_timing
-        const hasPhaseTiming =
-          bt != null &&
-          ((typeof bt.thinking_ms === 'number' && bt.thinking_ms > 0) ||
-            (typeof bt.content_ms === 'number' && bt.content_ms > 0) ||
-            (typeof bt.tool_ms === 'number' && bt.tool_ms > 0))
-
         const ttftMs =
           typeof bt?.ttft_ms === 'number' && bt.ttft_ms > 0
             ? bt.ttft_ms
@@ -842,71 +841,125 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               ? frt
               : null
 
+        const thinkingMs =
+          typeof bt?.thinking_ms === 'number' && bt.thinking_ms > 0
+            ? bt.thinking_ms
+            : null
+        const contentMs =
+          typeof bt?.content_ms === 'number' && bt.content_ms > 0
+            ? bt.content_ms
+            : null
+        const toolMs =
+          typeof bt?.tool_ms === 'number' && bt.tool_ms > 0
+            ? bt.tool_ms
+            : null
+        const hasPhaseTiming =
+          thinkingMs != null || contentMs != null || toolMs != null
+
+        const ttftBadge = log.is_stream ? (
+          ttftMs != null && ttftMs > 0 ? (
+            <StatusBadge
+              label={formatUseTime(ttftMs / 1000)}
+              variant={
+                getFirstResponseTimeColor(ttftMs / 1000) as StatusBadgeProps['variant']
+              }
+              size='sm'
+              showDot={false}
+              copyable={false}
+              className={cn(
+                'rounded-md font-mono',
+                timingBgMap[getFirstResponseTimeColor(ttftMs / 1000)]
+              )}
+            />
+          ) : (
+            <StatusBadge
+              label='N/A'
+              variant='neutral'
+              size='sm'
+              showDot={false}
+              copyable={false}
+              className={cn('rounded-md font-mono', timingBgMap.neutral)}
+            />
+          )
+        ) : null
+
+        const totalBadge = (
+          <StatusBadge
+            label={formatUseTime(useTime)}
+            variant={timeVariant as StatusBadgeProps['variant']}
+            size='sm'
+            copyable={false}
+            className={cn('rounded-md font-mono', timingBgMap[timeVariant])}
+          />
+        )
+
         return (
           <div className='flex flex-col gap-1'>
-            <div className='flex items-center gap-1.5'>
-              <StatusBadge
-                label={formatUseTime(useTime)}
-                variant={timeVariant as StatusBadgeProps['variant']}
-                size='sm'
-                copyable={false}
-                className={cn('rounded-md font-mono', timingBgMap[timeVariant])}
-              />
-              {log.is_stream &&
-                (ttftMs != null && ttftMs > 0 ? (
-                  <StatusBadge
-                    label={formatUseTime(ttftMs / 1000)}
-                    variant={
-                      getFirstResponseTimeColor(ttftMs / 1000) as StatusBadgeProps['variant']
-                    }
-                    size='sm'
-                    showDot={false}
-                    copyable={false}
-                    className={cn(
-                      'rounded-md font-mono',
-                      timingBgMap[getFirstResponseTimeColor(ttftMs / 1000)]
-                    )}
-                  />
-                ) : (
-                  <StatusBadge
-                    label='N/A'
-                    variant='neutral'
-                    size='sm'
-                    showDot={false}
-                    copyable={false}
-                    className={cn('rounded-md font-mono', timingBgMap.neutral)}
-                  />
-                ))}
-            </div>
             {hasPhaseTiming ? (
-              <div className='flex flex-wrap items-center gap-x-2 gap-y-0.5 [font-family:var(--font-body)] !text-[10px] leading-tight'>
-                {typeof bt.thinking_ms === 'number' &&
-                  bt.thinking_ms > 0 && (
-                    <span className='flex items-center gap-0.5 text-violet-600/80 dark:text-violet-400/70'>
-                      <span>◆</span>
-                      <span className='font-mono tabular-nums'>
-                        {(bt.thinking_ms / 1000).toFixed(1)}s
-                      </span>
-                    </span>
-                  )}
-                {typeof bt.content_ms === 'number' && bt.content_ms > 0 && (
-                  <span className='flex items-center gap-0.5 text-sky-600/80 dark:text-sky-400/70'>
-                    <span>◆</span>
-                    <span className='font-mono tabular-nums'>
-                      {(bt.content_ms / 1000).toFixed(1)}s
-                    </span>
-                  </span>
-                )}
-                {typeof bt.tool_ms === 'number' && bt.tool_ms > 0 && (
-                  <span className='flex items-center gap-0.5 text-amber-600/80 dark:text-amber-400/70'>
-                    <span>◆</span>
-                    <span className='font-mono tabular-nums'>
-                      {(bt.tool_ms / 1000).toFixed(1)}s
-                    </span>
-                  </span>
-                )}
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <div className='flex items-center gap-1.5'>
+                        {totalBadge}
+                        {ttftBadge}
+                      </div>
+                    }
+                  ></TooltipTrigger>
+                  <TooltipContent
+                    side='bottom'
+                    className='max-w-[220px] p-2'
+                  >
+                    <div className='space-y-1 text-xs'>
+                      {thinkingMs != null && (
+                        <div className='flex items-center gap-1.5'>
+                          <span className='text-violet-500 dark:text-violet-400'>
+                            ◆
+                          </span>
+                          <span className='text-muted-foreground'>
+                            {t('Thinking')}
+                          </span>
+                          <span className='ml-auto font-mono tabular-nums text-violet-600 dark:text-violet-400'>
+                            {(thinkingMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                      )}
+                      {contentMs != null && (
+                        <div className='flex items-center gap-1.5'>
+                          <span className='text-sky-500 dark:text-sky-400'>
+                            ◆
+                          </span>
+                          <span className='text-muted-foreground'>
+                            {t('Output')}
+                          </span>
+                          <span className='ml-auto font-mono tabular-nums text-sky-600 dark:text-sky-400'>
+                            {(contentMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                      )}
+                      {toolMs != null && (
+                        <div className='flex items-center gap-1.5'>
+                          <span className='text-amber-500 dark:text-amber-400'>
+                            ◆
+                          </span>
+                          <span className='text-muted-foreground'>
+                            {t('Tool')}
+                          </span>
+                          <span className='ml-auto font-mono tabular-nums text-amber-600 dark:text-amber-400'>
+                            {(toolMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <div className='flex items-center gap-1.5'>
+                {totalBadge}
+                {ttftBadge}
               </div>
-            ) : null}
+            )}
             {log.is_stream &&
               other?.stream_status &&
               other.stream_status.status !== 'ok' && (
