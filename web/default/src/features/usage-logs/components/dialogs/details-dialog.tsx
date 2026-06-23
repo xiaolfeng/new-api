@@ -33,6 +33,7 @@ import {
   Globe,
   ShieldCheck,
   Terminal,
+  Timer,
   UserCog,
   Info,
   LogIn,
@@ -1246,6 +1247,108 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 />
               )}
             </div>
+
+            {showTiming && other?.bamboo_timing && (
+              <DetailSection
+                icon={<Timer className='size-3.5' aria-hidden='true' />}
+                label={t('Timing Breakdown')}
+              >
+                <div className='space-y-1.5'>
+                  {(() => {
+                    const bt = other.bamboo_timing!
+                    const rows: Array<{
+                      label: string
+                      ms: number | null
+                      tps: number | null
+                      color: string
+                      dotColor: string
+                    }> = []
+                    if (typeof bt.ttft_ms === 'number' && bt.ttft_ms > 0) {
+                      rows.push({
+                        label: t('First Token (TTFT)'),
+                        ms: bt.ttft_ms,
+                        tps: null,
+                        color: 'text-emerald-600 dark:text-emerald-400',
+                        dotColor: 'text-emerald-500 dark:text-emerald-400',
+                      })
+                    }
+                    if (typeof bt.thinking_ms === 'number' && bt.thinking_ms > 0) {
+                      rows.push({
+                        label: t('Thinking'),
+                        ms: bt.thinking_ms,
+                        tps:
+                          typeof bt.thinking_tps === 'number'
+                            ? bt.thinking_tps
+                            : null,
+                        color: 'text-violet-600 dark:text-violet-400',
+                        dotColor: 'text-violet-500 dark:text-violet-400',
+                      })
+                    }
+                    if (typeof bt.content_ms === 'number' && bt.content_ms > 0) {
+                      rows.push({
+                        label: t('Content Generation'),
+                        ms: bt.content_ms,
+                        tps:
+                          typeof bt.output_tps === 'number'
+                            ? bt.output_tps
+                            : null,
+                        color: 'text-sky-600 dark:text-sky-400',
+                        dotColor: 'text-sky-500 dark:text-sky-400',
+                      })
+                    }
+                    if (typeof bt.tool_ms === 'number' && bt.tool_ms > 0) {
+                      rows.push({
+                        label: t('Tool Calls'),
+                        ms: bt.tool_ms,
+                        tps: null,
+                        color: 'text-amber-600 dark:text-amber-400',
+                        dotColor: 'text-amber-500 dark:text-amber-400',
+                      })
+                    }
+                    return rows.map((r) => (
+                      <div
+                        key={r.label}
+                        className='flex items-center gap-2 text-xs'
+                      >
+                        <span className={r.dotColor}>◆</span>
+                        <span className='text-muted-foreground min-w-[7rem]'>
+                          {r.label}
+                        </span>
+                        <span
+                          className={cn(
+                            'ml-auto font-mono tabular-nums',
+                            r.color
+                          )}
+                        >
+                          {(r.ms! / 1000).toFixed(2)}s
+                        </span>
+                        {r.tps != null && r.tps > 0 && (
+                          <span className='text-muted-foreground/60 font-mono text-[10px] tabular-nums'>
+                            ({r.tps.toFixed(1)} t/s)
+                          </span>
+                        )}
+                      </div>
+                    ))
+                  })()}
+                  {typeof other.bamboo_timing?.total_ms === 'number' &&
+                    other.bamboo_timing.total_ms > 0 && (
+                      <div className='mt-1.5 border-t pt-1.5'>
+                        <div className='flex items-center gap-2 text-xs'>
+                          <span className='text-muted-foreground min-w-[7rem] font-medium'>
+                            {t('Total')}
+                          </span>
+                          <span className='text-foreground ml-auto font-mono font-medium tabular-nums'>
+                            {(
+                              other.bamboo_timing.total_ms / 1000
+                            ).toFixed(2)}
+                            s
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                </div>
+              </DetailSection>
+            )}
 
             {/* Request conversion (admin only, not for refund) */}
             {showConversion && (
