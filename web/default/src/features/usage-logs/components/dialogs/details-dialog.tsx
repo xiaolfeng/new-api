@@ -815,7 +815,7 @@ function LogDetailSheet(props: {
               </div>
             )}
 
-            {isStructured && (
+            {isStructured && sections.format !== 'bamboo' && (
               <DetailSection label={t('Raw JSON')}>
                 <div className='relative min-w-0'>
                   <Button
