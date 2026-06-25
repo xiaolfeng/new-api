@@ -1,6 +1,7 @@
 package bamboo
 
 import (
+	"context"
 	"regexp"
 	"strings"
 
@@ -165,6 +166,11 @@ func resolveUpstreamRelayFormat(info *relaycommon.RelayInfo) types.RelayFormat {
 //
 // c 用于解析 header passthrough/placeholder 规则（与原生 DoApiRequest 一致），
 // 传入 nil 时仅应用 ChannelsOverride 中的显式 header。
+//
+// 当 info.ChannelMeta.ParamOverride 非空时，构造一个 provider.RequestInterceptor
+// 注入到 provider 中，复用 relaycommon.ApplyParamOverrideWithRelayInfo 的全部 23 种
+// 参数覆盖能力（含 header 操作通过 info 自动 sync）。ParamOverride 为空时不注入，
+// 行为与升级前完全一致（零开销）。
 func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider, types.RelayFormat, *types.NewAPIError) {
 	apiKey := info.ApiKey
 	baseURL := resolveBaseURL(info)
@@ -178,61 +184,91 @@ func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider
 		headers = resolved
 	}
 
+	// 构造参数覆盖拦截器（若配置了 ParamOverride）
+	paramOverrideInterceptor := buildParamOverrideInterceptor(info)
+
 	// 解析上游格式（手动覆盖 > ApiType 推断），与 provider 构造逻辑共享
 	upstreamRelayFormat := resolveUpstreamRelayFormat(info)
 
 	upstreamFmt := resolveUpstreamFormat(info)
 	if upstreamFmt != dto.BambooUpstreamFormatAuto {
-		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, info.ApiType)
+		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, info.ApiType, paramOverrideInterceptor)
 		if apiErr != nil {
 			return nil, "", apiErr
 		}
 		return p, upstreamRelayFormat, nil
 	}
 
-	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers)
+	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers, paramOverrideInterceptor)
 	if apiErr != nil {
 		return nil, "", apiErr
 	}
 	return p, upstreamRelayFormat, nil
 }
 
+// buildParamOverrideInterceptor 根据 RelayInfo.ChannelMeta.ParamOverride 构造一个
+// provider.RequestInterceptor，在 SDK 发起上游 HTTP 请求前应用参数覆盖。
+//
+// 复用 relaycommon.ApplyParamOverrideWithRelayInfo 的全部 23 种操作能力
+// （set/delete/regex/conditions/header ops 等）。Header 类操作（set_header 等）
+// 通过 ApplyParamOverrideWithRelayInfo 内部 sync 到 info.RuntimeHeadersOverride，
+// 后续在 newProvider 的 channel.ResolveHeaderOverride 中已被合并到 headers 参数
+// （注：当前实现下 header 操作走 info sync 路径，body 操作走 interceptor 路径，
+// 两者正交无冲突）。
+//
+// 当 ParamOverride 为空时返回 nil，调用方据此跳过注入（保持零开销）。
+func buildParamOverrideInterceptor(info *relaycommon.RelayInfo) provider.RequestInterceptor {
+	if info == nil || info.ChannelMeta == nil || len(info.ChannelMeta.ParamOverride) == 0 {
+		return nil
+	}
+	return func(ctx context.Context, body []byte) ([]byte, error) {
+		return relaycommon.ApplyParamOverrideWithRelayInfo(body, info)
+	}
+}
+
 // buildProviderByFormat 按用户手动指定的上游协议格式构造 provider。
 //
 // legacyCompat 推断：当用户强制选择 openai 格式但渠道本身的 ApiType 属于
 // Legacy 兼容列表（DeepSeek/Moonshot 等）时，保留 Legacy 行为以兼容旧字段名。
+//
+// interceptor 可以为 nil（无参数覆盖时），此时 4 个 Provider 的 WithInterceptor
+// option 不会被触发，构造行为与升级前一致。
 func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL string,
-	headers map[string]string, originalApiType int) (provider.Provider, *types.NewAPIError) {
+	headers map[string]string, originalApiType int,
+	interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
 
 	switch fmt {
 	case dto.BambooUpstreamFormatAnthropic:
-		return newAnthropicProvider(apiKey, baseURL, headers), nil
+		return newAnthropicProvider(apiKey, baseURL, headers, interceptor), nil
 	case dto.BambooUpstreamFormatGemini:
-		return newGeminiProvider(apiKey, baseURL, headers), nil
+		return newGeminiProvider(apiKey, baseURL, headers, interceptor), nil
 	case dto.BambooUpstreamFormatResponses:
-		return newResponsesProvider(apiKey, baseURL, headers), nil
+		return newResponsesProvider(apiKey, baseURL, headers, interceptor), nil
 	case dto.BambooUpstreamFormatOpenAI:
 		legacyCompat := isLegacyCompatApiType(originalApiType)
-		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat), nil
+		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
 	default:
 		return nil, types.NewError(ErrUnsupportedProvider, types.ErrorCodeInvalidApiType)
 	}
 }
 
 // buildProviderByApiType 按渠道 ApiType 自动推断上游协议（原 newProvider switch 逻辑）。
-func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[string]string) (provider.Provider, *types.NewAPIError) {
+//
+// interceptor 可以为 nil（无参数覆盖时）。
+func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[string]string,
+	interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
 	switch apiType {
 	case constant.APITypeAnthropic:
-		return newAnthropicProvider(apiKey, baseURL, headers), nil
+		return newAnthropicProvider(apiKey, baseURL, headers, interceptor), nil
 
 	case constant.APITypeGemini:
-		return newGeminiProvider(apiKey, baseURL, headers), nil
+		return newGeminiProvider(apiKey, baseURL, headers, interceptor), nil
 
 	case constant.APITypeCodex:
-		return newResponsesProvider(apiKey, baseURL, headers), nil
+		return newResponsesProvider(apiKey, baseURL, headers, interceptor), nil
 
 	case constant.APITypeOpenAI, constant.APITypeXai:
-		return buildCompletionsProvider(apiKey, baseURL, headers, false), nil
+		return buildCompletionsProvider(apiKey, baseURL, headers, false, interceptor), nil
 
 	case constant.APITypeDeepSeek, constant.APITypeMoonshot,
 		constant.APITypeSiliconFlow, constant.APITypeMistral,
@@ -240,7 +276,7 @@ func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[str
 		constant.APITypePerplexity, constant.APITypeCohere,
 		constant.APITypeMiniMax, constant.APITypeBaiduV2,
 		constant.APITypeOpenRouter, constant.APITypeXinference:
-		return buildCompletionsProvider(apiKey, baseURL, headers, true), nil
+		return buildCompletionsProvider(apiKey, baseURL, headers, true, interceptor), nil
 
 	default:
 		return nil, types.NewError(ErrUnsupportedProvider, types.ErrorCodeInvalidApiType)
@@ -269,7 +305,7 @@ func isLegacyCompatApiType(apiType int) bool {
 // debug 信息由 bridge.go 通过 FormatRelayInput/FormatRelayParsed/FormatDebugRequest
 // 收集到 RelayInfo.BambooDebug，不再调用 provider.SetDebug()。
 
-func newAnthropicProvider(apiKey, baseURL string, headers map[string]string) provider.Provider {
+func newAnthropicProvider(apiKey, baseURL string, headers map[string]string, interceptor provider.RequestInterceptor) provider.Provider {
 	opts := []bambooanthropic.Option{
 		bambooanthropic.WithAPIKey(apiKey),
 		bambooanthropic.WithBaseURL(baseURL),
@@ -277,10 +313,13 @@ func newAnthropicProvider(apiKey, baseURL string, headers map[string]string) pro
 	for k, v := range headers {
 		opts = append(opts, bambooanthropic.WithHeader(k, v))
 	}
+	if interceptor != nil {
+		opts = append(opts, bambooanthropic.WithInterceptor(interceptor))
+	}
 	return bambooanthropic.NewProviderWithOptions(opts...)
 }
 
-func newGeminiProvider(apiKey, baseURL string, headers map[string]string) provider.Provider {
+func newGeminiProvider(apiKey, baseURL string, headers map[string]string, interceptor provider.RequestInterceptor) provider.Provider {
 	opts := []bamboogemini.Option{
 		bamboogemini.WithAPIKey(apiKey),
 		bamboogemini.WithBaseURL(baseURL),
@@ -288,10 +327,13 @@ func newGeminiProvider(apiKey, baseURL string, headers map[string]string) provid
 	for k, v := range headers {
 		opts = append(opts, bamboogemini.WithHeader(k, v))
 	}
+	if interceptor != nil {
+		opts = append(opts, bamboogemini.WithInterceptor(interceptor))
+	}
 	return bamboogemini.NewProviderWithOptions(opts...)
 }
 
-func newResponsesProvider(apiKey, baseURL string, headers map[string]string) provider.Provider {
+func newResponsesProvider(apiKey, baseURL string, headers map[string]string, interceptor provider.RequestInterceptor) provider.Provider {
 	baseURL = ensureOpenAIBaseURL(baseURL)
 	opts := []bambooresponses.Option{
 		bambooresponses.WithAPIKey(apiKey),
@@ -300,11 +342,14 @@ func newResponsesProvider(apiKey, baseURL string, headers map[string]string) pro
 	for k, v := range headers {
 		opts = append(opts, bambooresponses.WithHeader(k, v))
 	}
+	if interceptor != nil {
+		opts = append(opts, bambooresponses.WithInterceptor(interceptor))
+	}
 	return bambooresponses.NewResponsesProviderWithOptions(opts...)
 }
 
 // buildCompletionsProvider 构造 OpenAI Completions provider，附加自定义 header。
-func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string, legacyCompat bool) provider.Provider {
+func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string, legacyCompat bool, interceptor provider.RequestInterceptor) provider.Provider {
 	baseURL = ensureOpenAIBaseURL(baseURL)
 	opts := []bamboocompletions.Option{
 		bamboocompletions.WithAPIKey(apiKey),
@@ -315,6 +360,9 @@ func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string,
 	}
 	for k, v := range headers {
 		opts = append(opts, bamboocompletions.WithHeader(k, v))
+	}
+	if interceptor != nil {
+		opts = append(opts, bamboocompletions.WithInterceptor(interceptor))
 	}
 	return bamboocompletions.NewCompletionsProviderWithOptions(opts...)
 }
