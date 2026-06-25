@@ -164,7 +164,7 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 	eventCh, err := client.Chat(ctx, req.Messages, req.System, req.Config)
 	if err != nil {
-		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed)
+		return nil, translateSDKError(err)
 	}
 
 	c.Writer.Header().Set("Content-Type", "text/event-stream")
@@ -385,7 +385,7 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 
 	resp, err := client.Complete(c.Request.Context(), req.Messages, req.System, req.Config)
 	if err != nil {
-		return nil, types.NewError(err, types.ErrorCodeDoRequestFailed)
+		return nil, translateSDKError(err)
 	}
 
 	info.SetFirstResponseTime()
