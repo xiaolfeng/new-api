@@ -296,6 +296,11 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 		streamItems = append(streamItems, string(data))
 
+		// DEBUG: 记录 finish_reason 相关的 SSE 帧（临时排查用）
+		if event.Type == bamboosdk.EventMessageDelta || event.Type == bamboosdk.EventMessageStop {
+			common.SysLog("bamboo-debug: event=" + string(event.Type) + " sse=" + truncateResponseBody(string(data)))
+		}
+
 		// TTFT：首个有效事件序列化成功后记录首次响应时间（幂等，仅首次生效）。
 		// 与原生路径 stream_scanner.go 行为一致：在上游数据到达时标记，而非客户端实际收到时。
 		// 即使 SmoothPacer 开启（输出被缓冲延迟），TTFT 仍反映上游真实首字延迟。
