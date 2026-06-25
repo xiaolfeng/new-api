@@ -225,7 +225,15 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			if event.Error != nil {
 				cause = event.Error
 			}
+			// flush 终止标记（如 OpenAI codec 的 [DONE]），
+			// 避免客户端因缺少终止符而挂起。
+			tail, _ := serializer.Flush()
+			if len(tail) > 0 {
+				writeSSE(tail)
+				streamItems = append(streamItems, string(tail))
+			}
 			if smooth != nil {
+				smooth.signalEnd()
 				smooth.wait()
 			}
 			return nil, types.NewError(cause, types.ErrorCodeBadResponseBody)
