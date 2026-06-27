@@ -4671,6 +4671,20 @@
     "Off (direct passthrough)": "关闭（直接透传）",
     "Gentle": "轻柔",
     "Smooth": "平滑",
-    "Typewriter": "打字机"
+    "Typewriter": "打字机",
+    "Arguments": "参数",
+    "Call ID": "调用 ID",
+    "Content Generation": "内容生成",
+    "Copy all": "复制全部",
+    "First Token (TTFT)": "首 Token (TTFT)",
+    "Show thinking content": "显示思考内容",
+    "Sub Session": "子会话",
+    "Sub Session ID": "子会话 ID",
+    "TPS": "TPS",
+    "Thinking": "思考",
+    "Timing Breakdown": "耗时分解",
+    "Tool": "工具",
+    "Tool Calls": "工具调用",
+    "Tool Responses": "工具响应"
   }
 }
