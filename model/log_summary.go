@@ -241,11 +241,23 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 		return interactionType
 	}
 
+	if interactionType := inferBambooStructuredInteractionType(
+		detailRecord.BambooRequestBlocks,
+		detailRecord.BambooToolResponses,
+		detailRecord.BambooResponseBlocks,
+	); interactionType != "" {
+		return interactionType
+	}
+
 	if interactionType := inferResponsesInteractionType(
 		flattenResponsesPromptInputItems(detailRecord.Prompt["input"]),
 	); interactionType != "" {
 		return interactionType
 	}
+
+	isBambooData := len(detailRecord.BambooRequestBlocks) > 0 ||
+		len(detailRecord.BambooToolResponses) > 0 ||
+		len(detailRecord.BambooResponseBlocks) > 0
 
 	lastUserMessageContent := getPromptNestedString(detailRecord.Prompt, "lastUserMessage", "content")
 	hasPromptObjectContent := len(detailRecord.Prompt) > 0
@@ -255,23 +267,33 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 		}
 	}
 
-	hasNonToolInput := strings.TrimSpace(lastUserMessageContent) != "" ||
+	// In the bamboo path, lastUserMessageContent is unconditionally populated by
+	// buildBambooStructuredRecord, so it must not drive hasNonToolInput alone.
+	hasNonToolInput := (!isBambooData && strings.TrimSpace(lastUserMessageContent) != "") ||
 		len(detailRecord.ClaudeRequestBlocks) > 0 ||
 		len(detailRecord.ResponsesRequestBlocks) > 0 ||
+		len(detailRecord.OpenAIRequestBlocks) > 0 ||
+		hasBambooTextInputBlocks(detailRecord.BambooRequestBlocks) ||
 		hasPromptObjectContent
-	hasToolInput := len(detailRecord.ClaudeToolResponses) > 0 || len(detailRecord.ResponsesToolResponses) > 0
+	hasToolInput := len(detailRecord.ClaudeToolResponses) > 0 ||
+		len(detailRecord.ResponsesToolResponses) > 0 ||
+		len(detailRecord.OpenAIToolResponses) > 0 ||
+		len(detailRecord.BambooToolResponses) > 0
 	hasTextOutput := strings.TrimSpace(detailRecord.Completion) != "" ||
 		hasClaudeTextResponseBlocks(detailRecord.ClaudeResponseBlocks) ||
 		hasResponsesTextOutputBlocks(detailRecord.ResponsesResponseBlocks) ||
-		hasOpenAITextResponseBlocks(detailRecord.OpenAIResponseBlocks)
+		hasOpenAITextResponseBlocks(detailRecord.OpenAIResponseBlocks) ||
+		hasBambooTextResponseBlocks(detailRecord.BambooResponseBlocks)
 	hasToolUse := hasClaudeToolUseBlocks(detailRecord.ClaudeResponseBlocks) ||
 		hasResponsesFunctionCallBlocks(detailRecord.ResponsesResponseBlocks) ||
 		hasOpenAIToolCallBlocks(detailRecord.OpenAIResponseBlocks) ||
+		hasBambooToolUseBlocks(detailRecord.BambooResponseBlocks) ||
 		len(detailRecord.ToolInvokes) > 0
 	hasAnyOutput := hasTextOutput ||
 		len(detailRecord.ClaudeResponseBlocks) > 0 ||
 		len(detailRecord.ResponsesResponseBlocks) > 0 ||
-		len(detailRecord.OpenAIResponseBlocks) > 0
+		len(detailRecord.OpenAIResponseBlocks) > 0 ||
+		len(detailRecord.BambooResponseBlocks) > 0
 
 	switch {
 	case hasNonToolInput:
@@ -425,6 +447,65 @@ func inferOpenAIStructuredInteractionType(
 	default:
 		return ""
 	}
+}
+
+func inferBambooStructuredInteractionType(
+	requestBlocks []BambooRequestBlock,
+	toolResponses []BambooToolResponseBlock,
+	responseBlocks []BambooResponseBlock,
+) string {
+	if len(toolResponses) > 0 {
+		return "回调"
+	}
+
+	hasToolUse := hasBambooToolUseBlocks(responseBlocks)
+	hasTextOutput := hasBambooTextResponseBlocks(responseBlocks)
+
+	if hasToolUse {
+		return "回调"
+	}
+	if hasTextOutput {
+		return "输出"
+	}
+
+	for _, block := range requestBlocks {
+		if strings.TrimSpace(block.Text) != "" {
+			return "输入"
+		}
+	}
+
+	if len(responseBlocks) > 0 {
+		return "回调"
+	}
+
+	return ""
+}
+
+func hasBambooTextResponseBlocks(blocks []BambooResponseBlock) bool {
+	for _, block := range blocks {
+		if block.Type == "text" && strings.TrimSpace(block.Text) != "" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasBambooToolUseBlocks(blocks []BambooResponseBlock) bool {
+	for _, block := range blocks {
+		if block.Type == "tool_use" {
+			return true
+		}
+	}
+	return false
+}
+
+func hasBambooTextInputBlocks(blocks []BambooRequestBlock) bool {
+	for _, block := range blocks {
+		if strings.TrimSpace(block.Text) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func hasClaudeTextResponseBlocks(blocks []ClaudeResponseBlock) bool {

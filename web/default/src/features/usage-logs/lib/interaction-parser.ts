@@ -33,6 +33,18 @@ export interface OpenAIStructuredInteractionData {
   openAIResponseBlocks: OpenAIBlock[]
 }
 
+export interface BambooBlock {
+  type?: string
+  text?: string
+  thinking?: string
+}
+
+export interface BambooStructuredInteractionData {
+  bambooRequestBlocks: unknown[]
+  bambooToolResponses: unknown[]
+  bambooResponseBlocks: BambooBlock[]
+}
+
 interface PromptItem {
   type: string
   content?: unknown
@@ -182,6 +194,39 @@ function inferOpenAIStructuredInteractionType(
   return null
 }
 
+function inferBambooStructuredInteractionType(
+  data: BambooStructuredInteractionData,
+): InteractionType | null {
+  const requestBlocks = (
+    Array.isArray(data.bambooRequestBlocks) ? data.bambooRequestBlocks : []
+  ) as Array<{ text?: string }>
+  const toolResponses = Array.isArray(data.bambooToolResponses)
+    ? data.bambooToolResponses
+    : []
+  const responseBlocks = Array.isArray(data.bambooResponseBlocks)
+    ? data.bambooResponseBlocks
+    : []
+
+  const hasToolResponse = toolResponses.length > 0
+  const hasToolUse = responseBlocks.some((block) => block.type === 'tool_use')
+  const hasTextOutput = responseBlocks.some(
+    (block) =>
+      block.type === 'text' &&
+      typeof block.text === 'string' &&
+      block.text.trim() !== '',
+  )
+  const hasRequestInput = requestBlocks.some(
+    (block) => typeof block.text === 'string' && block.text.trim() !== '',
+  )
+
+  if (hasToolResponse) return 'callback'
+  if (hasToolUse) return 'callback'
+  if (hasTextOutput) return 'output'
+  if (hasRequestInput) return 'input'
+
+  return null
+}
+
 export function parseInteractionType(record: unknown): InteractionType | null {
   if (!record) return null
 
@@ -278,6 +323,14 @@ export function parseInteractionType(record: unknown): InteractionType | null {
     })
     if (openAIStructuredType) return openAIStructuredType
 
+    // Try structured Bamboo format
+    const bambooStructuredType = inferBambooStructuredInteractionType({
+      bambooRequestBlocks,
+      bambooToolResponses,
+      bambooResponseBlocks,
+    })
+    if (bambooStructuredType) return bambooStructuredType
+
     // Try flattened prompt items
     const responsesType = inferResponsesInteractionType(responsesPromptItems)
     if (responsesType) return responsesType
@@ -289,6 +342,9 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       ? (data.toolInvokes as unknown[])
       : []
 
+    const isBambooData =
+      bambooResponseBlocks.length > 0 || bambooToolResponses.length > 0
+
     const hasPromptObjectContent =
       promptObj !== null &&
       !Array.isArray(promptObj) &&
@@ -297,7 +353,8 @@ export function parseInteractionType(record: unknown): InteractionType | null {
     const hasNonToolInput =
       (typeof data.prompt === 'string' &&
         (data.prompt as string).trim() !== '') ||
-      (typeof lastUserMessage.content === 'string' &&
+      (!isBambooData &&
+        typeof lastUserMessage.content === 'string' &&
         lastUserMessage.content.trim() !== '') ||
       claudeRequestBlocks.length > 0 ||
       responsesRequestBlocks.length > 0 ||
