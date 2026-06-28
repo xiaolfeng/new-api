@@ -448,12 +448,14 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		// to cache_creation_tokens.
 		other["cache_write_tokens"] = cacheWriteTokens
 	}
-	if relayInfo.GetFinalRequestRelayFormat() != types.RelayFormatClaude && usage != nil && usage.UsageSource != "" && usage.InputTokens > 0 {
-		// input_tokens_total: explicit normalized total input used by the usage log UI.
-		// Only write this field when upstream/current conversion has already provided a
-		// reliable total input value and tagged the usage source. Do not infer it from
-		// prompt/cache fields here, otherwise old upstream payloads may be double-counted.
+	if usage != nil && usage.UsageSource != "" && usage.InputTokens > 0 &&
+		relayInfo.GetFinalRequestRelayFormat() != types.RelayFormatClaude {
 		other["input_tokens_total"] = usage.InputTokens
+	} else if summary.IsClaudeUsageSemantic {
+		totalInput := summary.PromptTokens + summary.CacheTokens + summary.CacheCreationTokens
+		if totalInput > 0 {
+			other["input_tokens_total"] = totalInput
+		}
 	}
 	if tieredBillingApplied {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
