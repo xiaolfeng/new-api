@@ -1039,9 +1039,17 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         const promptTokens = log.prompt_tokens || 0
 
+        // For Anthropic-semantic usage, prompt_tokens only contains non-cached input.
+        // Use input_tokens_total (written by backend) as the true denominator; fall
+        // back to computing it from components for historical data.
+        const totalInput =
+          other?.input_tokens_total && other.input_tokens_total > 0
+            ? other.input_tokens_total
+            : promptTokens + cacheReadTokens + cacheWriteTokens
+
         const cacheRate =
-          promptTokens > 0 && cacheReadTokens > 0
-            ? (cacheReadTokens / promptTokens) * 100
+          totalInput > 0 && cacheReadTokens > 0
+            ? Math.min((cacheReadTokens / totalInput) * 100, 100)
             : null
 
         if (cacheRate === null || cacheRate === 0) {

@@ -172,7 +172,7 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	c.Writer.Header().Set("X-Accel-Buffering", "no")
 	c.Writer.Flush()
 
-	serializer := entryCodec.NewSerializer()
+	serializer := entryCodec.NewSerializer(req.Config.Model)
 	var usage dto.Usage
 
 	collector := newBambooTimingCollector()
