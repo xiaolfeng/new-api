@@ -899,10 +899,24 @@ func RemoveDisabledFields(jsonData []byte, channelOtherSettings dto.ChannelOther
 		}
 	}
 
+	// 默认允许 tool_choice 透传，除非明确禁用（用于不支持 tool_choice 的端点兼容，如未启用 --enable-auto-tool-choice 的 vLLM）
+	if channelOtherSettings.DisableToolChoice {
+		if _, exists := data["tool_choice"]; exists {
+			delete(data, "tool_choice")
+		}
+	}
+
 	// 默认移除 safety_identifier，除非明确允许（保护用户隐私，避免向 OpenAI 报告用户信息）
 	if !channelOtherSettings.AllowSafetyIdentifier {
 		if _, exists := data["safety_identifier"]; exists {
 			delete(data, "safety_identifier")
+		}
+	}
+
+	// 默认允许 tool_choice 透传，除非明确禁用（用于不支持 tool_choice 的端点兼容，如未启用 --enable-auto-tool-choice 的 vLLM）
+	if channelOtherSettings.DisableToolChoice {
+		if _, exists := data["tool_choice"]; exists {
+			delete(data, "tool_choice")
 		}
 	}
 
@@ -939,6 +953,7 @@ func hasRemovableDisabledField(jsonData []byte, channelOtherSettings dto.Channel
 		"store",
 		"safety_identifier",
 		"stream_options.include_obfuscation",
+		"tool_choice",
 	)
 
 	return (!channelOtherSettings.AllowServiceTier && values[0].Exists()) ||
@@ -946,7 +961,8 @@ func hasRemovableDisabledField(jsonData []byte, channelOtherSettings dto.Channel
 		(!channelOtherSettings.AllowSpeed && values[2].Exists()) ||
 		(channelOtherSettings.DisableStore && values[3].Exists()) ||
 		(!channelOtherSettings.AllowSafetyIdentifier && values[4].Exists()) ||
-		(!channelOtherSettings.AllowIncludeObfuscation && values[5].Exists())
+		(!channelOtherSettings.AllowIncludeObfuscation && values[5].Exists()) ||
+		(channelOtherSettings.DisableToolChoice && values[6].Exists())
 }
 
 // RemoveGeminiDisabledFields removes disabled fields from Gemini request JSON data
