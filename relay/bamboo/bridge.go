@@ -236,7 +236,11 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 				smooth.signalEnd()
 				smooth.wait()
 			}
-			return nil, types.NewError(cause, types.ErrorCodeBadResponseBody)
+			if len(streamItems) > 0 {
+				info.ResponseBody = truncateResponseBody(strings.Join(streamItems, "\n"))
+			}
+			usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+			return &usage, types.NewError(cause, types.ErrorCodeBadResponseBody)
 		}
 
 		collector.observe(event)
