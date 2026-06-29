@@ -764,7 +764,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           typeof bt?.output_tps === 'number' && bt.output_tps > 0
             ? bt.output_tps
             : null
-        const hasBambooRates = thinkingTps != null || outputTps != null
+        const toolTps =
+          typeof bt?.tool_tps === 'number' && bt.tool_tps > 0
+            ? bt.tool_tps
+            : null
+        const hasBambooRates =
+          thinkingTps != null || outputTps != null || toolTps != null
 
         return (
           <div className='flex flex-col gap-0.5'>
@@ -794,6 +799,16 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     </span>
                     <span className='font-mono tabular-nums text-sky-600/80 dark:text-sky-400/70'>
                       {outputTps.toFixed(1)}
+                    </span>
+                  </span>
+                )}
+                {toolTps != null && (
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-amber-500/80 dark:text-amber-400/70'>
+                      ◆
+                    </span>
+                    <span className='font-mono tabular-nums text-amber-600/80 dark:text-amber-400/70'>
+                      {toolTps.toFixed(1)}
                     </span>
                   </span>
                 )}
@@ -1039,13 +1054,18 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         const promptTokens = log.prompt_tokens || 0
 
-        // For Anthropic-semantic usage, prompt_tokens only contains non-cached input.
-        // Use input_tokens_total (written by backend) as the true denominator; fall
-        // back to computing it from components for historical data.
+        // prompt_tokens semantics differ by provider:
+        // - Claude (anthropic semantic): prompt_tokens is text-only, EXCLUDES cache tokens
+        // - OpenAI (openai semantic): prompt_tokens is the TOTAL, INCLUDES cache_read tokens
+        // input_tokens_total (written by backend) is the authoritative denominator;
+        // fallback must respect the claude flag to avoid double-counting cache tokens.
+        const isClaudeSemantic = other?.claude === true
         const totalInput =
           other?.input_tokens_total && other.input_tokens_total > 0
             ? other.input_tokens_total
-            : promptTokens + cacheReadTokens + cacheWriteTokens
+            : isClaudeSemantic
+              ? promptTokens + cacheReadTokens + cacheWriteTokens
+              : promptTokens
 
         const cacheRate =
           totalInput > 0 && cacheReadTokens > 0

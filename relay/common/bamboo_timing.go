@@ -19,12 +19,21 @@ type BambooTimingStats struct {
 type BambooTokenRates struct {
 	ThinkingTokensPerSec float64
 	OutputTokensPerSec   float64
+	ToolTokensPerSec     float64
+}
+
+// BambooTokenCounts 分阶段 Token 估算数量（char-based 启发式）。
+type BambooTokenCounts struct {
+	ThinkingTokens int64
+	OutputTokens   int64
+	ToolTokens     int64
 }
 
 // BambooTimingResult 完整计时结果，供 RelayInfo 存储和日志层消费。
 type BambooTimingResult struct {
-	Stats BambooTimingStats
-	Rates BambooTokenRates
+	Stats  BambooTimingStats
+	Rates  BambooTokenRates
+	Tokens BambooTokenCounts
 }
 
 // IsZero 判断是否有有效的计时数据（总耗时大于零）。

@@ -204,11 +204,32 @@ describe('parseInteractionType', () => {
     expect(parseInteractionType(record)).toBe('output')
   })
 
-  it('detects bamboo callback from tool responses', () => {
+  it('detects bamboo callback from bare tool responses (no text, no tool_use)', () => {
     const record = {
       bambooRequestBlocks: [],
       bambooToolResponses: [{ toolUseId: '1', output: 'result' }],
       bambooResponseBlocks: [],
+    }
+    expect(parseInteractionType(record)).toBe('callback')
+  })
+
+  it('detects bamboo output when tool response exists but AI gives final text', () => {
+    const record = {
+      bambooRequestBlocks: [],
+      bambooToolResponses: [{ toolUseId: '1', output: 'result' }],
+      bambooResponseBlocks: [{ type: 'text', text: 'Final answer' }],
+    }
+    expect(parseInteractionType(record)).toBe('output')
+  })
+
+  it('detects bamboo callback when tool_use follows tool response', () => {
+    const record = {
+      bambooRequestBlocks: [],
+      bambooToolResponses: [{ toolUseId: '1', output: 'result' }],
+      bambooResponseBlocks: [
+        { type: 'text', text: 'Let me check' },
+        { type: 'tool_use', id: '2', name: 'tool2', input: {} },
+      ],
     }
     expect(parseInteractionType(record)).toBe('callback')
   })
