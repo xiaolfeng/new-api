@@ -367,6 +367,23 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 
+	// 空响应检测：流式输出无任何 content_block_delta 且 output_tokens 为 0 时标记，
+	// 供 controller 触发空响应重试（与非流式 doCompleteRelay 对齐）。
+	// GLM 等端点在限流（429）时可能返回 200 + 空流而非标准错误码，
+	// 不检测则客户端收到"正常结束但无内容"的空响应。
+	hasContent := false
+	for _, idx := range orderedIndices {
+		if accum := streamBlocks[idx]; accum != nil {
+			if accum.textBuf.Len() > 0 || accum.thinkingBuf.Len() > 0 || accum.toolInputBuf.Len() > 0 {
+				hasContent = true
+				break
+			}
+		}
+	}
+	if !hasContent && usage.CompletionTokens == 0 {
+		common.SetContextKey(c, constant.ContextKeyEmptyResponse, true)
+	}
+
 	return &usage, nil
 }
 
