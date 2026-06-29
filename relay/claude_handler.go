@@ -152,6 +152,9 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			if errors.Is(relayErr, bamboo.ErrUnsupportedProvider) {
 				return originalClaudeRelay(c, info, request)
 			}
+			if usage != nil {
+				service.PostTextConsumeQuota(c, info, usage, []string{"bamboo relay error: " + relayErr.Error()})
+			}
 			return relayErr
 		}
 		service.PostTextConsumeQuota(c, info, usage, nil)

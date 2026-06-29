@@ -87,9 +87,11 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 		}
 		usage, relayErr := bamboo.ChatRelay(c, info, types.RelayFormatOpenAI, bodyBytes)
 		if relayErr != nil {
-			// 未覆盖的上游 fallback 到原生三段式
 			if errors.Is(relayErr, bamboo.ErrUnsupportedProvider) {
 				return originalTextRelay(c, info, request)
+			}
+			if usage != nil {
+				service.PostTextConsumeQuota(c, info, usage, []string{"bamboo relay error: " + relayErr.Error()})
 			}
 			return relayErr
 		}

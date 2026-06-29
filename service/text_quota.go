@@ -476,6 +476,10 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		logger.LogInfo(ctx, "empty response detected: completion_tokens=0, will trigger retry")
 	}
 
+	if summary.CompletionTokens == 0 && summary.PromptTokens > 0 {
+		extraContent = append(extraContent, "空响应：上游返回无内容（completion_tokens=0）")
+	}
+
 	// 构建 Record 字段
 	record := BuildLogRecord(relayInfo)
 	fullLog := BuildFullLogRecord(relayInfo)

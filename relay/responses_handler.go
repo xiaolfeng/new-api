@@ -90,6 +90,9 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			if errors.Is(relayErr, bamboo.ErrUnsupportedProvider) {
 				return originalResponsesRelay(c, info, request, responsesReq)
 			}
+			if usage != nil {
+				service.PostTextConsumeQuota(c, info, usage, []string{"bamboo relay error: " + relayErr.Error()})
+			}
 			return relayErr
 		}
 		postResponsesUsageQuota(c, info, usage)
