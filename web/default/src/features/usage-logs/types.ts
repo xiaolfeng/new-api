@@ -230,6 +230,10 @@ export interface LogOtherData {
     tool_ms?: number
     thinking_tps?: number
     output_tps?: number
+    tool_tps?: number
+    thinking_tokens?: number
+    output_tokens?: number
+    tool_tokens?: number
   }
 }
 

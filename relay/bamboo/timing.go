@@ -77,6 +77,7 @@ type bambooTimingCollector struct {
 
 	thinkingChars charCounter
 	outputChars   charCounter
+	toolChars     charCounter
 }
 
 func newBambooTimingCollector() *bambooTimingCollector {
@@ -170,6 +171,9 @@ func (tc *bambooTimingCollector) handleDelta(event bamboosdk.StreamEvent, now ti
 			tc.contentEnd = now
 		}
 		tc.phase = phaseTool
+		if delta.PartialJSON != "" {
+			tc.toolChars.add(delta.PartialJSON)
+		}
 	}
 }
 
@@ -249,14 +253,21 @@ func (tc *bambooTimingCollector) result() relaycommon.BambooTimingResult {
 	}
 
 	var rates relaycommon.BambooTokenRates
+	var counts relaycommon.BambooTokenCounts
+
+	counts.ThinkingTokens = tc.thinkingChars.estimateTokens()
+	counts.OutputTokens = tc.outputChars.estimateTokens()
+	counts.ToolTokens = tc.toolChars.estimateTokens()
+
 	if stats.ThinkingDuration > 0 {
-		tokens := tc.thinkingChars.estimateTokens()
-		rates.ThinkingTokensPerSec = round2(float64(tokens) / stats.ThinkingDuration.Seconds())
+		rates.ThinkingTokensPerSec = round2(float64(counts.ThinkingTokens) / stats.ThinkingDuration.Seconds())
 	}
 	if stats.ContentDuration > 0 {
-		tokens := tc.outputChars.estimateTokens()
-		rates.OutputTokensPerSec = round2(float64(tokens) / stats.ContentDuration.Seconds())
+		rates.OutputTokensPerSec = round2(float64(counts.OutputTokens) / stats.ContentDuration.Seconds())
+	}
+	if stats.ToolDuration > 0 {
+		rates.ToolTokensPerSec = round2(float64(counts.ToolTokens) / stats.ToolDuration.Seconds())
 	}
 
-	return relaycommon.BambooTimingResult{Stats: stats, Rates: rates}
+	return relaycommon.BambooTimingResult{Stats: stats, Rates: rates, Tokens: counts}
 }

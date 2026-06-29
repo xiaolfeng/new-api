@@ -454,31 +454,31 @@ func inferBambooStructuredInteractionType(
 	toolResponses []BambooToolResponseBlock,
 	responseBlocks []BambooResponseBlock,
 ) string {
-	if len(toolResponses) > 0 {
-		return "回调"
-	}
-
 	hasToolUse := hasBambooToolUseBlocks(responseBlocks)
 	hasTextOutput := hasBambooTextResponseBlocks(responseBlocks)
 
-	if hasToolUse {
-		return "回调"
-	}
-	if hasTextOutput {
-		return "输出"
-	}
-
+	hasRequestInput := false
 	for _, block := range requestBlocks {
 		if strings.TrimSpace(block.Text) != "" {
-			return "输入"
+			hasRequestInput = true
+			break
 		}
 	}
 
-	if len(responseBlocks) > 0 {
+	switch {
+	case hasRequestInput:
+		return "输入"
+	case hasToolUse:
 		return "回调"
+	case hasTextOutput:
+		return "输出"
+	case len(toolResponses) > 0:
+		return "回调"
+	case len(responseBlocks) > 0:
+		return "回调"
+	default:
+		return ""
 	}
-
-	return ""
 }
 
 func hasBambooTextResponseBlocks(blocks []BambooResponseBlock) bool {

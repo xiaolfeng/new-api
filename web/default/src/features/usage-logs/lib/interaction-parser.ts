@@ -219,10 +219,15 @@ function inferBambooStructuredInteractionType(
     (block) => typeof block.text === 'string' && block.text.trim() !== '',
   )
 
-  if (hasToolResponse) return 'callback'
+  // Priority follows the same contract as OpenAI / Responses formats:
+  //   1. User-typed input → 'input' (may include thinking / text / tool calls)
+  //   2. New tool call initiated (tool_use) → 'callback'
+  //   3. Final text answer without new tool calls → 'output'
+  //   4. Bare tool response with no text/tool_use → 'callback' (edge case)
+  if (hasRequestInput) return 'input'
   if (hasToolUse) return 'callback'
   if (hasTextOutput) return 'output'
-  if (hasRequestInput) return 'input'
+  if (hasToolResponse) return 'callback'
 
   return null
 }

@@ -413,6 +413,28 @@ function TokenBreakdown(props: { log: UsageLog; other: LogOtherData }) {
     })
   }
 
+  const bt = other.bamboo_timing
+  if (bt) {
+    if (typeof bt.thinking_tokens === 'number' && bt.thinking_tokens > 0) {
+      rows.push({
+        label: `${t('Thinking')} ${t('Tokens')}`,
+        value: bt.thinking_tokens.toLocaleString(),
+      })
+    }
+    if (typeof bt.output_tokens === 'number' && bt.output_tokens > 0) {
+      rows.push({
+        label: `${t('Output')} ${t('Tokens')}`,
+        value: bt.output_tokens.toLocaleString(),
+      })
+    }
+    if (typeof bt.tool_tokens === 'number' && bt.tool_tokens > 0) {
+      rows.push({
+        label: `${t('Tool')} ${t('Tokens')}`,
+        value: bt.tool_tokens.toLocaleString(),
+      })
+    }
+  }
+
   return (
     <DetailSection label={t('Token Breakdown')}>
       {rows.map((row, idx) => (
@@ -1260,6 +1282,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       label: string
                       ms: number | null
                       tps: number | null
+                      tokens: number | null
                       color: string
                       dotColor: string
                     }> = []
@@ -1268,6 +1291,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         label: t('First Token (TTFT)'),
                         ms: bt.ttft_ms,
                         tps: null,
+                        tokens: null,
                         color: 'text-emerald-600 dark:text-emerald-400',
                         dotColor: 'text-emerald-500 dark:text-emerald-400',
                       })
@@ -1279,6 +1303,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         tps:
                           typeof bt.thinking_tps === 'number'
                             ? bt.thinking_tps
+                            : null,
+                        tokens:
+                          typeof bt.thinking_tokens === 'number'
+                            ? bt.thinking_tokens
                             : null,
                         color: 'text-violet-600 dark:text-violet-400',
                         dotColor: 'text-violet-500 dark:text-violet-400',
@@ -1292,6 +1320,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
                           typeof bt.output_tps === 'number'
                             ? bt.output_tps
                             : null,
+                        tokens:
+                          typeof bt.output_tokens === 'number'
+                            ? bt.output_tokens
+                            : null,
                         color: 'text-sky-600 dark:text-sky-400',
                         dotColor: 'text-sky-500 dark:text-sky-400',
                       })
@@ -1300,7 +1332,12 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       rows.push({
                         label: t('Tool Calls'),
                         ms: bt.tool_ms,
-                        tps: null,
+                        tps:
+                          typeof bt.tool_tps === 'number' ? bt.tool_tps : null,
+                        tokens:
+                          typeof bt.tool_tokens === 'number'
+                            ? bt.tool_tokens
+                            : null,
                         color: 'text-amber-600 dark:text-amber-400',
                         dotColor: 'text-amber-500 dark:text-amber-400',
                       })
@@ -1325,6 +1362,11 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         {r.tps != null && r.tps > 0 && (
                           <span className='text-muted-foreground/60 font-mono text-[10px] tabular-nums'>
                             ({r.tps.toFixed(1)} t/s)
+                          </span>
+                        )}
+                        {r.tokens != null && r.tokens > 0 && (
+                          <span className='text-muted-foreground/60 font-mono text-[10px] tabular-nums'>
+                            ·{r.tokens.toLocaleString()}
                           </span>
                         )}
                       </div>
