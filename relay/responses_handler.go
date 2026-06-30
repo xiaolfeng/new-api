@@ -75,7 +75,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	if info.RelayMode != relayconstant.RelayModeResponsesCompact &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		openaicompat.ShouldResponsesUseChatCompletionsCached(info) {
+		relayconvert.ShouldResponsesUseChatCompletionsCached(info) {
 		return originalResponsesRelay(c, info, request, responsesReq)
 	}
 

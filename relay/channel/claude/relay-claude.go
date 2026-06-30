@@ -412,11 +412,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 						var inputObj any
 						if args := toolCall.Function.Arguments; args != "" {
 							if err := common.Unmarshal([]byte(args), &inputObj); err != nil {
-								// 解析失败时，使用原始字符串作为降级，不丢弃整个 tool call
 								common.SysLog("tool call function arguments parse failed, using raw string: " + args)
 								inputObj = map[string]any{"_raw": args}
 							}
-						}
 						}
 						claudeMediaMessages = append(claudeMediaMessages, dto.ClaudeMediaMessage{
 							Type:  "tool_use",
