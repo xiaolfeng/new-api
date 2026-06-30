@@ -50,6 +50,7 @@ import {
   Settings,
   SlidersHorizontal,
   Wand2,
+  Layers,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
@@ -119,7 +120,7 @@ import { getLobeIcon } from '@/lib/lobe-icon'
 import { ROLE } from '@/lib/roles'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
-
+import { useSystemOptions } from '@/features/system-settings/hooks/use-system-options'
 import {
   fetchModels,
   getAllModels,
@@ -630,6 +631,14 @@ export function ChannelMutateDrawer({
   const isEditing = Boolean(currentRow)
   const channelId = currentRow?.id ?? null
   const sensitiveLocked = isEditing && !canEditSensitive
+
+  const { data: systemOptionsData } = useSystemOptions()
+  const bambooRelayEnabled = useMemo(() => {
+    const opt = systemOptionsData?.data?.find(
+      (o) => o.key === 'bamboo.enable_bamboo_relay'
+    )
+    return opt?.value === 'true'
+  }, [systemOptionsData])
 
   // Fetch channel details if editing
   const { data: channelData, isLoading: isChannelLoading } = useQuery({
@@ -4027,6 +4036,62 @@ export function ChannelMutateDrawer({
                                 )}
                               />
                             </div>
+
+                            {bambooRelayEnabled && (
+                              <div className='border-border/60 flex flex-col gap-3 border-y py-4'>
+                                <SubHeading
+                                  title={t('Bamboo Relay Adapter')}
+                                  icon={<Layers className='h-3.5 w-3.5' />}
+                                />
+                                <FormField
+                                  control={form.control}
+                                  name='bamboo_upstream_format'
+                                  render={({ field }) => (
+                                    <FormItem className='space-y-2'>
+                                      <div className='space-y-0.5'>
+                                        <FormLabel>
+                                          {t('Upstream Protocol Format')}
+                                        </FormLabel>
+                                        <FormDescription>
+                                          {t(
+                                            'Override the upstream protocol format used by bamboo relay. Auto detects based on channel type. Use this to force a specific protocol (e.g., send Anthropic format to an OpenAI-compatible endpoint).'
+                                          )}
+                                        </FormDescription>
+                                      </div>
+                                      <Select
+                                        value={field.value ?? 'auto'}
+                                        onValueChange={field.onChange}
+                                      >
+                                        <FormControl>
+                                          <SelectTrigger className='w-full'>
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                        </FormControl>
+                                        <SelectContent
+                                          alignItemWithTrigger={false}
+                                        >
+                                          <SelectItem value='auto'>
+                                            {t('Auto (by channel type)')}
+                                          </SelectItem>
+                                          <SelectItem value='openai'>
+                                            {t('OpenAI Chat Completions')}
+                                          </SelectItem>
+                                          <SelectItem value='anthropic'>
+                                            {t('Anthropic Messages')}
+                                          </SelectItem>
+                                          <SelectItem value='gemini'>
+                                            {t('Google Gemini')}
+                                          </SelectItem>
+                                          <SelectItem value='responses'>
+                                            {t('OpenAI Responses')}
+                                          </SelectItem>
+                                        </SelectContent>
+                                      </Select>
+                                    </FormItem>
+                                  )}
+                                />
+                              </div>
+                            )}
 
                             <FormField
                               control={form.control}

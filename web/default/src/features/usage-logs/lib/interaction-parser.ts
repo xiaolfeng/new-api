@@ -33,6 +33,18 @@ export interface OpenAIStructuredInteractionData {
   openAIResponseBlocks: OpenAIBlock[]
 }
 
+export interface BambooBlock {
+  type?: string
+  text?: string
+  thinking?: string
+}
+
+export interface BambooStructuredInteractionData {
+  bambooRequestBlocks: unknown[]
+  bambooToolResponses: unknown[]
+  bambooResponseBlocks: BambooBlock[]
+}
+
 interface PromptItem {
   type: string
   content?: unknown
@@ -182,6 +194,44 @@ function inferOpenAIStructuredInteractionType(
   return null
 }
 
+function inferBambooStructuredInteractionType(
+  data: BambooStructuredInteractionData,
+): InteractionType | null {
+  const requestBlocks = (
+    Array.isArray(data.bambooRequestBlocks) ? data.bambooRequestBlocks : []
+  ) as Array<{ text?: string }>
+  const toolResponses = Array.isArray(data.bambooToolResponses)
+    ? data.bambooToolResponses
+    : []
+  const responseBlocks = Array.isArray(data.bambooResponseBlocks)
+    ? data.bambooResponseBlocks
+    : []
+
+  const hasToolResponse = toolResponses.length > 0
+  const hasToolUse = responseBlocks.some((block) => block.type === 'tool_use')
+  const hasTextOutput = responseBlocks.some(
+    (block) =>
+      block.type === 'text' &&
+      typeof block.text === 'string' &&
+      block.text.trim() !== '',
+  )
+  const hasRequestInput = requestBlocks.some(
+    (block) => typeof block.text === 'string' && block.text.trim() !== '',
+  )
+
+  // Priority follows the same contract as OpenAI / Responses formats:
+  //   1. User-typed input → 'input' (may include thinking / text / tool calls)
+  //   2. New tool call initiated (tool_use) → 'callback'
+  //   3. Final text answer without new tool calls → 'output'
+  //   4. Bare tool response with no text/tool_use → 'callback' (edge case)
+  if (hasRequestInput) return 'input'
+  if (hasToolUse) return 'callback'
+  if (hasTextOutput) return 'output'
+  if (hasToolResponse) return 'callback'
+
+  return null
+}
+
 export function parseInteractionType(record: unknown): InteractionType | null {
   if (!record) return null
 
@@ -240,6 +290,24 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       ? (data.openaiToolResponses as unknown[])
       : []
 
+    const bambooResponseBlocks: Array<{ type?: string; text?: string; thinking?: string }> =
+      Array.isArray(data.bambooResponseBlocks)
+        ? (data.bambooResponseBlocks as Array<{
+            type?: string
+            text?: string
+            thinking?: string
+          }>)
+        : []
+
+    const bambooRequestBlocks: Array<{ text?: string }> = Array.isArray(
+      data.bambooRequestBlocks
+    )
+      ? (data.bambooRequestBlocks as Array<{ text?: string }>)
+      : []
+    const bambooToolResponses = Array.isArray(data.bambooToolResponses)
+      ? (data.bambooToolResponses as unknown[])
+      : []
+
     const responsesPromptItems = flattenResponsesPromptInputItems(
       promptObj.input
     )
@@ -260,6 +328,14 @@ export function parseInteractionType(record: unknown): InteractionType | null {
     })
     if (openAIStructuredType) return openAIStructuredType
 
+    // Try structured Bamboo format
+    const bambooStructuredType = inferBambooStructuredInteractionType({
+      bambooRequestBlocks,
+      bambooToolResponses,
+      bambooResponseBlocks,
+    })
+    if (bambooStructuredType) return bambooStructuredType
+
     // Try flattened prompt items
     const responsesType = inferResponsesInteractionType(responsesPromptItems)
     if (responsesType) return responsesType
@@ -271,6 +347,9 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       ? (data.toolInvokes as unknown[])
       : []
 
+    const isBambooData =
+      bambooResponseBlocks.length > 0 || bambooToolResponses.length > 0
+
     const hasPromptObjectContent =
       promptObj !== null &&
       !Array.isArray(promptObj) &&
@@ -279,18 +358,23 @@ export function parseInteractionType(record: unknown): InteractionType | null {
     const hasNonToolInput =
       (typeof data.prompt === 'string' &&
         (data.prompt as string).trim() !== '') ||
-      (typeof lastUserMessage.content === 'string' &&
+      (!isBambooData &&
+        typeof lastUserMessage.content === 'string' &&
         lastUserMessage.content.trim() !== '') ||
       claudeRequestBlocks.length > 0 ||
       responsesRequestBlocks.length > 0 ||
       openAIRequestBlocks.length > 0 ||
+      bambooRequestBlocks.some(
+        (block) => typeof block.text === 'string' && block.text.trim() !== ''
+      ) ||
       hasPromptObjectContent ||
       (Array.isArray(data.prompt) && data.prompt.length > 0)
 
     const hasToolInput =
       claudeToolResponses.length > 0 ||
       responsesToolResponses.length > 0 ||
-      openaiToolResponses.length > 0
+      openaiToolResponses.length > 0 ||
+      bambooToolResponses.length > 0
 
     const hasTextOutput =
       (typeof completion === 'string' && completion.trim() !== '') ||
@@ -311,6 +395,12 @@ export function parseInteractionType(record: unknown): InteractionType | null {
           (block.type === 'content' || block.type === 'reasoning') &&
           typeof block.content === 'string' &&
           block.content.trim() !== ''
+      ) ||
+      bambooResponseBlocks.some(
+        (block) =>
+          (block.type === 'text' || block.type === 'thinking') &&
+          typeof block.text === 'string' &&
+          block.text.trim() !== ''
       )
 
     const hasAnyOutput =
@@ -322,12 +412,14 @@ export function parseInteractionType(record: unknown): InteractionType | null {
             Object.keys(completion as Record<string, unknown>).length > 0))) ||
       claudeResponseBlocks.length > 0 ||
       responsesResponseBlocks.length > 0 ||
-      openAIResponseBlocks.length > 0
+      openAIResponseBlocks.length > 0 ||
+      bambooResponseBlocks.length > 0
 
     const hasToolUse =
       claudeResponseBlocks.some((block) => block.type === 'tool_use') ||
       responsesResponseBlocks.some((block) => block.type === 'function_call') ||
       openAIResponseBlocks.some((block) => block.type === 'tool_call') ||
+      bambooResponseBlocks.some((block) => block.type === 'tool_use') ||
       legacyToolInvokes.length > 0
 
     if (hasNonToolInput) return 'input'

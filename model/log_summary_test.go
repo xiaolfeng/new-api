@@ -350,3 +350,94 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 		})
 	}
 }
+
+func TestParseInteractionType(t *testing.T) {
+	tests := []struct {
+		name           string
+		requestBlocks  []BambooRequestBlock
+		toolResponses  []BambooToolResponseBlock
+		responseBlocks []BambooResponseBlock
+		expected       string
+	}{
+		{
+			name: "bamboo input",
+			requestBlocks: []BambooRequestBlock{
+				{Type: "text", Text: "你好"},
+			},
+			toolResponses:  nil,
+			responseBlocks: nil,
+			expected:       "输入",
+		},
+		{
+			name:          "bamboo output",
+			requestBlocks: nil,
+			toolResponses: nil,
+			responseBlocks: []BambooResponseBlock{
+				{Type: "text", Text: "完成了"},
+			},
+			expected: "输出",
+		},
+		{
+			name:          "bamboo callback (bare tool response, no text, no tool_use)",
+			requestBlocks: nil,
+			toolResponses: []BambooToolResponseBlock{
+				{ToolUseID: "tool_1", Name: "exec", Type: "tool", Content: "ok", Role: "tool"},
+			},
+			responseBlocks: nil,
+			expected:       "回调",
+		},
+		{
+			name:          "bamboo output (tool response + final text, no new tool_use)",
+			requestBlocks: nil,
+			toolResponses: []BambooToolResponseBlock{
+				{ToolUseID: "tool_1", Name: "exec", Type: "tool", Content: "ok", Role: "tool"},
+			},
+			responseBlocks: []BambooResponseBlock{
+				{Type: "text", Text: "最终回复"},
+			},
+			expected: "输出",
+		},
+		{
+			name:          "bamboo callback (tool response + tool_use in response)",
+			requestBlocks: nil,
+			toolResponses: []BambooToolResponseBlock{
+				{ToolUseID: "tool_1", Name: "exec", Type: "tool", Content: "ok", Role: "tool"},
+			},
+			responseBlocks: []BambooResponseBlock{
+				{Type: "text", Text: "我再查一下"},
+				{Type: "tool_use", ToolName: "exec_command"},
+			},
+			expected: "回调",
+		},
+		{
+			name:          "bamboo callback (tool use)",
+			requestBlocks: nil,
+			toolResponses: nil,
+			responseBlocks: []BambooResponseBlock{
+				{Type: "tool_use", ToolName: "exec_command"},
+			},
+			expected: "回调",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := inferBambooStructuredInteractionType(tt.requestBlocks, tt.toolResponses, tt.responseBlocks)
+			require.Equal(t, tt.expected, result)
+		})
+	}
+
+	t.Run("bamboo 空字段兜底", func(t *testing.T) {
+		recordBytes, err := common.Marshal(LogDetailRecord{
+			Prompt: map[string]interface{}{
+				"lastUserMessage": map[string]interface{}{
+					"content": "fallback 输入",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+		require.Equal(t, "输入", interactionType)
+	})
+}

@@ -256,6 +256,8 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		if !shouldRetry(c, newAPIError, common.RetryTimes-retryParam.GetRetry()) {
 			break
 		}
+		// 清除当前 Affinity 缓存，确保下一轮 getChannel 不命中已失败的渠道
+		service.ClearCurrentChannelAffinityCache(c)
 	}
 
 	useChannel := c.GetStringSlice("use_channel")

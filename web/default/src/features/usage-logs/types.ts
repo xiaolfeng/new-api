@@ -142,6 +142,7 @@ export interface LogOtherData {
   cache_creation_tokens?: number
   cache_creation_tokens_5m?: number
   cache_creation_tokens_1h?: number
+  input_tokens_total?: number
   claude?: boolean
   model_ratio?: number
   completion_ratio?: number
@@ -221,6 +222,19 @@ export interface LogOtherData {
   parent_session_id?: string
   parent_session_name?: string
   tps?: number
+  bamboo_timing?: {
+    total_ms?: number
+    ttft_ms?: number
+    thinking_ms?: number
+    content_ms?: number
+    tool_ms?: number
+    thinking_tps?: number
+    output_tps?: number
+    tool_tps?: number
+    thinking_tokens?: number
+    output_tokens?: number
+    tool_tokens?: number
+  }
 }
 
 /**

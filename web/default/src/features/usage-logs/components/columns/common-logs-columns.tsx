@@ -700,7 +700,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const subAgentName = other.agent_name
 
         return (
-          <div className='flex flex-col items-center gap-0.5'>
+          <div className='flex flex-col items-start gap-0.5'>
             {mainSessionName &&
               (() => {
                 const badge = getBadgeStyle(`session-${mainSessionName}`)
@@ -787,15 +787,22 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const hasValidTps = typeof tps === 'number' && tps > 0
 
         const useTime = log.use_time
+        const ttftSec = (() => {
+          const btTtft = other?.bamboo_timing?.ttft_ms
+          if (typeof btTtft === 'number' && btTtft > 0) return btTtft / 1000
+          const frtVal = other?.frt
+          if (typeof frtVal === 'number' && frtVal > 0) return frtVal / 1000
+          return 0
+        })()
+        const genTime =
+          log.is_stream && ttftSec > 0 ? useTime - ttftSec : useTime
         const avgTps =
-          useTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / useTime
+          genTime > 0 && log.completion_tokens > 0
+            ? log.completion_tokens / genTime
             : null
 
         if (!hasValidTps && avgTps == null) return null
 
-        // When the upstream-reported tps is missing, fall back to the
-        // tokens/time derived average so the colored display is still filled.
         const displayTps = hasValidTps ? (tps as number) : avgTps
 
         let colorClass = 'text-red-600 dark:text-red-400'
@@ -808,6 +815,22 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             colorClass = 'text-yellow-600 dark:text-yellow-400'
         }
 
+        const bt = other?.bamboo_timing
+        const thinkingTps =
+          typeof bt?.thinking_tps === 'number' && bt.thinking_tps > 0
+            ? bt.thinking_tps
+            : null
+        const outputTps =
+          typeof bt?.output_tps === 'number' && bt.output_tps > 0
+            ? bt.output_tps
+            : null
+        const toolTps =
+          typeof bt?.tool_tps === 'number' && bt.tool_tps > 0
+            ? bt.tool_tps
+            : null
+        const hasBambooRates =
+          thinkingTps != null || outputTps != null || toolTps != null
+
         return (
           <div className='flex flex-col gap-0.5'>
             {displayTps != null && (
@@ -817,16 +840,44 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                 {displayTps.toFixed(1)}
               </span>
             )}
-            {avgTps != null && (
-              <span className='text-muted-foreground/60 text-[11px]'>
-                {log.is_stream ? t('Stream') : t('Non-stream')}
-                {' · '}
-                <span className='font-mono tabular-nums'>
-                  {Math.round(avgTps)}
-                </span>
-                {' t/s'}
+            {hasBambooRates ? (
+              <div className='flex items-center gap-2 text-[11px]'>
+                {thinkingTps != null && (
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-violet-500/80 dark:text-violet-400/70'>
+                      ◆
+                    </span>
+                    <span className='font-mono tabular-nums text-violet-600/80 dark:text-violet-400/70'>
+                      {thinkingTps.toFixed(1)}
+                    </span>
+                  </span>
+                )}
+                {outputTps != null && (
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-sky-500/80 dark:text-sky-400/70'>
+                      ◆
+                    </span>
+                    <span className='font-mono tabular-nums text-sky-600/80 dark:text-sky-400/70'>
+                      {outputTps.toFixed(1)}
+                    </span>
+                  </span>
+                )}
+                {toolTps != null && (
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-amber-500/80 dark:text-amber-400/70'>
+                      ◆
+                    </span>
+                    <span className='font-mono tabular-nums text-amber-600/80 dark:text-amber-400/70'>
+                      {toolTps.toFixed(1)}
+                    </span>
+                  </span>
+                )}
+              </div>
+            ) : avgTps != null ? (
+              <span className='text-muted-foreground/60 font-mono text-[11px] tabular-nums'>
+                {Math.round(avgTps)}
               </span>
-            )}
+            ) : null}
           </div>
         )
       },
@@ -845,9 +896,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const other = parseLogOther(log.other)
         const frt = other?.frt
         const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
-        const frtVariant = frt
-          ? getFirstResponseTimeColor(frt / 1000)
-          : 'neutral'
 
         const timingBgMap: Record<string, string> = {
           success:
@@ -860,40 +908,133 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             'border border-border/60 bg-muted/30 dark:border-border/40 dark:bg-muted/20',
         }
 
+        const bt = other?.bamboo_timing
+        const ttftMs =
+          typeof bt?.ttft_ms === 'number' && bt.ttft_ms > 0
+            ? bt.ttft_ms
+            : typeof frt === 'number'
+              ? frt
+              : null
+
+        const thinkingMs =
+          typeof bt?.thinking_ms === 'number' && bt.thinking_ms > 0
+            ? bt.thinking_ms
+            : null
+        const contentMs =
+          typeof bt?.content_ms === 'number' && bt.content_ms > 0
+            ? bt.content_ms
+            : null
+        const toolMs =
+          typeof bt?.tool_ms === 'number' && bt.tool_ms > 0
+            ? bt.tool_ms
+            : null
+        const hasPhaseTiming =
+          thinkingMs != null || contentMs != null || toolMs != null
+
+        const ttftBadge = log.is_stream ? (
+          ttftMs != null && ttftMs > 0 ? (
+            <StatusBadge
+              label={formatUseTime(ttftMs / 1000)}
+              variant={
+                getFirstResponseTimeColor(ttftMs / 1000) as StatusBadgeProps['variant']
+              }
+              size='sm'
+              showDot={false}
+              copyable={false}
+              className={cn(
+                'rounded-md font-mono',
+                timingBgMap[getFirstResponseTimeColor(ttftMs / 1000)]
+              )}
+            />
+          ) : (
+            <StatusBadge
+              label='N/A'
+              variant='neutral'
+              size='sm'
+              showDot={false}
+              copyable={false}
+              className={cn('rounded-md font-mono', timingBgMap.neutral)}
+            />
+          )
+        ) : null
+
+        const totalBadge = (
+          <StatusBadge
+            label={formatUseTime(useTime)}
+            variant={timeVariant as StatusBadgeProps['variant']}
+            size='sm'
+            copyable={false}
+            className={cn('rounded-md font-mono', timingBgMap[timeVariant])}
+          />
+        )
+
         return (
           <div className='flex flex-col gap-1'>
-            <div className='flex items-center gap-1.5'>
-              <StatusBadge
-                label={formatUseTime(useTime)}
-                variant={timeVariant as StatusBadgeProps['variant']}
-                size='sm'
-                copyable={false}
-                className={cn('rounded-md font-mono', timingBgMap[timeVariant])}
-              />
-              {log.is_stream &&
-                (frt != null && frt > 0 ? (
-                  <StatusBadge
-                    label={formatUseTime(frt / 1000)}
-                    variant={frtVariant as StatusBadgeProps['variant']}
-                    size='sm'
-                    showDot={false}
-                    copyable={false}
-                    className={cn(
-                      'rounded-md font-mono',
-                      timingBgMap[frtVariant]
-                    )}
-                  />
-                ) : (
-                  <StatusBadge
-                    label='N/A'
-                    variant='neutral'
-                    size='sm'
-                    showDot={false}
-                    copyable={false}
-                    className={cn('rounded-md font-mono', timingBgMap.neutral)}
-                  />
-                ))}
-            </div>
+            {hasPhaseTiming ? (
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <div className='flex items-center gap-1.5'>
+                        {totalBadge}
+                        {ttftBadge}
+                      </div>
+                    }
+                  ></TooltipTrigger>
+                  <TooltipContent
+                    side='bottom'
+                    className='max-w-[220px] p-2'
+                  >
+                    <div className='space-y-1 text-xs'>
+                      {thinkingMs != null && (
+                        <div className='flex items-center gap-1.5'>
+                          <span className='text-violet-500 dark:text-violet-400'>
+                            ◆
+                          </span>
+                          <span className='text-muted-foreground'>
+                            {t('Thinking')}
+                          </span>
+                          <span className='ml-auto font-mono tabular-nums text-violet-600 dark:text-violet-400'>
+                            {(thinkingMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                      )}
+                      {contentMs != null && (
+                        <div className='flex items-center gap-1.5'>
+                          <span className='text-sky-500 dark:text-sky-400'>
+                            ◆
+                          </span>
+                          <span className='text-muted-foreground'>
+                            {t('Output')}
+                          </span>
+                          <span className='ml-auto font-mono tabular-nums text-sky-600 dark:text-sky-400'>
+                            {(contentMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                      )}
+                      {toolMs != null && (
+                        <div className='flex items-center gap-1.5'>
+                          <span className='text-amber-500 dark:text-amber-400'>
+                            ◆
+                          </span>
+                          <span className='text-muted-foreground'>
+                            {t('Tool')}
+                          </span>
+                          <span className='ml-auto font-mono tabular-nums text-amber-600 dark:text-amber-400'>
+                            {(toolMs / 1000).toFixed(2)}s
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            ) : (
+              <div className='flex items-center gap-1.5'>
+                {totalBadge}
+                {ttftBadge}
+              </div>
+            )}
             {log.is_stream &&
               other?.stream_status &&
               other.stream_status.status !== 'ok' && (
@@ -936,13 +1077,32 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
 
-        const other = parseLogOther(log.other)
-
         const promptTokens = log.prompt_tokens || 0
         const completionTokens = log.completion_tokens || 0
         if (promptTokens === 0 && completionTokens === 0) {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
+
+        return (
+          <div className='flex flex-col gap-0.5'>
+            <span className='font-mono text-xs font-medium tabular-nums'>
+              {promptTokens.toLocaleString()} /{' '}
+              {completionTokens.toLocaleString()}
+            </span>
+          </div>
+        )
+      },
+      size: 110,
+    },
+
+    {
+      id: 'cache_rate',
+      header: t('Cache Rate'),
+      cell: ({ row }) => {
+        const log = row.original
+        if (!isDisplayableLogType(log.type)) return null
+
+        const other = parseLogOther(log.other)
 
         const cacheReadTokens = other?.cache_tokens || 0
         const cacheWrite5m = other?.cache_creation_tokens_5m || 0
@@ -952,30 +1112,91 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           ? cacheWrite5m + cacheWrite1h
           : other?.cache_creation_tokens || 0
 
+        const promptTokens = log.prompt_tokens || 0
+
+        // prompt_tokens semantics differ by provider:
+        // - Claude (anthropic semantic): prompt_tokens is text-only, EXCLUDES cache tokens
+        // - OpenAI (openai semantic): prompt_tokens is the TOTAL, INCLUDES cache_read tokens
+        // input_tokens_total (written by backend) is the authoritative denominator;
+        // fallback must respect the claude flag to avoid double-counting cache tokens.
+        const isClaudeSemantic = other?.claude === true
+        const totalInput =
+          other?.input_tokens_total && other.input_tokens_total > 0
+            ? other.input_tokens_total
+            : isClaudeSemantic
+              ? promptTokens + cacheReadTokens + cacheWriteTokens
+              : promptTokens
+
+        const cacheRate =
+          totalInput > 0 && cacheReadTokens > 0
+            ? Math.min((cacheReadTokens / totalInput) * 100, 100)
+            : null
+
+        if (cacheRate === null || cacheRate === 0) {
+          return <span className='text-muted-foreground text-xs'>-</span>
+        }
+
+        const rateText = `${cacheRate.toFixed(1)}%`
+
         return (
-          <div className='flex flex-col gap-0.5'>
-            <span className='font-mono text-xs font-medium tabular-nums'>
-              {promptTokens.toLocaleString()} /{' '}
-              {completionTokens.toLocaleString()}
-            </span>
-            {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-              <div className='flex items-center gap-1 text-[11px]'>
-                {cacheReadTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className='font-mono text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400'>
+                    {rateText}
                   </span>
-                )}
-                {cacheWriteTokens > 0 && (
-                  <span className='text-muted-foreground/60'>
-                    ↑ {cacheWriteTokens.toLocaleString()}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
+                }
+              />
+              <TooltipContent side='top' className='max-w-[200px] p-2'>
+                <div className='flex flex-col gap-0.5 text-xs'>
+                  {cacheReadTokens > 0 && (
+                    <div className='flex items-center justify-between gap-3'>
+                      <span className='text-muted-foreground'>
+                        {t('Cache Read')}
+                      </span>
+                      <span className='font-mono tabular-nums font-medium'>
+                        ↓ {cacheReadTokens.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  {cacheWriteTokens > 0 && (
+                    <div className='flex items-center justify-between gap-3'>
+                      <span className='text-muted-foreground'>
+                        {t('Cache Write')}
+                      </span>
+                      <span className='font-mono tabular-nums font-medium'>
+                        ↑ {cacheWriteTokens.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  {hasSplitCache && (
+                    <>
+                      {cacheWrite5m > 0 && (
+                        <div className='flex items-center justify-between gap-3 text-[11px] text-muted-foreground/70'>
+                          <span>{t('Cache Creation (5m)')}</span>
+                          <span className='font-mono tabular-nums'>
+                            {cacheWrite5m.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {cacheWrite1h > 0 && (
+                        <div className='flex items-center justify-between gap-3 text-[11px] text-muted-foreground/70'>
+                          <span>{t('Cache Creation (1h)')}</span>
+                          <span className='font-mono tabular-nums'>
+                            {cacheWrite1h.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
         )
       },
-      size: 110,
+      size: 90,
     },
 
     {

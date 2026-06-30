@@ -30,6 +30,7 @@ ENV GOEXPERIMENT=greenteagc
 
 WORKDIR /build
 
+RUN apk add --no-cache git
 ADD go.mod go.sum ./
 RUN go mod download
 

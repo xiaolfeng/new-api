@@ -75,8 +75,15 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	isClaudeRecord := isClaudeStructuredRecord(relayInfo)
 	isResponsesRecord := isResponsesStructuredRecord(relayInfo)
 
+	// 0. Bamboo relay 路径：从 N2N 中间态构建结构化记录（格式无关）
+	if relayInfo.BambooRelayData != nil {
+		buildBambooStructuredRecord(&record, relayInfo.BambooRelayData)
+	}
+
 	// 1. Prompt (从 relayInfo.Request 获取 messages)
-	if relayInfo != nil && relayInfo.Request != nil {
+	// Bamboo 路径已在步骤 0 从 N2N 中间态填充了 record.Prompt / BambooRequestBlocks / BambooToolResponses，
+	// 跳过此处避免被入口格式覆盖。
+	if relayInfo != nil && relayInfo.Request != nil && relayInfo.BambooRelayData == nil {
 		switch req := relayInfo.Request.(type) {
 		case *dto.GeneralOpenAIRequest:
 			if req != nil {
@@ -115,14 +122,18 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		record.Completion = safeTruncateUTF8(relayInfo.CompletionText, maxCompletionLength)
 	}
 
-	if shouldRecordClaudeResponseBlocks(relayInfo) {
-		record.ClaudeResponseBlocks = buildClaudeResponseBlocks(relayInfo)
-	}
-	if shouldRecordOpenAIResponseBlocks(relayInfo) {
-		record.OpenAIResponseBlocks = buildOpenAIResponseBlocks(relayInfo)
-	}
-	if shouldRecordResponsesResponseBlocks(relayInfo) {
-		record.ResponsesResponseBlocks = buildResponsesResponseBlocksFromSSE(relayInfo.ResponseBody)
+	if relayInfo.BambooRelayData != nil {
+		buildBambooResponseBlocks(&record, relayInfo)
+	} else {
+		if shouldRecordClaudeResponseBlocks(relayInfo) {
+			record.ClaudeResponseBlocks = buildClaudeResponseBlocks(relayInfo)
+		}
+		if shouldRecordOpenAIResponseBlocks(relayInfo) {
+			record.OpenAIResponseBlocks = buildOpenAIResponseBlocks(relayInfo)
+		}
+		if shouldRecordResponsesResponseBlocks(relayInfo) {
+			record.ResponsesResponseBlocks = buildResponsesResponseBlocksFromSSE(relayInfo.ResponseBody)
+		}
 	}
 
 	// 3. Headers (排除敏感信息)
@@ -131,7 +142,9 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 	}
 
 	// 4. Tool invokes (Claude/Anthropic tool_use + tool_result)
-	if len(record.OpenAIResponseBlocks) > 0 {
+	if len(record.BambooResponseBlocks) > 0 {
+		record.ToolInvokes = buildBambooToolInvokeRecordsFromBlocks(record.BambooResponseBlocks)
+	} else if len(record.OpenAIResponseBlocks) > 0 {
 		record.ToolInvokes = buildOpenAIToolInvokeRecordsFromBlocks(record.OpenAIResponseBlocks)
 	} else if len(record.ClaudeResponseBlocks) > 0 {
 		record.ToolInvokes = buildClaudeToolInvokeRecordsFromBlocks(record.ClaudeResponseBlocks)
@@ -139,6 +152,11 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		record.ToolInvokes = buildResponsesToolInvokeRecordsFromBlocks(record.ResponsesResponseBlocks)
 	} else if relayInfo != nil {
 		record.ToolInvokes = buildToolInvokeRecords(relayInfo)
+	}
+
+	// 5. Bamboo debug（走 bamboo relay 路径时由 bridge.go 写入）
+	if relayInfo != nil && relayInfo.BambooDebug != "" {
+		record.BambooDebug = relayInfo.BambooDebug
 	}
 
 	// 如果所有字段都为空，返回空字符串
@@ -154,7 +172,11 @@ func BuildLogRecord(relayInfo *relaycommon.RelayInfo) string {
 		len(record.ClaudeResponseBlocks) == 0 &&
 		len(record.ResponsesRequestBlocks) == 0 &&
 		len(record.ResponsesToolResponses) == 0 &&
-		len(record.ResponsesResponseBlocks) == 0 {
+		len(record.ResponsesResponseBlocks) == 0 &&
+		len(record.BambooResponseBlocks) == 0 &&
+		len(record.BambooRequestBlocks) == 0 &&
+		len(record.BambooToolResponses) == 0 &&
+		record.BambooDebug == "" {
 		return ""
 	}
 
@@ -184,6 +206,153 @@ func isResponsesStructuredRecord(relayInfo *relaycommon.RelayInfo) bool {
 		return false
 	}
 	return relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatOpenAIResponses
+}
+
+func buildBambooStructuredRecord(record *model.LogDetailRecord, data *relaycommon.BambooRelayExtract) {
+	if data == nil || len(data.Messages) == 0 {
+		return
+	}
+
+	var lastUserMsg *relaycommon.BambooMessageExtract
+	for i := len(data.Messages) - 1; i >= 0; i-- {
+		if data.Messages[i].Role == "user" {
+			lastUserMsg = &data.Messages[i]
+			break
+		}
+	}
+	if lastUserMsg == nil {
+		return
+	}
+
+	requestBlocks := make([]model.BambooRequestBlock, 0, len(lastUserMsg.Blocks))
+	toolResponses := make([]model.BambooToolResponseBlock, 0)
+	textParts := make([]string, 0, len(lastUserMsg.Blocks))
+
+	// Build tool name lookup from assistant tool_use blocks in message history.
+	// tool_result blocks from upstream typically only carry ToolID (no ToolName),
+	// so the name must be resolved from the preceding assistant tool_use block.
+	toolNameMap := make(map[string]string)
+	for _, msg := range data.Messages {
+		if msg.Role != "assistant" {
+			continue
+		}
+		for _, block := range msg.Blocks {
+			if block.Type != "tool_use" {
+				continue
+			}
+			toolID := strings.TrimSpace(block.ToolID)
+			toolName := strings.TrimSpace(block.ToolName)
+			if toolID != "" && toolName != "" {
+				toolNameMap[toolID] = toolName
+			}
+		}
+	}
+
+	for _, block := range lastUserMsg.Blocks {
+		switch block.Type {
+		case "text":
+			text := safeTruncateUTF8(block.Text, maxCompletionLength)
+			if strings.TrimSpace(text) == "" {
+				continue
+			}
+			requestBlocks = append(requestBlocks, model.BambooRequestBlock{
+				Type: "text",
+				Text: text,
+			})
+			textParts = append(textParts, text)
+		case "tool_result":
+			toolUseID := strings.TrimSpace(block.ToolID)
+			if toolUseID == "" {
+				continue
+			}
+			// Resolve tool name: prefer current block, fallback to history lookup
+			name := strings.TrimSpace(block.ToolName)
+			if name == "" {
+				name = toolNameMap[toolUseID]
+			}
+			toolResponses = append(toolResponses, model.BambooToolResponseBlock{
+				ToolUseID: toolUseID,
+				Name:      name,
+				Type:      "tool_result",
+				Content:   safeTruncateUTF8(block.ToolResult, maxCompletionLength),
+				Role:      "user",
+			})
+		case "image", "document":
+			requestBlocks = append(requestBlocks, model.BambooRequestBlock{
+				Type: block.Type,
+			})
+		}
+	}
+
+	if len(requestBlocks) == 0 && len(toolResponses) == 0 {
+		return
+	}
+
+	record.BambooRequestBlocks = requestBlocks
+	record.BambooToolResponses = toolResponses
+
+	prompt := make(map[string]interface{})
+	prompt["role"] = "user"
+	if len(textParts) > 0 {
+		prompt["content"] = strings.Join(textParts, "\n")
+	}
+	prompt["contentList"] = requestBlocks
+	record.Prompt = map[string]interface{}{
+		"lastUserMessage": prompt,
+	}
+}
+
+func buildBambooResponseBlocks(record *model.LogDetailRecord, relayInfo *relaycommon.RelayInfo) {
+	if relayInfo == nil {
+		return
+	}
+	// 优先使用 N2N 中间态——携带完整的结构化数据（含 thinking 块），
+	// 不会因格式序列化或 ResponseBody 截断而丢失。
+	if relayInfo.BambooRelayData != nil && len(relayInfo.BambooRelayData.ResponseBlocks) > 0 {
+		bambooBlocks := make([]model.BambooResponseBlock, 0, len(relayInfo.BambooRelayData.ResponseBlocks))
+		for _, block := range relayInfo.BambooRelayData.ResponseBlocks {
+			bb := model.BambooResponseBlock{Type: block.Type}
+			switch block.Type {
+			case "text":
+				bb.Text = safeTruncateUTF8(block.Text, maxCompletionLength)
+			case "thinking":
+				bb.Thinking = safeTruncateUTF8(block.Thinking, maxCompletionLength)
+			case "tool_use":
+				bb.ToolID = block.ToolID
+				bb.ToolName = block.ToolName
+				if len(block.ToolInput) > 0 {
+					var input interface{}
+					if err := common.Unmarshal(block.ToolInput, &input); err == nil {
+						bb.ToolInput = input
+					}
+				}
+			case "tool_result":
+				bb.ToolID = block.ToolID
+				bb.ToolName = block.ToolName
+				bb.ToolResult = safeTruncateUTF8(block.ToolResult, maxCompletionLength)
+				bb.IsError = block.IsError
+			}
+			bambooBlocks = append(bambooBlocks, bb)
+		}
+		record.BambooResponseBlocks = bambooBlocks
+		return
+	}
+	// 回退：从序列化的 ResponseBody 反向解析
+	if strings.TrimSpace(relayInfo.ResponseBody) == "" {
+		return
+	}
+	switch relayInfo.RelayFormat {
+	case types.RelayFormatClaude:
+		record.ClaudeResponseBlocks = buildClaudeResponseBlocks(relayInfo)
+	case types.RelayFormatOpenAI:
+		record.OpenAIResponseBlocks = buildOpenAIResponseBlocks(relayInfo)
+	case types.RelayFormatOpenAIResponses:
+		if relayInfo.IsStream {
+			record.ResponsesResponseBlocks = buildResponsesResponseBlocksFromSSE(relayInfo.ResponseBody)
+		}
+	default:
+		record.ClaudeResponseBlocks = buildClaudeResponseBlocks(relayInfo)
+	}
 }
 
 func shouldRecordClaudeResponseBlocks(relayInfo *relaycommon.RelayInfo) bool {
@@ -760,6 +929,30 @@ func buildClaudeToolInvokeRecordsFromBlocks(blocks []model.ClaudeResponseBlock) 
 			ID:    block.ID,
 			Name:  block.Name,
 			Input: block.Input,
+		})
+	}
+	if len(records) == 0 {
+		return nil
+	}
+	return records
+}
+
+func buildBambooToolInvokeRecordsFromBlocks(blocks []model.BambooResponseBlock) []model.LogToolInvokeRecord {
+	if len(blocks) == 0 {
+		return nil
+	}
+	records := make([]model.LogToolInvokeRecord, 0, len(blocks))
+	for _, block := range blocks {
+		if block.Type != "tool_use" {
+			continue
+		}
+		if strings.TrimSpace(block.ToolID) == "" && strings.TrimSpace(block.ToolName) == "" && block.ToolInput == nil {
+			continue
+		}
+		records = append(records, model.LogToolInvokeRecord{
+			ID:    block.ToolID,
+			Name:  block.ToolName,
+			Input: block.ToolInput,
 		})
 	}
 	if len(records) == 0 {
@@ -1769,62 +1962,44 @@ func buildResponsesPromptMessageContent(content any, role string) []responsesInp
 	}
 }
 
+// selectResponsesInputSegment 从扁平化的 input items 中选取「当前请求输入」片段。
+//
+// 选取规则：
+//   - 从末尾向前找到最后一个用户输入（input_text/text），跳过末尾的 AI 活动区（output_text / function_call / function_call_output）。
+//     这些末尾的 AI 活动属于「本次请求已带出的上下文 / 上游工具链」，需要连同用户输入一起返回。
+//   - 从该用户输入继续向前，收集所有连续的用户输入项（支持 AgentSDK 多输入场景）。
+//   - 遇到非用户输入项（output_text / function_call / function_call_output）即为上一轮对话边界，停止回溯。
+//
+// 返回结果为 [首个连续用户输入 .. 末尾]，涵盖了触发本次请求的用户输入及随之携带的工具链 / AI 输出上下文。
 func selectResponsesInputSegment(items []responsesInputSegmentItem) []responsesInputSegmentItem {
 	if len(items) == 0 {
 		return nil
 	}
 
 	lastIndex := len(items) - 1
-	lastType := strings.TrimSpace(items[lastIndex].Type)
-	if lastType == "" {
-		return items
+
+	cursor := lastIndex
+	for cursor >= 0 {
+		t := strings.TrimSpace(items[cursor].Type)
+		if t == "input_text" || t == "text" {
+			break
+		}
+		cursor--
 	}
 
-	switch lastType {
-	case "output_text":
-		return selectResponsesItemsUntilBoundary(items, lastIndex, map[string]bool{
-			"function_call": true,
-			"input_text":    true,
-			"text":          true,
-		})
-	case "function_call_output":
-		return selectResponsesItemsUntilBoundary(items, lastIndex, map[string]bool{
-			"function_call": true,
-			"input_text":    true,
-			"text":          true,
-			"output_text":   true,
-		})
-	case "input_text", "text":
-		start := lastIndex
-		for start >= 0 {
-			itemType := strings.TrimSpace(items[start].Type)
-			if itemType != "input_text" && itemType != "text" {
-				break
-			}
-			start--
-		}
-		return append([]responsesInputSegmentItem(nil), items[start+1:lastIndex+1]...)
-	case "function_call":
-		return selectResponsesItemsUntilBoundary(items, lastIndex, map[string]bool{
-			"function_call_output": true,
-			"input_text":           true,
-			"text":                 true,
-			"output_text":          true,
-		})
-	default:
+	if cursor < 0 {
 		return append([]responsesInputSegmentItem(nil), items...)
 	}
-}
 
-func selectResponsesItemsUntilBoundary(items []responsesInputSegmentItem, lastIndex int, boundaries map[string]bool) []responsesInputSegmentItem {
-	start := lastIndex
+	start := cursor
 	for start >= 0 {
-		itemType := strings.TrimSpace(items[start].Type)
-		if start != lastIndex && boundaries[itemType] {
+		t := strings.TrimSpace(items[start].Type)
+		if t != "input_text" && t != "text" {
 			break
 		}
 		start--
 	}
+
 	return append([]responsesInputSegmentItem(nil), items[start+1:lastIndex+1]...)
 }
 

@@ -185,4 +185,73 @@ describe('parseInteractionType', () => {
     }
     expect(parseInteractionType(record)).toBe('callback')
   })
+
+  it('detects bamboo input from request blocks', () => {
+    const record = {
+      bambooRequestBlocks: [{ text: 'Hello bamboo' }],
+      bambooToolResponses: [],
+      bambooResponseBlocks: [],
+    }
+    expect(parseInteractionType(record)).toBe('input')
+  })
+
+  it('detects bamboo output from response text blocks', () => {
+    const record = {
+      bambooRequestBlocks: [],
+      bambooToolResponses: [],
+      bambooResponseBlocks: [{ type: 'text', text: 'Bamboo response' }],
+    }
+    expect(parseInteractionType(record)).toBe('output')
+  })
+
+  it('detects bamboo callback from bare tool responses (no text, no tool_use)', () => {
+    const record = {
+      bambooRequestBlocks: [],
+      bambooToolResponses: [{ toolUseId: '1', output: 'result' }],
+      bambooResponseBlocks: [],
+    }
+    expect(parseInteractionType(record)).toBe('callback')
+  })
+
+  it('detects bamboo output when tool response exists but AI gives final text', () => {
+    const record = {
+      bambooRequestBlocks: [],
+      bambooToolResponses: [{ toolUseId: '1', output: 'result' }],
+      bambooResponseBlocks: [{ type: 'text', text: 'Final answer' }],
+    }
+    expect(parseInteractionType(record)).toBe('output')
+  })
+
+  it('detects bamboo callback when tool_use follows tool response', () => {
+    const record = {
+      bambooRequestBlocks: [],
+      bambooToolResponses: [{ toolUseId: '1', output: 'result' }],
+      bambooResponseBlocks: [
+        { type: 'text', text: 'Let me check' },
+        { type: 'tool_use', id: '2', name: 'tool2', input: {} },
+      ],
+    }
+    expect(parseInteractionType(record)).toBe('callback')
+  })
+
+  it('detects bamboo callback from tool_use in response blocks', () => {
+    const record = {
+      bambooRequestBlocks: [],
+      bambooToolResponses: [],
+      bambooResponseBlocks: [
+        { type: 'tool_use', id: '1', name: 'tool1', input: {} },
+      ],
+    }
+    expect(parseInteractionType(record)).toBe('callback')
+  })
+
+  it('does not let prompt fallback short-circuit bamboo output', () => {
+    const record = {
+      prompt: { lastUserMessage: { content: 'User message' } },
+      bambooRequestBlocks: [],
+      bambooToolResponses: [],
+      bambooResponseBlocks: [{ type: 'text', text: 'Bamboo output' }],
+    }
+    expect(parseInteractionType(record)).toBe('output')
+  })
 })

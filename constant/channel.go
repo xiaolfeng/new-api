@@ -202,7 +202,7 @@ var ChannelSpecialBases = map[string]ChannelSpecialBase{
 		OpenAIBaseURL: "https://api.z.ai/api/coding/paas/v4",
 	},
 	"kimi-coding-plan": {
-		ClaudeBaseURL: "https://api.kimi.com/coding",
+		ClaudeBaseURL: "https://api.kimi.com/coding/",
 		OpenAIBaseURL: "https://api.kimi.com/coding/v1",
 	},
 	"doubao-coding-plan": {

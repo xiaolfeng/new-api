@@ -139,7 +139,8 @@ func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 		if sourceFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherClientSourceKey])) == "" {
 			otherMap[LogOtherClientSourceKey] = sourceFromRecord
 		}
-		if interactionFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherInteractionTypeKey])) == "" {
+		// interaction_type: always overwrite (see appendAdminLogSummaries for rationale).
+		if interactionFromRecord != "" {
 			otherMap[LogOtherInteractionTypeKey] = interactionFromRecord
 		}
 		if agentIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherAgentIdKey])) == "" {
@@ -672,7 +673,11 @@ func appendAdminLogSummaries(logs []*Log) {
 		if sourceFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherClientSourceKey])) == "" {
 			otherMap[LogOtherClientSourceKey] = sourceFromRecord
 		}
-		if interactionFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherInteractionTypeKey])) == "" {
+		// interaction_type: always overwrite from record inference.
+		// Earlier versions stored stale values computed by a buggy inference path
+		// (bamboo logs were misclassified as "输入"). Overwriting on read ensures
+		// historical data is corrected once the running binary has the fix.
+		if interactionFromRecord != "" {
 			otherMap[LogOtherInteractionTypeKey] = interactionFromRecord
 		}
 		if agentIdFromRecord != "" && strings.TrimSpace(common.Interface2String(otherMap[LogOtherAgentIdKey])) == "" {

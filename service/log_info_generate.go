@@ -111,6 +111,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendBillingInfo(relayInfo, other)
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
+	appendBambooTiming(relayInfo, other)
 	return other
 }
 
@@ -146,6 +147,30 @@ func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other map[string]inter
 		streamInfo["errors"] = messages
 	}
 	other["stream_status"] = streamInfo
+}
+
+func appendBambooTiming(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
+	if relayInfo == nil || other == nil || relayInfo.BambooTiming == nil {
+		return
+	}
+	bt := relayInfo.BambooTiming
+	if bt.IsZero() {
+		return
+	}
+	timing := map[string]interface{}{
+		"total_ms":        bt.Stats.TotalDuration.Milliseconds(),
+		"ttft_ms":         bt.Stats.FirstByteDuration.Milliseconds(),
+		"thinking_ms":     bt.Stats.ThinkingDuration.Milliseconds(),
+		"content_ms":      bt.Stats.ContentDuration.Milliseconds(),
+		"tool_ms":         bt.Stats.ToolDuration.Milliseconds(),
+		"thinking_tps":    bt.Rates.ThinkingTokensPerSec,
+		"output_tps":      bt.Rates.OutputTokensPerSec,
+		"tool_tps":        bt.Rates.ToolTokensPerSec,
+		"thinking_tokens": bt.Tokens.ThinkingTokens,
+		"output_tokens":   bt.Tokens.OutputTokens,
+		"tool_tokens":     bt.Tokens.ToolTokens,
+	}
+	other["bamboo_timing"] = timing
 }
 
 func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {

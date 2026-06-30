@@ -204,6 +204,56 @@ type RelayInfo struct {
 	ResponseBody string
 	// ToolInvokes 存储 Claude/Anthropic 工具调用信息，用于日志详细记录
 	ToolInvokes []ToolInvokeInfo
+	// BambooDebug 存储 bamboo-messages 的格式化 debug 字符串，
+	// 仅在 EnableBambooDebugLog 开启且走 bamboo relay 路径时非空。
+	BambooDebug string
+
+	// BambooTiming 存储 bamboo relay 路径的分阶段流式计时数据。
+	// 仅在走 bamboo relay 流式路径（relay/bamboo/bridge.go doStreamRelay）时非 nil。
+	// 包含 ThinkingDuration / ContentDuration / ToolDuration / TTFT 等精确阶段耗时，
+	// 以及基于字符估算的分阶段 token/s 速率。
+	// 非 bamboo 路径（原生 adaptor 链路）为 nil，下游应做 nil 判断。
+	BambooTiming *BambooTimingResult
+
+	// BambooRelayData 存储 bamboo relay 的 N2N 中间态请求（从 ParseRequest 结果提取）。
+	// 仅在走 bamboo relay 路径（relay/bamboo/bridge.go ChatRelay）时非 nil。
+	// 供日志记录从格式无关的统一中间表示构建结构化记录，
+	// 而非依赖可能被改写的 info.Request / FinalRequestRelayFormat。
+	BambooRelayData *BambooRelayExtract
+}
+
+// BambooRelayExtract 是 bamboo N2N 中间态请求的本地提取副本。
+//
+// relay/common 不直接依赖 bamboo-messages SDK，因此由 bridge.go 的
+// extractBambooRelayData 从 *bamboocodec.RelayRequest 拷贝出简单字段，
+// 供 service/log_record.go 构建结构化日志记录。
+type BambooRelayExtract struct {
+	System   string
+	Messages []BambooMessageExtract
+	// ResponseBlocks 存储累计的 assistant 响应内容块（thinking / text / tool_use）。
+	// 由 bridge.go 从上游 StreamEvent 流或非流式 Response 中累积，
+	// 保存的是格式无关的统一中间表示——包括可能在格式序列化中丢失的 thinking 块。
+	// 供日志记录构建结构化响应记录，而非依赖可能被截断/格式特化的 ResponseBody。
+	ResponseBlocks []BambooBlockExtract
+}
+
+// BambooMessageExtract 对应 bamboo.BambooMessage 的本地副本。
+type BambooMessageExtract struct {
+	Role   string // "user" | "assistant"
+	Blocks []BambooBlockExtract
+}
+
+// BambooBlockExtract 对应 bamboo.ContentBlock 的本地副本。
+// Type 取值："text" | "thinking" | "tool_use" | "tool_result" | "image" | "document"
+type BambooBlockExtract struct {
+	Type       string
+	Text       string
+	Thinking   string
+	ToolID     string
+	ToolName   string
+	ToolInput  json.RawMessage
+	ToolResult string
+	IsError    bool
 }
 
 func (info *RelayInfo) InitChannelMeta(c *gin.Context) {
@@ -850,10 +900,24 @@ func RemoveDisabledFields(jsonData []byte, channelOtherSettings dto.ChannelOther
 		}
 	}
 
+	// 默认允许 tool_choice 透传，除非明确禁用（用于不支持 tool_choice 的端点兼容，如未启用 --enable-auto-tool-choice 的 vLLM）
+	if channelOtherSettings.DisableToolChoice {
+		if _, exists := data["tool_choice"]; exists {
+			delete(data, "tool_choice")
+		}
+	}
+
 	// 默认移除 safety_identifier，除非明确允许（保护用户隐私，避免向 OpenAI 报告用户信息）
 	if !channelOtherSettings.AllowSafetyIdentifier {
 		if _, exists := data["safety_identifier"]; exists {
 			delete(data, "safety_identifier")
+		}
+	}
+
+	// 默认允许 tool_choice 透传，除非明确禁用（用于不支持 tool_choice 的端点兼容，如未启用 --enable-auto-tool-choice 的 vLLM）
+	if channelOtherSettings.DisableToolChoice {
+		if _, exists := data["tool_choice"]; exists {
+			delete(data, "tool_choice")
 		}
 	}
 
@@ -890,6 +954,7 @@ func hasRemovableDisabledField(jsonData []byte, channelOtherSettings dto.Channel
 		"store",
 		"safety_identifier",
 		"stream_options.include_obfuscation",
+		"tool_choice",
 	)
 
 	return (!channelOtherSettings.AllowServiceTier && values[0].Exists()) ||
@@ -897,7 +962,8 @@ func hasRemovableDisabledField(jsonData []byte, channelOtherSettings dto.Channel
 		(!channelOtherSettings.AllowSpeed && values[2].Exists()) ||
 		(channelOtherSettings.DisableStore && values[3].Exists()) ||
 		(!channelOtherSettings.AllowSafetyIdentifier && values[4].Exists()) ||
-		(!channelOtherSettings.AllowIncludeObfuscation && values[5].Exists())
+		(!channelOtherSettings.AllowIncludeObfuscation && values[5].Exists()) ||
+		(channelOtherSettings.DisableToolChoice && values[6].Exists())
 }
 
 // RemoveGeminiDisabledFields removes disabled fields from Gemini request JSON data

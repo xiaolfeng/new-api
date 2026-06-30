@@ -33,6 +33,10 @@ type LogDetailRecord struct {
 	ResponsesResponseBlocks []ResponsesResponseBlock     `json:"responsesResponseBlocks,omitempty"`
 	OpenAIRequestBlocks     []OpenAIRequestBlock         `json:"openaiRequestBlocks,omitempty"`
 	OpenAIToolResponses     []OpenAIToolResponseBlock    `json:"openaiToolResponses,omitempty"`
+	BambooResponseBlocks    []BambooResponseBlock        `json:"bambooResponseBlocks,omitempty"`
+	BambooRequestBlocks     []BambooRequestBlock         `json:"bambooRequestBlocks,omitempty"`
+	BambooToolResponses     []BambooToolResponseBlock    `json:"bambooToolResponses,omitempty"`
+	BambooDebug             string                       `json:"bambooDebug,omitempty"`
 }
 
 type LogToolInvokeRecord struct {
@@ -54,7 +58,23 @@ type ClaudeResponseBlock struct {
 	Input   interface{} `json:"input,omitempty"`
 }
 
+type BambooResponseBlock struct {
+	Type       string      `json:"type,omitempty"`
+	Text       string      `json:"text,omitempty"`
+	Thinking   string      `json:"thinking,omitempty"`
+	ToolID     string      `json:"toolId,omitempty"`
+	ToolName   string      `json:"toolName,omitempty"`
+	ToolInput  interface{} `json:"toolInput,omitempty"`
+	ToolResult string      `json:"toolResult,omitempty"`
+	IsError    bool        `json:"isError,omitempty"`
+}
+
 type ClaudeRequestBlock struct {
+	Type string `json:"type,omitempty"`
+	Text string `json:"text,omitempty"`
+}
+
+type BambooRequestBlock struct {
 	Type string `json:"type,omitempty"`
 	Text string `json:"text,omitempty"`
 }
@@ -63,6 +83,14 @@ type ClaudeToolResponseBlock struct {
 	ToolUseID string `json:"toolUseId,omitempty"`
 	Name      string `json:"name,omitempty"`
 	Type      string `json:"type,omitempty"`
+	Role      string `json:"role,omitempty"`
+}
+
+type BambooToolResponseBlock struct {
+	ToolUseID string `json:"toolUseId,omitempty"`
+	Name      string `json:"name,omitempty"`
+	Type      string `json:"type,omitempty"`
+	Content   string `json:"content,omitempty"`
 	Role      string `json:"role,omitempty"`
 }
 

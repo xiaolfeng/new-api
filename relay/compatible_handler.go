@@ -1,6 +1,7 @@
 package relay
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/relay/bamboo"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
@@ -64,6 +66,48 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 
 	info.ShouldIncludeUsage = includeUsage
 
+	// pass-through 旁路与 chatCompletionsViaResponses 旁路：无论 bamboo 开关都走原生，
+	// 确保这两个特殊路径行为不变（复审发现的关键点）。
+	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
+	if info.RelayMode == relayconstant.RelayModeChatCompletions &&
+		!passThroughGlobal &&
+		!info.ChannelSetting.PassThroughBodyEnabled &&
+		service.ShouldChatCompletionsUseResponsesGlobal(info.ChannelId, info.ChannelType, info.OriginModelName) {
+		return originalTextRelay(c, info, request)
+	}
+	if passThroughGlobal || info.ChannelSetting.PassThroughBodyEnabled {
+		return originalTextRelay(c, info, request)
+	}
+
+	// bamboo 中继桥：灰度开启时由 bamboo 替代协议转换三段式内核
+	if model_setting.GetBambooSettings().EnableBambooRelay {
+		bodyBytes, mErr := common.Marshal(request)
+		if mErr != nil {
+			return types.NewError(mErr, types.ErrorCodeJsonMarshalFailed, types.ErrOptionWithSkipRetry())
+		}
+		usage, relayErr := bamboo.ChatRelay(c, info, types.RelayFormatOpenAI, bodyBytes)
+		if relayErr != nil {
+			if errors.Is(relayErr, bamboo.ErrUnsupportedProvider) {
+				return originalTextRelay(c, info, request)
+			}
+			if usage != nil {
+				service.PostTextConsumeQuota(c, info, usage, []string{"bamboo relay error: " + relayErr.Error()})
+			}
+			return relayErr
+		}
+		service.PostTextConsumeQuota(c, info, usage, nil)
+		return nil
+	}
+
+	return originalTextRelay(c, info, request)
+}
+
+// originalTextRelay 是 new-api 原生三段式中继，作为 bamboo 未覆盖渠道的 fallback。
+//
+// 包含 GetAdaptor→ConvertOpenAIRequest→DoRequest→DoResponse 完整三段式，
+// 以及 pass-through / chatCompletionsViaResponses 旁路的原始实现。
+// bamboo 灰度关闭或 ErrUnsupportedProvider 时调用，行为与改造前完全一致。
+func originalTextRelay(c *gin.Context, info *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (newAPIError *types.NewAPIError) {
 	adaptor := GetAdaptor(info.ApiType)
 	if adaptor == nil {
 		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
