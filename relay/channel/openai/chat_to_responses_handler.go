@@ -10,7 +10,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/service/openaicompat"
+	"github.com/QuantumNous/new-api/service/relayconvert"
 	"github.com/QuantumNous/new-api/types"
 
 	"github.com/gin-gonic/gin"
@@ -38,7 +38,7 @@ func ChatCompletionsToResponsesHandler(c *gin.Context, info *relaycommon.RelayIn
 	}
 
 	responseID := fmt.Sprintf("resp_%s", c.GetString(common.RequestIdKey))
-	responsesResp, usage, err := openaicompat.ChatCompletionsResponseToResponsesResponse(&chatResp, origReq, responseID)
+	responsesResp, usage, err := relayconvert.ChatCompletionsResponseToResponsesResponse(&chatResp, origReq, responseID)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}

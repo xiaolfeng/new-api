@@ -14,7 +14,7 @@ import (
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/service/openaicompat"
+	"github.com/QuantumNous/new-api/service/relayconvert"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
@@ -80,11 +80,11 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	responsesToChatFallbackEnabled := info.RelayMode != relayconstant.RelayModeResponsesCompact &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		openaicompat.ShouldResponsesUseChatCompletions(info)
+		relayconvert.ShouldResponsesUseChatCompletions(info)
 	if info.RelayMode != relayconstant.RelayModeResponsesCompact &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		openaicompat.ShouldResponsesUseChatCompletionsCached(info) {
+		relayconvert.ShouldResponsesUseChatCompletionsCached(info) {
 		usage, newApiErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
 		if newApiErr != nil {
 			return newApiErr
@@ -110,7 +110,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				if fallbackErr != nil {
 					return fallbackErr
 				}
-				openaicompat.MarkResponsesToChatCompletionsFallback(info)
+				relayconvert.MarkResponsesToChatCompletionsFallback(info)
 				postResponsesUsageQuota(c, info, usage)
 				return nil
 			}
@@ -156,7 +156,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			if fallbackErr != nil {
 				return fallbackErr
 			}
-			openaicompat.MarkResponsesToChatCompletionsFallback(info)
+			relayconvert.MarkResponsesToChatCompletionsFallback(info)
 			postResponsesUsageQuota(c, info, usage)
 			return nil
 		}
@@ -177,7 +177,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 				if fallbackErr != nil {
 					return fallbackErr
 				}
-				openaicompat.MarkResponsesToChatCompletionsFallback(info)
+				relayconvert.MarkResponsesToChatCompletionsFallback(info)
 				postResponsesUsageQuota(c, info, usage)
 				return nil
 			}
