@@ -389,9 +389,9 @@ func GetDailyTokenSummary(startTime, endTime int64) ([]TokenRecordDailyItem, err
 	}
 
 	var dateExpr string
-	if common.UsingSQLite {
+	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		dateExpr = "DATE(ROUND(bucket_start_at), 'unixepoch')"
-	} else if common.UsingPostgreSQL {
+	} else if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		dateExpr = "TO_CHAR(TO_TIMESTAMP(bucket_start_at)::DATE, 'YYYY-MM-DD')"
 	} else {
 		dateExpr = "DATE(FROM_UNIXTIME(bucket_start_at))"
@@ -423,9 +423,9 @@ func GetUserDailyTokenSummary(userId int, startTime, endTime int64) ([]TokenReco
 	}
 
 	var dateExpr string
-	if common.UsingSQLite {
+	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
 		dateExpr = "DATE(ROUND(created_at), 'unixepoch')"
-	} else if common.UsingPostgreSQL {
+	} else if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
 		dateExpr = "TO_CHAR(TO_TIMESTAMP(created_at)::DATE, 'YYYY-MM-DD')"
 	} else {
 		dateExpr = "DATE(FROM_UNIXTIME(created_at))"
