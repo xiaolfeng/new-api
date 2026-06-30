@@ -742,8 +742,8 @@ github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4 h1:W6tKfa/s37faUnwJ7
 github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4/go.mod h1:BZ+9thH0QOTDUwE8KAv/ZwUzsNC7CSMJXj/wtnZMs5k=
 github.com/aws/smithy-go v1.24.2 h1:FzA3bu/nt/vDvmnkg+R8Xl46gmzEDam6mZ1hzmwXFng=
 github.com/aws/smithy-go v1.24.2/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
-github.com/bamboo-services/bamboo-messages v0.7.8 h1:D5k92PH+j0dmEXXlmm5YXljQiejorOWcx1GzencYv5I=
-github.com/bamboo-services/bamboo-messages v0.7.8/go.mod h1:Wd1h7YSffzH3l2OYnX86NMfiZpoQGrc60gPuwNc5nHI=
+github.com/bamboo-services/bamboo-messages v0.7.9 h1:uHHNB0pVG37TE5/fHaziMrFjr1+t4WATQW/Q3Sozk+g=
+github.com/bamboo-services/bamboo-messages v0.7.9/go.mod h1:Wd1h7YSffzH3l2OYnX86NMfiZpoQGrc60gPuwNc5nHI=
 github.com/benbjohnson/clock v1.0.3/go.mod h1:bGMdMPoPVvcYyt1gHDf4J2KE153Yf9BuiUKYMaxlTDM=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/benbjohnson/clock v1.3.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
