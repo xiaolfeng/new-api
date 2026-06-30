@@ -21,6 +21,8 @@ export type MessageRole = 'user' | 'assistant' | 'system' | 'tool'
 
 export type MessageStatus = 'loading' | 'streaming' | 'complete' | 'error'
 
+export type PlaygroundMessageLayoutMode = 'alternating' | 'left'
+
 export interface ToolCallFunction {
   name: string
   arguments: string
@@ -42,10 +44,17 @@ export interface Message {
   key: string
   from: MessageRole
   versions: MessageVersion[]
+  createdAt?: number
+  startedAt?: number
+  completedAt?: number
+  durationMs?: number
   sources?: { href: string; title: string }[]
   reasoning?: {
     content: string
     duration: number
+    startedAt?: number
+    completedAt?: number
+    durationMs?: number
   }
   isReasoningStreaming?: boolean
   isReasoningComplete?: boolean

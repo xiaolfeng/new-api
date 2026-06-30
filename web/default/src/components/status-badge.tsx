@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
 import * as React from 'react'
-import { type LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { stringToColor } from '@/lib/colors'
 import { cn } from '@/lib/utils'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
@@ -86,15 +86,15 @@ export type StatusBadgeType = 'badge' | 'text' | 'underline'
 export const StatusBadgeTypeContext = React.createContext<StatusBadgeType>('badge')
 
 const sizeMap = {
-  sm: 'h-5 gap-1 px-1.5 text-xs leading-none',
-  md: 'h-5 gap-1 px-1.5 text-xs leading-none',
-  lg: 'h-6 gap-1.5 px-2 text-xs leading-none',
+  sm: 'h-5 gap-1 px-1.5 text-sm leading-none',
+  md: 'h-5 gap-1 px-1.5 text-sm leading-none',
+  lg: 'h-6 gap-1.5 px-2 text-sm leading-none',
 } as const
 
 const textSizeMap = {
-  sm: 'gap-1 text-xs leading-none',
-  md: 'gap-1 text-xs leading-none',
-  lg: 'gap-1.5 text-xs leading-none',
+  sm: 'gap-1 text-sm leading-none',
+  md: 'gap-1 text-sm leading-none',
+  lg: 'gap-1.5 text-sm leading-none',
 } as const
 
 export interface StatusBadgeProps extends Omit<
@@ -155,12 +155,15 @@ export function StatusBadge({
     ) : null)
 
   const isBadge = type === 'badge'
+  const title = copyable
+    ? `Click to copy: ${copyText || label || ''}`
+    : label || undefined
 
   return (
     <span
       data-slot='status-badge'
       className={cn(
-        'inline-flex w-fit max-w-full shrink-0 items-center font-medium tracking-normal whitespace-nowrap transition-colors',
+        'inline-flex w-fit max-w-full min-w-0 shrink items-center font-medium tracking-normal whitespace-nowrap transition-colors',
         isBadge
           ? cn('rounded-4xl', sizeMap[size ?? 'sm'])
           : cn(textSizeMap[size ?? 'sm'], type === 'underline' && 'border-b border-current pb-px'),
@@ -171,7 +174,7 @@ export function StatusBadge({
         className
       )}
       onClick={handleClick}
-      title={copyable ? `Click to copy: ${copyText || label || ''}` : undefined}
+      title={title}
       {...props}
     >
       {showDot && (
@@ -223,7 +226,7 @@ export function StatusBadgeList<T>(props: StatusBadgeListProps<T>) {
   return (
     <div
       className={cn(
-        'flex max-w-full items-center gap-1 overflow-hidden',
+        'flex max-w-full min-w-0 items-center gap-1 overflow-hidden',
         className
       )}
       {...domProps}

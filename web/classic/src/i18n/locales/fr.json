@@ -3719,13 +3719,13 @@
     "默认补全倍率": "Taux de complétion par défaut",
     "阶梯计费（表达式解析失败）": "Facturation par paliers (échec de l'analyse de l'expression)",
     "阶梯计费（未匹配到对应阶梯）": "Facturation par paliers (aucun palier correspondant)",
-"（共 {{total}} 个）": "",
+    "（共 {{total}} 个）": "",
     "（共 {{total}} 个，省略 {{omit}} 个）": "",
     "（当前仅支持易支付接口，默认使用上方服务器地址作为回调地址！）": "(Actuellement, seule l'interface Epay est prise en charge, l'adresse du serveur ci-dessus est utilisée par défaut comme adresse de rappel !)",
     "，当前无生效订阅，将自动使用钱包": ", aucun abonnement actif, le portefeuille sera utilisé automatiquement.",
     "，时间：": ", time:",
     "，点击更新": ", cliquez sur Mettre à jour",
-"你已合法取得所接入模型 API、账号、密钥和额度的授权；": "You have legally obtained authorization for the connected model APIs, accounts, keys, and quotas.",
+    "你已合法取得所接入模型 API、账号、密钥和额度的授权；": "You have legally obtained authorization for the connected model APIs, accounts, keys, and quotas.",
     "你承诺仅在已取得上游服务商、模型服务提供方或相关权利方合法授权的范围内使用其 API、账号、密钥、额度及服务能力，不进行未经授权的转售、倒卖、分销或其他违规商业化使用。": "You commit to using upstream APIs, accounts, keys, quotas, and service capabilities only within the scope of lawful authorization obtained from upstream service providers, model service providers, or relevant rights holders, and will not conduct unauthorized resale, trafficking, distribution, or other non-compliant commercialization.",
     "如向中华人民共和国境内公众提供生成式人工智能服务，你将依法履行备案登记、安全评估、内容安全、投诉举报、生成合成内容标识、日志留存、个人信息保护等合规义务；": "If you provide generative AI services to the public in mainland China, you will fulfill legal compliance obligations.",
     "你承诺不会利用本系统实施、协助实施或变相实施违反适用法律法规、监管要求、平台规则、社会公共利益或第三方合法权益的行为。": "You commit not to use this system to implement, assist with, or indirectly implement acts that violate applicable laws and regulations, regulatory requirements, platform rules, public interests, or the lawful rights and interests of third parties.",
@@ -3754,6 +3754,14 @@
     "并确认自行承担部署": "confirm that I bear legal responsibility arising from deployment",
     "运营和收费行为产生的法律责任": "operation and charging behavior",
     "，": ", ",
-    "、": ", "
+    "、": ", ",
+    "MjProxy 任务记录": "Tâches MjProxy",
+    "SMTP 加密方式": "Chiffrement SMTP",
+    "SSL/TLS": "SSL/TLS",
+    "STARTTLS": "STARTTLS",
+    "已切换到新版前端，正在跳转首页": "Passage au nouveau frontend effectué, redirection vers l'accueil",
+    "当前未开启 MjProxy 回调，部分项目可能无法获得绘图结果，可在运营设置中开启。": "Le rappel MjProxy actuel n'est pas activé, certains projets peuvent ne pas être en mesure d'obtenir des résultats de dessin, qui peuvent être activés dans les paramètres de fonctionnement.",
+    "无加密": "Aucun chiffrement",
+    "请选择一种 SMTP 传输加密方式": "Veuillez sélectionner un mode de sécurité de transport SMTP"
   }
 }

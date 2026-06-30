@@ -47,7 +47,7 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { MarkdownSourceHighlighter } from '@/components/ui/markdown-source-highlighter'
-import { ScrollArea } from '@/components/ui/scroll-area'
+
 import {
   Sheet,
   SheetContent,
@@ -116,7 +116,7 @@ function DetailRow(props: {
       </span>
       <span
         className={cn(
-          'max-w-full min-w-0 text-xs break-all sm:break-words',
+          'max-w-full min-w-0 text-xs break-all sm:wrap-break-word',
           props.mono && 'font-mono',
           props.muted && 'text-muted-foreground'
         )}
@@ -444,7 +444,7 @@ function ToolUseTable(props: { rows: ToolUseRow[] }) {
               </td>
               <td className='max-w-[300px] px-2 py-1.5'>
                 {row.arguments != null || row.input != null ? (
-                  <pre className='m-0 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap'>
+                  <pre className='m-0 font-mono text-[11px] leading-relaxed wrap-break-word whitespace-pre-wrap'>
                     {JSON.stringify(row.arguments ?? row.input, null, 2)}
                   </pre>
                 ) : (
@@ -757,7 +757,6 @@ function LogDetailSheet(props: {
           <SheetTitle>{props.title}</SheetTitle>
           <SheetDescription>{props.description}</SheetDescription>
         </SheetHeader>
-        <ScrollArea className='min-h-0 flex-1'>
           <div className='space-y-3 p-4'>
             {isStructured && sections ? (
               <StructuredLogContent sections={sections} rawContent={rawJson} />
@@ -811,7 +810,6 @@ function LogDetailSheet(props: {
               </DetailSection>
             )}
           </div>
-        </ScrollArea>
       </SheetContent>
     </Sheet>
   )
@@ -997,11 +995,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
         headerClassName='max-sm:gap-1'
         titleClassName='flex items-center gap-2 text-base'
         descriptionClassName='sr-only'
-        contentHeight='min(72vh, 720px)'
-        bodyClassName='space-y-4'
+        contentHeight='min(72dvh, 720px)'
+        bodyClassName='pr-2 sm:pr-4'
       >
-        <ScrollArea className='max-h-[70vh] min-w-0 overflow-hidden pr-2 max-sm:max-h-[calc(100dvh-7rem)] sm:pr-4'>
-          <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-hidden py-1 sm:space-y-3'>
+        <div className='w-full max-w-full min-w-0 space-y-2.5 overflow-x-hidden py-1 sm:space-y-3'>
             {/* Structured record / full log viewers */}
             {(detailRecord || fullLog) && (
               <div className='flex flex-wrap gap-2'>
@@ -1249,7 +1246,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         className='text-muted-foreground size-3'
                         aria-hidden='true'
                       />
-                      <span className='min-w-0 break-all sm:break-words'>
+                      <span className='min-w-0 break-all sm:wrap-break-word'>
                         {conversionLabel}
                       </span>
                     </div>
@@ -1265,7 +1262,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 label={t('Reject Reason')}
                 variant='danger'
               >
-                <p className='text-xs break-words'>{other.reject_reason}</p>
+                <p className='text-xs wrap-break-word'>{other.reject_reason}</p>
               </DetailSection>
             )}
 
@@ -1592,7 +1589,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   )}
                   {Array.isArray(other.stream_status.errors) &&
                     other.stream_status.errors.length > 0 && (
-                      <pre className='bg-background/60 mt-1 max-h-32 overflow-y-auto rounded border p-2 font-mono text-[11px] leading-relaxed break-words whitespace-pre-wrap'>
+                      <pre className='bg-background/60 mt-1 max-h-32 overflow-y-auto rounded border p-2 font-mono text-[11px] leading-relaxed wrap-break-word whitespace-pre-wrap'>
                         {other.stream_status.errors.join('\n')}
                       </pre>
                     )}
@@ -1667,7 +1664,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                         className='shrink-0 font-medium'
                         copyable={false}
                       />
-                      <span className='min-w-0 font-mono text-[11px] leading-relaxed break-all sm:break-words'>
+                      <span className='min-w-0 font-mono text-[11px] leading-relaxed break-all sm:wrap-break-word'>
                         {parsed.content}
                       </span>
                     </div>
@@ -1695,14 +1692,13 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       <Copy className='size-3' />
                     )}
                   </Button>
-                  <p className='min-w-0 pr-6 text-xs leading-relaxed break-all whitespace-pre-wrap sm:break-words'>
+                  <p className='min-w-0 pr-6 text-xs leading-relaxed break-all whitespace-pre-wrap sm:wrap-break-word'>
                     {details}
                   </p>
                 </div>
               </div>
             )}
           </div>
-        </ScrollArea>
       </Dialog>
       <LogDetailSheet
         open={detailSheet !== null}

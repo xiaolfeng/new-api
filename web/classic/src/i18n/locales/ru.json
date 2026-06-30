@@ -3740,13 +3740,13 @@
     "默认补全倍率": "Коэффициент завершения по умолчанию",
     "阶梯计费（表达式解析失败）": "Многоуровневая тарификация (ошибка разбора выражения)",
     "阶梯计费（未匹配到对应阶梯）": "Многоуровневая тарификация (подходящий уровень не найден)",
-"（共 {{total}} 个）": "",
+    "（共 {{total}} 个）": "",
     "（共 {{total}} 个，省略 {{omit}} 个）": "",
     "（当前仅支持易支付接口，默认使用上方服务器地址作为回调地址！）": "(В настоящее время поддерживается только интерфейс YiPay, по умолчанию используется адрес сервера выше в качестве адреса обратного вызова!)",
     "，当前无生效订阅，将自动使用钱包": ", нет активной подписки, автоматически будет использоваться кошелек.",
     "，时间：": ", время: ",
     "，点击更新": ", нажмите для обновления",
-"你已合法取得所接入模型 API、账号、密钥和额度的授权；": "You have legally obtained authorization for the connected model APIs, accounts, keys, and quotas.",
+    "你已合法取得所接入模型 API、账号、密钥和额度的授权；": "You have legally obtained authorization for the connected model APIs, accounts, keys, and quotas.",
     "你承诺仅在已取得上游服务商、模型服务提供方或相关权利方合法授权的范围内使用其 API、账号、密钥、额度及服务能力，不进行未经授权的转售、倒卖、分销或其他违规商业化使用。": "You commit to using upstream APIs, accounts, keys, quotas, and service capabilities only within the scope of lawful authorization obtained from upstream service providers, model service providers, or relevant rights holders, and will not conduct unauthorized resale, trafficking, distribution, or other non-compliant commercialization.",
     "如向中华人民共和国境内公众提供生成式人工智能服务，你将依法履行备案登记、安全评估、内容安全、投诉举报、生成合成内容标识、日志留存、个人信息保护等合规义务；": "If you provide generative AI services to the public in mainland China, you will fulfill legal compliance obligations.",
     "你承诺不会利用本系统实施、协助实施或变相实施违反适用法律法规、监管要求、平台规则、社会公共利益或第三方合法权益的行为。": "You commit not to use this system to implement, assist with, or indirectly implement acts that violate applicable laws and regulations, regulatory requirements, platform rules, public interests, or the lawful rights and interests of third parties.",
@@ -3775,6 +3775,14 @@
     "并确认自行承担部署": "confirm that I bear legal responsibility arising from deployment",
     "运营和收费行为产生的法律责任": "operation and charging behavior",
     "，": ", ",
-    "、": ", "
+    "、": ", ",
+    "MjProxy 任务记录": "Записи задач MjProxy",
+    "SMTP 加密方式": "Шифрование SMTP",
+    "SSL/TLS": "SSL/TLS",
+    "STARTTLS": "STARTTLS",
+    "已切换到新版前端，正在跳转首页": "Переключено на новый интерфейс, переход на главную",
+    "当前未开启 MjProxy 回调，部分项目可能无法获得绘图结果，可在运营设置中开启。": "В настоящее время обратный вызов MjProxy отключен, некоторые проекты могут не получить результаты рисования, можно включить в настройках эксплуатации.",
+    "无加密": "Без шифрования",
+    "请选择一种 SMTP 传输加密方式": "Выберите один из режимов защиты SMTP-транспорта"
   }
 }
