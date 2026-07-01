@@ -1,9 +1,6 @@
 # ============================================================================
 # new-api Alpha Docker Build Workflow (QuantumNous)
-# 全部使用 self-hosted runner 构建
-# - amd64: 原生构建
-# - arm64: 通过 Docker QEMU 在 self-hosted (amd64) 上仿真构建
-# 触发条件: 推送 alpha tag（如 v0.10.8-alpha.3）或手动触发
+# 触发条件: 推送 alpha tag（如 v0.10.8-alpha.3） 或 手动触发
 # ============================================================================
 
 name: Publish Docker image (alpha)
@@ -11,11 +8,11 @@ name: Publish Docker image (alpha)
 on:
   push:
     tags:
-      - "v[0-9]+.[0-9]+.[0-9]+-alpha*"
+      - 'v[0-9]+.[0-9]+.[0-9]+-alpha*'
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag name to build (e.g., v0.10.8-alpha.3)"
+        description: 'Tag name to build (e.g., v0.10.8-alpha.3)'
         required: true
         type: string
 
@@ -28,9 +25,9 @@ concurrency:
 
 jobs:
   # ==========================================================================
-  # Step 1: 多架构构建（amd64 原生 + arm64 QEMU 仿真），全部跑在 self-hosted
+  # Step 1: 多架构原生构建（amd64 + arm64）
   # ==========================================================================
-  build:
+  build_single_arch:
     name: Build & push (${{ matrix.arch }})
     strategy:
       fail-fast: false
@@ -38,9 +35,11 @@ jobs:
         include:
           - arch: amd64
             platform: linux/amd64
+            runner: ubuntu-latest
           - arch: arm64
             platform: linux/arm64
-    runs-on: self-hosted
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
     permissions:
       packages: write
       contents: read
@@ -66,13 +65,6 @@ jobs:
           echo "TAG=$TAG" >> $GITHUB_ENV
           echo "$TAG" > VERSION
           echo "Building tag: $TAG for ${{ matrix.arch }}"
-
-      # arm64 构建需要 QEMU 仿真（self-hosted 为 amd64 机器）
-      - name: Set up QEMU
-        if: matrix.arch == 'arm64'
-        uses: docker/setup-qemu-action@v3
-        with:
-          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
@@ -125,8 +117,8 @@ jobs:
   # ==========================================================================
   create_manifests:
     name: Create multi-arch manifests
-    needs: [build]
-    runs-on: self-hosted
+    needs: [build_single_arch]
+    runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
     permissions:
       packages: write
