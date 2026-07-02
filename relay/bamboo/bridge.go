@@ -310,12 +310,17 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 		// 即使 SmoothPacer 开启（输出被缓冲延迟），TTFT 仍反映上游真实首字延迟。
 		info.SetFirstResponseTime()
 
-		if !writeSSE(data) {
-			break
+		// 先提取 usage，再写 SSE — 即使客户端断开（writeSSE 返回 false）也能拿到 usage。
+		// EventPing 携带中间 usage 更新（SDK StreamConverter 通过 Ping 而非 MessageDelta
+		// 传递 usage，以避免携带 usage 的终止语义 chunk 导致部分客户端误判流结束）。
+		if event.Type == bamboosdk.EventMessageStart ||
+			event.Type == bamboosdk.EventMessageDelta ||
+			event.Type == bamboosdk.EventPing {
+			extractStreamUsage(&usage, &event)
 		}
 
-		if event.Type == bamboosdk.EventMessageStart || event.Type == bamboosdk.EventMessageDelta {
-			extractStreamUsage(&usage, &event)
+		if !writeSSE(data) {
+			break
 		}
 	}
 
@@ -366,8 +371,6 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 		info.BambooTiming = &result
 	}
 
-	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
-
 	// 空响应检测：流式输出无任何 content_block_delta 且 output_tokens 为 0 时标记，
 	// 供 controller 触发空响应重试（与非流式 doCompleteRelay 对齐）。
 	// GLM 等端点在限流（429）时可能返回 200 + 空流而非标准错误码，
@@ -381,6 +384,29 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			}
 		}
 	}
+
+	// Fallback：当上游未返回 usage 或 SDK StreamConverter 覆盖导致 usage 丢失时，
+	// 用估算值兜底，与原生 claude 路径（relay-claude.go:963-979）对齐。
+	if usage.PromptTokens == 0 {
+		usage.PromptTokens = info.GetEstimatePromptTokens()
+	}
+	if usage.CompletionTokens == 0 && hasContent {
+		var allText strings.Builder
+		for _, idx := range orderedIndices {
+			if accum := streamBlocks[idx]; accum != nil {
+				allText.WriteString(accum.textBuf.String())
+				allText.WriteString(accum.thinkingBuf.String())
+				allText.WriteString(accum.toolInputBuf.String())
+			}
+		}
+		if allText.Len() > 0 {
+			usage.CompletionTokens = service.CountTextToken(allText.String(), info.OriginModelName)
+		}
+	}
+
+	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+	usage.UsageSemantic = "anthropic"
+
 	if !hasContent && usage.CompletionTokens == 0 {
 		common.SetContextKey(c, constant.ContextKeyEmptyResponse, true)
 	}
@@ -415,6 +441,10 @@ func accumulateReasoningFromEvent(modelName string, usage *dto.Usage, event *bam
 // Anthropic streaming protocol:
 //   - message_start carries input_tokens, cache_read_input_tokens, cache_creation_input_tokens
 //   - message_delta carries output_tokens (and sometimes updated input_tokens)
+//
+// bamboo SDK's StreamConverter sends intermediate usage via EventPing (not EventMessageDelta)
+// to avoid carrying usage in a terminal-semantic chunk that could mislead clients like Vercel AI SDK.
+// Therefore EventPing must also be processed here.
 //
 // Only overwrites non-zero values to avoid clobbering start data with delta zeros.
 func extractStreamUsage(usage *dto.Usage, event *bamboosdk.StreamEvent) {
@@ -490,6 +520,7 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 		PromptTokens:     int(resp.Usage.InputTokens),
 		CompletionTokens: int(resp.Usage.OutputTokens),
 		TotalTokens:      int(resp.Usage.InputTokens + resp.Usage.OutputTokens),
+		UsageSemantic:    "anthropic",
 		PromptTokensDetails: dto.InputTokenDetails{
 			CachedTokens:         int(resp.Usage.CacheReadInputTokens),
 			CachedCreationTokens: int(resp.Usage.CacheCreationInputTokens),

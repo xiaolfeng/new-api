@@ -135,3 +135,83 @@ func TestExtractStreamUsage_MessageStartFollowedByMessageDelta(t *testing.T) {
 		t.Fatalf("expected CachedCreationTokens=30, got %d", usage.PromptTokensDetails.CachedCreationTokens)
 	}
 }
+
+func TestExtractStreamUsage_PingCarriesInputTokens(t *testing.T) {
+	usage := &dto.Usage{}
+	event := bamboosdk.StreamEvent{
+		Type: bamboosdk.EventPing,
+		Usage: &bamboosdk.Usage{
+			InputTokens:              100,
+			CacheReadInputTokens:     50,
+			CacheCreationInputTokens: 30,
+		},
+	}
+
+	extractStreamUsage(usage, &event)
+
+	if usage.PromptTokens != 100 {
+		t.Fatalf("expected PromptTokens=100, got %d", usage.PromptTokens)
+	}
+	if usage.PromptTokensDetails.CachedTokens != 50 {
+		t.Fatalf("expected CachedTokens=50, got %d", usage.PromptTokensDetails.CachedTokens)
+	}
+	if usage.PromptTokensDetails.CachedCreationTokens != 30 {
+		t.Fatalf("expected CachedCreationTokens=30, got %d", usage.PromptTokensDetails.CachedCreationTokens)
+	}
+}
+
+func TestExtractStreamUsage_PingCarriesOutputTokens(t *testing.T) {
+	usage := &dto.Usage{
+		PromptTokens: 100,
+	}
+	event := bamboosdk.StreamEvent{
+		Type: bamboosdk.EventPing,
+		Usage: &bamboosdk.Usage{
+			OutputTokens: 200,
+		},
+	}
+
+	extractStreamUsage(usage, &event)
+
+	if usage.CompletionTokens != 200 {
+		t.Fatalf("expected CompletionTokens=200, got %d", usage.CompletionTokens)
+	}
+	if usage.PromptTokens != 100 {
+		t.Fatalf("expected PromptTokens unchanged (100), got %d", usage.PromptTokens)
+	}
+}
+
+func TestExtractStreamUsage_PingFollowedByMessageDelta(t *testing.T) {
+	usage := &dto.Usage{}
+
+	pingEvent := &bamboosdk.StreamEvent{
+		Type: bamboosdk.EventPing,
+		Usage: &bamboosdk.Usage{
+			InputTokens:              100,
+			CacheReadInputTokens:     50,
+			CacheCreationInputTokens: 30,
+		},
+	}
+	deltaEvent := &bamboosdk.StreamEvent{
+		Type: bamboosdk.EventMessageDelta,
+		Usage: &bamboosdk.Usage{
+			OutputTokens: 200,
+		},
+	}
+
+	extractStreamUsage(usage, pingEvent)
+	extractStreamUsage(usage, deltaEvent)
+
+	if usage.PromptTokens != 100 {
+		t.Fatalf("expected PromptTokens=100, got %d", usage.PromptTokens)
+	}
+	if usage.CompletionTokens != 200 {
+		t.Fatalf("expected CompletionTokens=200, got %d", usage.CompletionTokens)
+	}
+	if usage.PromptTokensDetails.CachedTokens != 50 {
+		t.Fatalf("expected CachedTokens=50, got %d", usage.PromptTokensDetails.CachedTokens)
+	}
+	if usage.PromptTokensDetails.CachedCreationTokens != 30 {
+		t.Fatalf("expected CachedCreationTokens=30, got %d", usage.PromptTokensDetails.CachedCreationTokens)
+	}
+}
