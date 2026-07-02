@@ -314,11 +314,8 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			break
 		}
 
-		if event.Type == bamboosdk.EventMessageDelta && event.Usage != nil {
-			usage.PromptTokens = int(event.Usage.InputTokens)
-			usage.CompletionTokens = int(event.Usage.OutputTokens)
-			usage.PromptTokensDetails.CachedTokens = int(event.Usage.CacheReadInputTokens)
-			usage.PromptTokensDetails.CachedCreationTokens = int(event.Usage.CacheCreationInputTokens)
+		if event.Type == bamboosdk.EventMessageStart || event.Type == bamboosdk.EventMessageDelta {
+			extractStreamUsage(&usage, &event)
 		}
 	}
 
@@ -410,6 +407,31 @@ func accumulateReasoningFromEvent(modelName string, usage *dto.Usage, event *bam
 	if delta.Type == bamboosdk.DeltaThinkingDelta && delta.Thinking != "" {
 		tokens := service.CountTextToken(delta.Thinking, modelName)
 		accumulateReasoning(usage, tokens)
+	}
+}
+
+// extractStreamUsage updates usage from StreamEvent's Usage field.
+//
+// Anthropic streaming protocol:
+//   - message_start carries input_tokens, cache_read_input_tokens, cache_creation_input_tokens
+//   - message_delta carries output_tokens (and sometimes updated input_tokens)
+//
+// Only overwrites non-zero values to avoid clobbering start data with delta zeros.
+func extractStreamUsage(usage *dto.Usage, event *bamboosdk.StreamEvent) {
+	if event.Usage == nil {
+		return
+	}
+	if event.Usage.InputTokens > 0 {
+		usage.PromptTokens = int(event.Usage.InputTokens)
+	}
+	if event.Usage.OutputTokens > 0 {
+		usage.CompletionTokens = int(event.Usage.OutputTokens)
+	}
+	if event.Usage.CacheReadInputTokens > 0 {
+		usage.PromptTokensDetails.CachedTokens = int(event.Usage.CacheReadInputTokens)
+	}
+	if event.Usage.CacheCreationInputTokens > 0 {
+		usage.PromptTokensDetails.CachedCreationTokens = int(event.Usage.CacheCreationInputTokens)
 	}
 }
 

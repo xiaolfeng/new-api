@@ -4090,6 +4090,45 @@ export function ChannelMutateDrawer({
                                     </FormItem>
                                   )}
                                 />
+                                {(form.watch('bamboo_upstream_format') === 'openai' ||
+                                  form.watch('bamboo_upstream_format') === 'anthropic') && (
+                                  <FormField
+                                    control={form.control}
+                                    name='bamboo_legacy_compat'
+                                    render={({ field }) => (
+                                      <FormItem className='space-y-2'>
+                                        <div className='space-y-0.5'>
+                                          <FormLabel>
+                                            {t('Traditional Mode')}
+                                          </FormLabel>
+                                          <FormDescription>
+                                            {t(
+                                              'When enabled, uses legacy field names (e.g., max_tokens instead of max_completion_tokens) and omits reasoning_effort / parallel_tool_calls. Enable for endpoints that do not support the latest OpenAI/Anthropic schema.'
+                                            )}
+                                          </FormDescription>
+                                          </div>
+                                        <Select
+                                          value={field.value ? 'true' : 'false'}
+                                          onValueChange={(v) => field.onChange(v === 'true')}
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className='w-full'>
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            <SelectItem value='false'>
+                                              {t('Off (Standard)')}
+                                            </SelectItem>
+                                            <SelectItem value='true'>
+                                              {t('On (Legacy fields)')}
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </FormItem>
+                                    )}
+                                  />
+                                )}
                               </div>
                             )}
 

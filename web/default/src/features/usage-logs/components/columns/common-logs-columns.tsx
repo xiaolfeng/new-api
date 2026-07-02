@@ -786,35 +786,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const tps = other?.tps
         const hasValidTps = typeof tps === 'number' && tps > 0
 
-        const useTime = log.use_time
-        const ttftSec = (() => {
-          const btTtft = other?.bamboo_timing?.ttft_ms
-          if (typeof btTtft === 'number' && btTtft > 0) return btTtft / 1000
-          const frtVal = other?.frt
-          if (typeof frtVal === 'number' && frtVal > 0) return frtVal / 1000
-          return 0
-        })()
-        const genTime =
-          log.is_stream && ttftSec > 0 ? useTime - ttftSec : useTime
-        const avgTps =
-          genTime > 0 && log.completion_tokens > 0
-            ? log.completion_tokens / genTime
-            : null
-
-        if (!hasValidTps && avgTps == null) return null
-
-        const displayTps = hasValidTps ? (tps as number) : avgTps
-
-        let colorClass = 'text-red-600 dark:text-red-400'
-        if (displayTps != null) {
-          if (displayTps >= 81)
-            colorClass = 'text-green-600 dark:text-green-400'
-          else if (displayTps >= 51)
-            colorClass = 'text-lime-600 dark:text-lime-400'
-          else if (displayTps >= 11)
-            colorClass = 'text-yellow-600 dark:text-yellow-400'
-        }
-
         const bt = other?.bamboo_timing
         const thinkingTps =
           typeof bt?.thinking_tps === 'number' && bt.thinking_tps > 0
@@ -830,6 +801,43 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             : null
         const hasBambooRates =
           thinkingTps != null || outputTps != null || toolTps != null
+
+        const useTime = log.use_time
+        const ttftSec = (() => {
+          const btTtft = bt?.ttft_ms
+          if (typeof btTtft === 'number' && btTtft > 0) return btTtft / 1000
+          const frtVal = other?.frt
+          if (typeof frtVal === 'number' && frtVal > 0) return frtVal / 1000
+          return 0
+        })()
+
+        const completionTokens =
+          log.completion_tokens > 0
+            ? log.completion_tokens
+            : typeof bt?.output_tokens === 'number' && bt.output_tokens > 0
+              ? bt.output_tokens
+              : 0
+
+        const genTime =
+          log.is_stream && ttftSec > 0 ? useTime - ttftSec : useTime
+        const avgTps =
+          genTime > 0 && completionTokens > 0
+            ? completionTokens / genTime
+            : null
+
+        if (!hasValidTps && avgTps == null && !hasBambooRates) return null
+
+        const displayTps = hasValidTps ? (tps as number) : avgTps
+
+        let colorClass = 'text-red-600 dark:text-red-400'
+        if (displayTps != null) {
+          if (displayTps >= 81)
+            colorClass = 'text-green-600 dark:text-green-400'
+          else if (displayTps >= 51)
+            colorClass = 'text-lime-600 dark:text-lime-400'
+          else if (displayTps >= 11)
+            colorClass = 'text-yellow-600 dark:text-yellow-400'
+        }
 
         return (
           <div className='flex flex-col gap-0.5'>
@@ -1077,8 +1085,30 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
 
-        const promptTokens = log.prompt_tokens || 0
-        const completionTokens = log.completion_tokens || 0
+        let promptTokens = log.prompt_tokens || 0
+        let completionTokens = log.completion_tokens || 0
+
+        // Fallback to bamboo_timing token counts when log fields are 0
+        if (promptTokens === 0 || completionTokens === 0) {
+          const other = parseLogOther(log.other)
+          const bt = other?.bamboo_timing
+          if (promptTokens === 0) {
+            const thinkingTokens =
+              typeof bt?.thinking_tokens === 'number'
+                ? bt.thinking_tokens
+                : 0
+            const outputTokens =
+              typeof bt?.output_tokens === 'number' ? bt.output_tokens : 0
+            const toolTokens =
+              typeof bt?.tool_tokens === 'number' ? bt.tool_tokens : 0
+            const bambooTotal =
+              thinkingTokens + outputTokens + toolTokens
+            if (bambooTotal > 0 && completionTokens === 0) {
+              completionTokens = outputTokens + toolTokens
+            }
+          }
+        }
+
         if (promptTokens === 0 && completionTokens === 0) {
           return <span className='text-muted-foreground text-xs'>-</span>
         }

@@ -102,6 +102,7 @@ export interface ChannelOtherSettings {
   claude_beta_query?: boolean
   disable_task_polling_sleep?: boolean
   bamboo_upstream_format?: 'auto' | 'openai' | 'anthropic' | 'gemini' | 'responses'
+  bamboo_legacy_compat?: boolean
   upstream_model_update_check_enabled?: boolean
   upstream_model_update_auto_sync_enabled?: boolean
   upstream_model_update_ignored_models?: string[]

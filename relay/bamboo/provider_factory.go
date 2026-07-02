@@ -190,16 +190,18 @@ func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider
 	// 解析上游格式（手动覆盖 > ApiType 推断），与 provider 构造逻辑共享
 	upstreamRelayFormat := resolveUpstreamRelayFormat(info)
 
+	legacyCompat := info.ChannelOtherSettings.IsBambooLegacyCompat()
+
 	upstreamFmt := resolveUpstreamFormat(info)
 	if upstreamFmt != dto.BambooUpstreamFormatAuto {
-		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, info.ApiType, paramOverrideInterceptor)
+		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, legacyCompat, paramOverrideInterceptor)
 		if apiErr != nil {
 			return nil, "", apiErr
 		}
 		return p, upstreamRelayFormat, nil
 	}
 
-	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers, paramOverrideInterceptor)
+	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers, legacyCompat, paramOverrideInterceptor)
 	if apiErr != nil {
 		return nil, "", apiErr
 	}
@@ -228,24 +230,24 @@ func buildParamOverrideInterceptor(info *relaycommon.RelayInfo) provider.Request
 
 // buildProviderByFormat 按用户手动指定的上游协议格式构造 provider。
 //
-// legacyCompat 推断：当用户强制选择 openai 格式但渠道本身的 ApiType 属于
-// Legacy 兼容列表（DeepSeek/Moonshot 等）时，保留 Legacy 行为以兼容旧字段名。
+// legacyCompat 由 UI 的 bamboo_legacy_compat 字段控制（传统模式开关），
+// 当用户启用传统模式时，OpenAI Completions provider 使用旧字段名 max_tokens
+// 而非 max_completion_tokens，且不发送 reasoning_effort / parallel_tool_calls。
 //
 // interceptor 可以为 nil（无参数覆盖时），此时 4 个 Provider 的 WithInterceptor
 // option 不会被触发，构造行为与升级前一致。
 func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL string,
-	headers map[string]string, originalApiType int,
+	headers map[string]string, legacyCompat bool,
 	interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
 
 	switch fmt {
 	case dto.BambooUpstreamFormatAnthropic:
-		return newAnthropicProvider(apiKey, baseURL, headers, interceptor), nil
+		return newAnthropicProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
 	case dto.BambooUpstreamFormatGemini:
 		return newGeminiProvider(apiKey, baseURL, headers, interceptor), nil
 	case dto.BambooUpstreamFormatResponses:
 		return newResponsesProvider(apiKey, baseURL, headers, interceptor), nil
 	case dto.BambooUpstreamFormatOpenAI:
-		legacyCompat := isLegacyCompatApiType(originalApiType)
 		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
 	default:
 		return nil, types.NewError(ErrUnsupportedProvider, types.ErrorCodeInvalidApiType)
@@ -253,13 +255,12 @@ func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL str
 }
 
 // buildProviderByApiType 按渠道 ApiType 自动推断上游协议（原 newProvider switch 逻辑）。
-//
-// interceptor 可以为 nil（无参数覆盖时）。
+// auto 模式下 legacyCompat 由调用方从 ChannelOtherSettings.BambooLegacyCompat 读取。
 func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[string]string,
-	interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
+	legacyCompat bool, interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
 	switch apiType {
 	case constant.APITypeAnthropic:
-		return newAnthropicProvider(apiKey, baseURL, headers, interceptor), nil
+		return newAnthropicProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
 
 	case constant.APITypeGemini:
 		return newGeminiProvider(apiKey, baseURL, headers, interceptor), nil
@@ -267,37 +268,17 @@ func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[str
 	case constant.APITypeCodex:
 		return newResponsesProvider(apiKey, baseURL, headers, interceptor), nil
 
-	case constant.APITypeOpenAI, constant.APITypeXai:
-		return buildCompletionsProvider(apiKey, baseURL, headers, false, interceptor), nil
-
-	case constant.APITypeDeepSeek, constant.APITypeMoonshot,
+	case constant.APITypeOpenAI, constant.APITypeXai,
+		constant.APITypeDeepSeek, constant.APITypeMoonshot,
 		constant.APITypeSiliconFlow, constant.APITypeMistral,
 		constant.APITypeZhipuV4,
 		constant.APITypePerplexity, constant.APITypeCohere,
 		constant.APITypeMiniMax, constant.APITypeBaiduV2,
 		constant.APITypeOpenRouter, constant.APITypeXinference:
-		return buildCompletionsProvider(apiKey, baseURL, headers, true, interceptor), nil
+		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
 
 	default:
 		return nil, types.NewError(ErrUnsupportedProvider, types.ErrorCodeInvalidApiType)
-	}
-}
-
-// isLegacyCompatApiType 判断 ApiType 是否属于 Legacy 兼容渠道列表。
-//
-// Legacy 渠道使用 max_tokens（旧字段名）而非 max_completion_tokens，
-// 且不支持 reasoning_effort / parallel_tool_calls 无工具时发送。
-func isLegacyCompatApiType(apiType int) bool {
-	switch apiType {
-	case constant.APITypeDeepSeek, constant.APITypeMoonshot,
-		constant.APITypeSiliconFlow, constant.APITypeMistral,
-		constant.APITypeZhipuV4,
-		constant.APITypePerplexity, constant.APITypeCohere,
-		constant.APITypeMiniMax, constant.APITypeBaiduV2,
-		constant.APITypeOpenRouter, constant.APITypeXinference:
-		return true
-	default:
-		return false
 	}
 }
 
@@ -305,7 +286,7 @@ func isLegacyCompatApiType(apiType int) bool {
 // debug 信息由 bridge.go 通过 FormatRelayInput/FormatRelayParsed/FormatDebugRequest
 // 收集到 RelayInfo.BambooDebug，不再调用 provider.SetDebug()。
 
-func newAnthropicProvider(apiKey, baseURL string, headers map[string]string, interceptor provider.RequestInterceptor) provider.Provider {
+func newAnthropicProvider(apiKey, baseURL string, headers map[string]string, legacyCompat bool, interceptor provider.RequestInterceptor) provider.Provider {
 	opts := []bambooanthropic.Option{
 		bambooanthropic.WithAPIKey(apiKey),
 		bambooanthropic.WithBaseURL(baseURL),
@@ -315,6 +296,9 @@ func newAnthropicProvider(apiKey, baseURL string, headers map[string]string, int
 	}
 	if interceptor != nil {
 		opts = append(opts, bambooanthropic.WithInterceptor(interceptor))
+	}
+	if legacyCompat {
+		opts = append(opts, bambooanthropic.WithLegacyCompat())
 	}
 	return bambooanthropic.NewProviderWithOptions(opts...)
 }

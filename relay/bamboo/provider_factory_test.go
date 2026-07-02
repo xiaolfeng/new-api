@@ -383,3 +383,44 @@ func TestEnsureOpenAIBaseURL(t *testing.T) {
 		})
 	}
 }
+
+func TestNewAnthropicProvider_LegacyCompat(t *testing.T) {
+	// legacyCompat=true 不应 panic 并返回非 nil provider
+	p := newAnthropicProvider("test-key", "https://api.example.com", nil, true, nil)
+	assert.NotNil(t, p)
+
+	// legacyCompat=false 也应返回非 nil provider
+	p = newAnthropicProvider("test-key", "https://api.example.com", nil, false, nil)
+	assert.NotNil(t, p)
+}
+
+func TestNewProvider_BambooLegacyCompat(t *testing.T) {
+	boolPtr := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name         string
+		apiType      int
+		upstreamFmt  string
+		legacyCompat *bool
+	}{
+		{"nil default fallback to false", constant.APITypeAnthropic, "", nil},
+		{"force legacy true", constant.APITypeAnthropic, "", boolPtr(true)},
+		{"force legacy false", constant.APITypeAnthropic, "", boolPtr(false)},
+		{"manual anthropic format with legacy", constant.APITypeOpenAI, "anthropic", boolPtr(true)},
+		{"manual openai format with legacy", constant.APITypeOpenAI, "openai", boolPtr(true)},
+		{"auto openai apitype with legacy", constant.APITypeOpenAI, "", boolPtr(true)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := makeInfo(tt.apiType)
+			info.ChannelOtherSettings.BambooLegacyCompat = tt.legacyCompat
+			info.ChannelOtherSettings.BambooUpstreamFormat = tt.upstreamFmt
+
+			p, _, err := newProvider(nil, info)
+			if err != nil {
+				t.Fatalf("newProvider returned error: %v (type: %T, msg: %q)", err, err, err.Error())
+			}
+			assert.NotNil(t, p)
+		})
+	}
+}

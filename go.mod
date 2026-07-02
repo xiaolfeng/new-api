@@ -62,7 +62,7 @@ require (
 )
 
 require (
-	github.com/bamboo-services/bamboo-messages v0.8.4
+	github.com/bamboo-services/bamboo-messages v0.8.6
 	github.com/waffo-com/waffo-pancake-sdk-go v0.3.1
 	gorm.io/driver/clickhouse v0.6.0
 )

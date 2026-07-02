@@ -69,6 +69,7 @@ type ChannelOtherSettings struct {
 	DisableTaskPollingSleep               bool                  `json:"disable_task_polling_sleep,omitempty"` // 是否跳过异步任务轮询间隔
 	AwsKeyType                            AwsKeyType            `json:"aws_key_type,omitempty"`
 	BambooUpstreamFormat                  string                `json:"bamboo_upstream_format,omitempty"`     // bamboo 灰度模式下手动指定上游协议格式
+	BambooLegacyCompat                    *bool                 `json:"bamboo_legacy_compat,omitempty"`       // bamboo 传统模式：使用 max_tokens 旧字段名而非 max_completion_tokens，不发送 reasoning_effort / parallel_tool_calls
 	UpstreamModelUpdateCheckEnabled       bool                  `json:"upstream_model_update_check_enabled,omitempty"`        // 是否检测上游模型更新
 	UpstreamModelUpdateAutoSyncEnabled    bool                  `json:"upstream_model_update_auto_sync_enabled,omitempty"`    // 是否自动同步上游模型更新
 	UpstreamModelUpdateLastCheckTime      int64                 `json:"upstream_model_update_last_check_time,omitempty"`      // 上次检测时间
@@ -83,6 +84,13 @@ func (s *ChannelOtherSettings) IsOpenRouterEnterprise() bool {
 		return false
 	}
 	return *s.OpenRouterEnterprise
+}
+
+func (s *ChannelOtherSettings) IsBambooLegacyCompat() bool {
+	if s == nil || s.BambooLegacyCompat == nil {
+		return false
+	}
+	return *s.BambooLegacyCompat
 }
 
 const (
