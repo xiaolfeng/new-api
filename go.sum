@@ -742,6 +742,8 @@ github.com/bamboo-services/bamboo-messages v0.8.6 h1:adLlwZC86CsLrS5p2rniVAKnSFt
 github.com/bamboo-services/bamboo-messages v0.8.6/go.mod h1:+oZt7XR7UZDf5lE2Ybhs5SGyG6kaiOqOmcPW3fBhOD4=
 github.com/bamboo-services/bamboo-messages v0.8.7 h1:84d75UEiyaT6Y1AgsbgUPExt6I7WVapiFd/zgOmyohk=
 github.com/bamboo-services/bamboo-messages v0.8.7/go.mod h1:+oZt7XR7UZDf5lE2Ybhs5SGyG6kaiOqOmcPW3fBhOD4=
+github.com/bamboo-services/bamboo-messages v0.8.8 h1:g0gXNLv7MOVxY98PDflu7vmjya8ZgCzFKcjJbWyNAnk=
+github.com/bamboo-services/bamboo-messages v0.8.8/go.mod h1:+oZt7XR7UZDf5lE2Ybhs5SGyG6kaiOqOmcPW3fBhOD4=
 github.com/benbjohnson/clock v1.0.3/go.mod h1:bGMdMPoPVvcYyt1gHDf4J2KE153Yf9BuiUKYMaxlTDM=
 github.com/benbjohnson/clock v1.1.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
 github.com/benbjohnson/clock v1.3.0/go.mod h1:J11/hYXuz8f4ySSvYwY0FKfm+ezbsZBKZxNJlLklBHA=
