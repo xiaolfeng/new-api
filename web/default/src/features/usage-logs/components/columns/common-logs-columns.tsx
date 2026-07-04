@@ -16,19 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useState, useCallback } from 'react'
 import { type ColumnDef } from '@tanstack/react-table'
 import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
+import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
-import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
-import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import {
-  formatUseTime,
-  formatLogQuota,
-  formatTimestampToDate,
-} from '@/lib/format'
-import { cn } from '@/lib/utils'
+
+import { DataTableColumnHeader } from '@/components/data-table/core/column-header'
+import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
   Popover,
@@ -41,8 +35,16 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
-import { DataTableColumnHeader } from '@/components/data-table/core/column-header'
+import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
+import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
+import {
+  formatUseTime,
+  formatLogQuota,
+  formatTimestampToDate,
+} from '@/lib/format'
+import { cn } from '@/lib/utils'
+
 import { LOG_TYPE_ALL_VALUE } from '../../constants'
 import type { UsageLog } from '../../data/schema'
 import {
@@ -335,8 +337,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             ? rawUseChannel.map(String).filter(Boolean)
             : []
           const hasRetryChain = useChannel.length > 1
-          const channelChain =
-            hasRetryChain ? useChannel.join(' → ') : undefined
+          const channelChain = hasRetryChain
+            ? useChannel.join(' → ')
+            : undefined
           const channelDisplay = log.channel_name
             ? `${log.channel_name} #${log.channel}`
             : `#${log.channel}`
@@ -788,15 +791,15 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         const bt = other?.bamboo_timing
         const thinkingTps =
-          typeof bt?.thinking_tps === 'number' && bt.thinking_tps > 0
+          typeof bt?.thinking_tps === 'number' && bt.thinking_tps !== 0
             ? bt.thinking_tps
             : null
         const outputTps =
-          typeof bt?.output_tps === 'number' && bt.output_tps > 0
+          typeof bt?.output_tps === 'number' && bt.output_tps !== 0
             ? bt.output_tps
             : null
         const toolTps =
-          typeof bt?.tool_tps === 'number' && bt.tool_tps > 0
+          typeof bt?.tool_tps === 'number' && bt.tool_tps !== 0
             ? bt.tool_tps
             : null
         const hasBambooRates =
@@ -855,8 +858,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <span className='text-violet-500/80 dark:text-violet-400/70'>
                       ◆
                     </span>
-                    <span className='font-mono tabular-nums text-violet-600/80 dark:text-violet-400/70'>
-                      {thinkingTps.toFixed(1)}
+                    <span className='font-mono text-violet-600/80 tabular-nums dark:text-violet-400/70'>
+                      {thinkingTps < 0 ? '~' : ''}
+                      {Math.abs(thinkingTps).toFixed(1)}
                     </span>
                   </span>
                 )}
@@ -865,8 +869,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <span className='text-sky-500/80 dark:text-sky-400/70'>
                       ◆
                     </span>
-                    <span className='font-mono tabular-nums text-sky-600/80 dark:text-sky-400/70'>
-                      {outputTps.toFixed(1)}
+                    <span className='font-mono text-sky-600/80 tabular-nums dark:text-sky-400/70'>
+                      {outputTps < 0 ? '~' : ''}
+                      {Math.abs(outputTps).toFixed(1)}
                     </span>
                   </span>
                 )}
@@ -875,8 +880,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                     <span className='text-amber-500/80 dark:text-amber-400/70'>
                       ◆
                     </span>
-                    <span className='font-mono tabular-nums text-amber-600/80 dark:text-amber-400/70'>
-                      {toolTps.toFixed(1)}
+                    <span className='font-mono text-amber-600/80 tabular-nums dark:text-amber-400/70'>
+                      {toolTps < 0 ? '~' : ''}
+                      {Math.abs(toolTps).toFixed(1)}
                     </span>
                   </span>
                 )}
@@ -933,9 +939,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             ? bt.content_ms
             : null
         const toolMs =
-          typeof bt?.tool_ms === 'number' && bt.tool_ms > 0
-            ? bt.tool_ms
-            : null
+          typeof bt?.tool_ms === 'number' && bt.tool_ms > 0 ? bt.tool_ms : null
         const hasPhaseTiming =
           thinkingMs != null || contentMs != null || toolMs != null
 
@@ -944,7 +948,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <StatusBadge
               label={formatUseTime(ttftMs / 1000)}
               variant={
-                getFirstResponseTimeColor(ttftMs / 1000) as StatusBadgeProps['variant']
+                getFirstResponseTimeColor(
+                  ttftMs / 1000
+                ) as StatusBadgeProps['variant']
               }
               size='sm'
               showDot={false}
@@ -989,10 +995,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       </div>
                     }
                   ></TooltipTrigger>
-                  <TooltipContent
-                    side='bottom'
-                    className='max-w-[220px] p-2'
-                  >
+                  <TooltipContent side='bottom' className='max-w-[220px] p-2'>
                     <div className='space-y-1 text-xs'>
                       {thinkingMs != null && (
                         <div className='flex items-center gap-1.5'>
@@ -1002,7 +1005,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                           <span className='text-muted-foreground'>
                             {t('Thinking')}
                           </span>
-                          <span className='ml-auto font-mono tabular-nums text-violet-600 dark:text-violet-400'>
+                          <span className='ml-auto font-mono text-violet-600 tabular-nums dark:text-violet-400'>
                             {(thinkingMs / 1000).toFixed(2)}s
                           </span>
                         </div>
@@ -1015,7 +1018,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                           <span className='text-muted-foreground'>
                             {t('Output')}
                           </span>
-                          <span className='ml-auto font-mono tabular-nums text-sky-600 dark:text-sky-400'>
+                          <span className='ml-auto font-mono text-sky-600 tabular-nums dark:text-sky-400'>
                             {(contentMs / 1000).toFixed(2)}s
                           </span>
                         </div>
@@ -1028,7 +1031,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                           <span className='text-muted-foreground'>
                             {t('Tool')}
                           </span>
-                          <span className='ml-auto font-mono tabular-nums text-amber-600 dark:text-amber-400'>
+                          <span className='ml-auto font-mono text-amber-600 tabular-nums dark:text-amber-400'>
                             {(toolMs / 1000).toFixed(2)}s
                           </span>
                         </div>
@@ -1094,15 +1097,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           const bt = other?.bamboo_timing
           if (promptTokens === 0) {
             const thinkingTokens =
-              typeof bt?.thinking_tokens === 'number'
-                ? bt.thinking_tokens
-                : 0
+              typeof bt?.thinking_tokens === 'number' ? bt.thinking_tokens : 0
             const outputTokens =
               typeof bt?.output_tokens === 'number' ? bt.output_tokens : 0
             const toolTokens =
               typeof bt?.tool_tokens === 'number' ? bt.tool_tokens : 0
-            const bambooTotal =
-              thinkingTokens + outputTokens + toolTokens
+            const bambooTotal = thinkingTokens + outputTokens + toolTokens
             if (bambooTotal > 0 && completionTokens === 0) {
               completionTokens = outputTokens + toolTokens
             }
@@ -1173,19 +1173,19 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             <Tooltip>
               <TooltipTrigger
                 render={
-                  <span className='font-mono text-xs font-medium tabular-nums text-emerald-600 dark:text-emerald-400'>
+                  <span className='font-mono text-xs font-medium text-emerald-600 tabular-nums dark:text-emerald-400'>
                     {rateText}
                   </span>
                 }
               />
-              <TooltipContent side='top' className='max-w-[200px] p-2'>
+              <TooltipContent side='top' className='max-w-[220px] p-2'>
                 <div className='flex flex-col gap-0.5 text-xs'>
                   {cacheReadTokens > 0 && (
                     <div className='flex items-center justify-between gap-3'>
                       <span className='text-muted-foreground'>
                         {t('Cache Read')}
                       </span>
-                      <span className='font-mono tabular-nums font-medium'>
+                      <span className='font-mono font-medium tabular-nums'>
                         ↓ {cacheReadTokens.toLocaleString()}
                       </span>
                     </div>
@@ -1195,7 +1195,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       <span className='text-muted-foreground'>
                         {t('Cache Write')}
                       </span>
-                      <span className='font-mono tabular-nums font-medium'>
+                      <span className='font-mono font-medium tabular-nums'>
                         ↑ {cacheWriteTokens.toLocaleString()}
                       </span>
                     </div>
@@ -1203,7 +1203,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   {hasSplitCache && (
                     <>
                       {cacheWrite5m > 0 && (
-                        <div className='flex items-center justify-between gap-3 text-[11px] text-muted-foreground/70'>
+                        <div className='text-muted-foreground/70 flex items-center justify-between gap-3 text-[11px]'>
                           <span>{t('Cache Creation (5m)')}</span>
                           <span className='font-mono tabular-nums'>
                             {cacheWrite5m.toLocaleString()}
@@ -1211,7 +1211,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                         </div>
                       )}
                       {cacheWrite1h > 0 && (
-                        <div className='flex items-center justify-between gap-3 text-[11px] text-muted-foreground/70'>
+                        <div className='text-muted-foreground/70 flex items-center justify-between gap-3 text-[11px]'>
                           <span>{t('Cache Creation (1h)')}</span>
                           <span className='font-mono tabular-nums'>
                             {cacheWrite1h.toLocaleString()}
@@ -1220,6 +1220,14 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                       )}
                     </>
                   )}
+                  <div className='mt-0.5 flex items-center justify-between gap-3 border-t pt-0.5'>
+                    <span className='text-muted-foreground'>
+                      {t('Total Input')}
+                    </span>
+                    <span className='font-mono tabular-nums'>
+                      {totalInput.toLocaleString()}
+                    </span>
+                  </div>
                 </div>
               </TooltipContent>
             </Tooltip>

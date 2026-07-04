@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { z } from 'zod'
+
 import {
   CHANNEL_STATUS,
   ERROR_MESSAGES,
@@ -410,7 +411,12 @@ export function transformChannelToFormDefaults(
   let upstreamModelUpdateAutoSyncEnabled = false
   let upstreamModelUpdateIgnoredModels = ''
   let advancedCustom = ''
-  let bambooUpstreamFormat: 'auto' | 'openai' | 'anthropic' | 'gemini' | 'responses' = 'auto'
+  let bambooUpstreamFormat:
+    | 'auto'
+    | 'openai'
+    | 'anthropic'
+    | 'gemini'
+    | 'responses' = 'auto'
   let bambooLegacyCompat = false
 
   if (channel.settings) {
@@ -643,14 +649,21 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
   }
 
   // Bamboo upstream format override (applies to all channel types when bamboo relay is enabled)
-  if (formData.bamboo_upstream_format && formData.bamboo_upstream_format !== 'auto') {
+  if (
+    formData.bamboo_upstream_format &&
+    formData.bamboo_upstream_format !== 'auto'
+  ) {
     settingsObj.bamboo_upstream_format = formData.bamboo_upstream_format
   } else {
     delete settingsObj.bamboo_upstream_format
   }
 
   // Bamboo legacy compat mode (only applies to openai/anthropic upstream formats)
-  if (formData.bamboo_legacy_compat && (formData.bamboo_upstream_format === 'openai' || formData.bamboo_upstream_format === 'anthropic')) {
+  if (
+    formData.bamboo_legacy_compat &&
+    (formData.bamboo_upstream_format === 'openai' ||
+      formData.bamboo_upstream_format === 'anthropic')
+  ) {
     settingsObj.bamboo_legacy_compat = true
   } else {
     delete settingsObj.bamboo_legacy_compat

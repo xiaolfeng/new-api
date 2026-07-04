@@ -16,12 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useEffect, useRef, useState } from 'react'
-import * as z from 'zod'
-import type { Resolver } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { RotateCcw } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import type { Resolver } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
+import * as z from 'zod'
+
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -31,7 +32,6 @@ import {
   FormItem,
   FormLabel,
 } from '@/components/ui/form'
-import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -39,6 +39,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Switch } from '@/components/ui/switch'
+
 import { FormDirtyIndicator } from '../components/form-dirty-indicator'
 import { FormNavigationGuard } from '../components/form-navigation-guard'
 import { useSettingsForm } from '../hooks/use-settings-form'
@@ -51,9 +53,7 @@ const customizationSchema = z.object({
   bamboo: z.object({
     enable_bamboo_relay: z.boolean(),
     enable_bamboo_debug_log: z.boolean(),
-    smooth_level: z
-      .enum(['off', 'gentle', 'smooth', 'typewriter'])
-      .optional(),
+    smooth_level: z.enum(['off', 'gentle', 'smooth', 'typewriter']).optional(),
   }),
   retry_setting: z.object({
     record_consume_log_detail_enabled: z.boolean(),
@@ -261,12 +261,8 @@ export function CustomizationSection({
                         <SelectItem value='off'>
                           {t('Off (direct passthrough)')}
                         </SelectItem>
-                        <SelectItem value='gentle'>
-                          {t('Gentle')}
-                        </SelectItem>
-                        <SelectItem value='smooth'>
-                          {t('Smooth')}
-                        </SelectItem>
+                        <SelectItem value='gentle'>{t('Gentle')}</SelectItem>
+                        <SelectItem value='smooth'>{t('Smooth')}</SelectItem>
                         <SelectItem value='typewriter'>
                           {t('Typewriter')}
                         </SelectItem>

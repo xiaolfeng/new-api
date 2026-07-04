@@ -18,9 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+
+import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
-import { Skeleton } from '@/components/ui/skeleton'
 
 interface TokenRecordDailyItem {
   date: string
@@ -75,7 +76,7 @@ function UserHeatmapDayLabels() {
   const wed = fmt.format(new Date(2024, 0, 3))
   const fri = fmt.format(new Date(2024, 0, 5))
   return (
-    <div className='flex flex-col gap-[3px] pt-5 text-[10px] text-muted-foreground'>
+    <div className='text-muted-foreground flex flex-col gap-[3px] pt-5 text-[10px]'>
       <span className='flex h-[11px] items-center'>{mon}</span>
       <span className='h-[11px]' />
       <span className='flex h-[11px] items-center'>{wed}</span>
@@ -161,16 +162,16 @@ export function UserHeatmap() {
 
     const weeksCount = Math.ceil(allDates.length / 7)
     const labels: (string | null)[] = []
-    const monthFormatter = new Intl.DateTimeFormat(i18n.language, { month: 'short' })
+    const monthFormatter = new Intl.DateTimeFormat(i18n.language, {
+      month: 'short',
+    })
     for (let w = 0; w < weeksCount; w++) {
       const weekDates = allDates.slice(w * 7, w * 7 + 7)
       const monthStart = weekDates.find((dateStr) => {
         return dayjs(dateStr).date() === 1
       })
       if (monthStart) {
-        labels.push(
-          monthFormatter.format(dayjs(monthStart).toDate())
-        )
+        labels.push(monthFormatter.format(dayjs(monthStart).toDate()))
       } else {
         labels.push(null)
       }
@@ -212,7 +213,7 @@ export function UserHeatmap() {
           <UserHeatmapDayLabels />
           <div className='overflow-x-auto'>
             <div className='min-w-max'>
-              <div className='mb-1 flex gap-[3px] text-[10px] text-muted-foreground'>
+              <div className='text-muted-foreground mb-1 flex gap-[3px] text-[10px]'>
                 {monthLabels.map((label, i) => (
                   <span
                     key={i}
@@ -240,7 +241,7 @@ export function UserHeatmap() {
           </div>
         </div>
         {!hasActivity && (
-          <p className='mt-3 text-center text-xs text-muted-foreground'>
+          <p className='text-muted-foreground mt-3 text-center text-xs'>
             {t('dashboard.models.noActivityYet')}
           </p>
         )}

@@ -16,6 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { useQueryClient } from '@tanstack/react-query'
 /* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
@@ -26,7 +27,7 @@ import {
   useRef,
   type ReactNode,
 } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+
 import type { ChannelAffinityInfo } from '../types'
 
 const AUTO_REFRESH_INTERVAL_SECONDS = 30

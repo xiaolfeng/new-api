@@ -1,4 +1,5 @@
 import type { ISpec } from '@visactor/vchart'
+
 import type { TokenRecordRecentItem, ChartDataPoint } from '../types'
 
 function formatTimeLabel(bucketStartAt: number): string {
@@ -35,8 +36,7 @@ export function transformChartData(
         Value: Number(Number(cell.avg_tps || 0).toFixed(2)),
       })
 
-      const totalRequests =
-        (cell.request_count || 0) + (cell.failed_count || 0)
+      const totalRequests = (cell.request_count || 0) + (cell.failed_count || 0)
       const rate =
         totalRequests > 0
           ? Number(((cell.failed_count / totalRequests) * 100).toFixed(2))

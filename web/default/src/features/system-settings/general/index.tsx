@@ -1,6 +1,8 @@
 import { useParams } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
+
 import { parseCurrencyDisplayType } from '@/lib/currency'
+
 import { useSystemOptions, getOptionValue } from '../hooks/use-system-options'
 import type { SiteSettings } from '../types'
 import {
@@ -74,7 +76,8 @@ export function GeneralSettings() {
   const quotaDisplayType = parseCurrencyDisplayType(
     settings['general_setting.quota_display_type']
   )
-  const activeSection = ((params as Record<string, string> | null)?.section ?? GENERAL_DEFAULT_SECTION) as
+  const activeSection = ((params as Record<string, string> | null)?.section ??
+    GENERAL_DEFAULT_SECTION) as
     | 'system-info'
     | 'quota'
     | 'pricing'

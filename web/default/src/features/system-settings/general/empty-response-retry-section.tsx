@@ -1,8 +1,9 @@
-import * as z from 'zod'
+import { zodResolver } from '@hookform/resolvers/zod'
 import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslation } from 'react-i18next'
+import * as z from 'zod'
+
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -15,6 +16,7 @@ import {
 } from '@/components/ui/form'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
+
 import { SettingsSection } from '../components/settings-section'
 import { useResetForm } from '../hooks/use-reset-form'
 import { useUpdateOption } from '../hooks/use-update-option'
@@ -51,12 +53,14 @@ export function EmptyResponseRetrySection({
     defaultValues['retry_setting.full_log_consume_remaining_seconds'] ?? 0
   )
   const expiresAt = form.watch('retry_setting.full_log_consume_expires_at') ?? 0
-  const fullLogEnabled = form.watch('retry_setting.full_log_consume_enabled') ?? false
+  const fullLogEnabled =
+    form.watch('retry_setting.full_log_consume_enabled') ?? false
   const isFullLogActive = fullLogEnabled && remainingSeconds > 0
 
   const prevDefaultRemaining = useRef(remainingSeconds)
   useEffect(() => {
-    const newRemaining = defaultValues['retry_setting.full_log_consume_remaining_seconds'] ?? 0
+    const newRemaining =
+      defaultValues['retry_setting.full_log_consume_remaining_seconds'] ?? 0
     if (newRemaining !== prevDefaultRemaining.current) {
       setRemainingSeconds(newRemaining)
       prevDefaultRemaining.current = newRemaining

@@ -1,9 +1,8 @@
 import { api } from '@/lib/api'
+
 import type { TokenRecordRecentSnapshot } from './types'
 
-export async function getTokenRecordRecent(
-  hours = 24
-): Promise<{
+export async function getTokenRecordRecent(hours = 24): Promise<{
   success: boolean
   message?: string
   data?: TokenRecordRecentSnapshot

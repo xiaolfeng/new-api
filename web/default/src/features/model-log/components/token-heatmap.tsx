@@ -1,7 +1,9 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+
 import { api } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
+
 import type { TokenRecordDailyItem } from '../types'
 
 interface DayCell {

@@ -107,7 +107,8 @@ const GENERAL_SECTIONS = [
           'retry_setting.empty_response_retry_delay_seconds':
             settings['retry_setting.empty_response_retry_delay_seconds'] ?? 0,
           'retry_setting.record_consume_log_detail_enabled':
-            settings['retry_setting.record_consume_log_detail_enabled'] ?? false,
+            settings['retry_setting.record_consume_log_detail_enabled'] ??
+            false,
           'retry_setting.full_log_consume_enabled':
             settings['retry_setting.full_log_consume_enabled'] ?? false,
           'retry_setting.full_log_consume_expires_at':

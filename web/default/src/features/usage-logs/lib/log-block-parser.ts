@@ -200,9 +200,7 @@ function ensureArray<T>(value: unknown): T[] {
  * When `responsesRequestBlocks` is empty, try to derive request data
  * from `prompt.input` (which may contain message / input_text items).
  */
-function deriveResponsesRequestDataFromPromptInput(
-  promptInput: unknown,
-): {
+function deriveResponsesRequestDataFromPromptInput(promptInput: unknown): {
   requestBlocks: Array<{ type: string; role: string; text: string }>
   toolResponses: ToolResponseRow[]
 } {
@@ -228,15 +226,25 @@ function deriveResponsesRequestDataFromPromptInput(
         if (!part || typeof part !== 'object') continue
         const p = part as Record<string, unknown>
         if (!['input_text', 'text'].includes(p.type as string)) continue
-        if (typeof p.text !== 'string' || (p.text as string).trim() === '') continue
-        requestBlocks.push({ type: p.type as string, role, text: p.text as string })
+        if (typeof p.text !== 'string' || (p.text as string).trim() === '')
+          continue
+        requestBlocks.push({
+          type: p.type as string,
+          role,
+          text: p.text as string,
+        })
       }
       continue
     }
 
-    if (['input_text', 'text'].includes((item as Record<string, unknown>).type as string)) {
+    if (
+      ['input_text', 'text'].includes(
+        (item as Record<string, unknown>).type as string
+      )
+    ) {
       const p = item as Record<string, unknown>
-      if (typeof p.text !== 'string' || (p.text as string).trim() === '') continue
+      if (typeof p.text !== 'string' || (p.text as string).trim() === '')
+        continue
       requestBlocks.push({
         type: p.type as string,
         role: typeof p.role === 'string' ? (p.role as string) : '',
@@ -264,7 +272,7 @@ function deriveResponsesRequestDataFromPromptInput(
 // ---------------------------------------------------------------------------
 
 export function parseLogDetailRecord(
-  record: LogDetailRecord | null,
+  record: LogDetailRecord | null
 ): ParsedSections {
   const empty: ParsedSections = {
     format: 'none',
@@ -285,9 +293,15 @@ export function parseLogDetailRecord(
   empty.bambooDebug = bambooDebug
 
   // Bamboo format — check FIRST (bamboo data takes priority)
-  const bambooResponseBlocks = ensureArray<BambooResponseBlock>(record.bambooResponseBlocks)
-  const bambooRequestBlocks = ensureArray<BambooRequestBlock>(record.bambooRequestBlocks)
-  const bambooToolResponses = ensureArray<BambooToolResponseBlock>(record.bambooToolResponses)
+  const bambooResponseBlocks = ensureArray<BambooResponseBlock>(
+    record.bambooResponseBlocks
+  )
+  const bambooRequestBlocks = ensureArray<BambooRequestBlock>(
+    record.bambooRequestBlocks
+  )
+  const bambooToolResponses = ensureArray<BambooToolResponseBlock>(
+    record.bambooToolResponses
+  )
   const hasBamboo = bambooResponseBlocks.length > 0
 
   if (hasBamboo) {
@@ -338,9 +352,15 @@ export function parseLogDetailRecord(
   }
 
   // Claude format
-  const claudeRequestBlocks = ensureArray<ClaudeRequestBlock>(record.claudeRequestBlocks)
-  const claudeToolResponses = ensureArray<ClaudeToolResponseBlock>(record.claudeToolResponses)
-  const claudeResponseBlocks = ensureArray<ClaudeResponseBlock>(record.claudeResponseBlocks)
+  const claudeRequestBlocks = ensureArray<ClaudeRequestBlock>(
+    record.claudeRequestBlocks
+  )
+  const claudeToolResponses = ensureArray<ClaudeToolResponseBlock>(
+    record.claudeToolResponses
+  )
+  const claudeResponseBlocks = ensureArray<ClaudeResponseBlock>(
+    record.claudeResponseBlocks
+  )
   const hasClaude =
     claudeRequestBlocks.length > 0 ||
     claudeToolResponses.length > 0 ||
@@ -390,9 +410,15 @@ export function parseLogDetailRecord(
   }
 
   // OpenAI format
-  const openaiRequestBlocks = ensureArray<OpenAIRequestBlock>(record.openaiRequestBlocks)
-  const openaiToolResponses = ensureArray<OpenAIToolResponseBlock>(record.openaiToolResponses)
-  const openaiResponseBlocks = ensureArray<OpenAIResponseBlock>(record.openaiResponseBlocks)
+  const openaiRequestBlocks = ensureArray<OpenAIRequestBlock>(
+    record.openaiRequestBlocks
+  )
+  const openaiToolResponses = ensureArray<OpenAIToolResponseBlock>(
+    record.openaiToolResponses
+  )
+  const openaiResponseBlocks = ensureArray<OpenAIResponseBlock>(
+    record.openaiResponseBlocks
+  )
   const hasOpenAI =
     openaiRequestBlocks.length > 0 ||
     openaiToolResponses.length > 0 ||
@@ -429,7 +455,11 @@ export function parseLogDetailRecord(
       format: 'openai',
       requestBlocks: openaiRequestBlocks
         .filter((b) => b.text && b.text.trim() !== '')
-        .map((b) => ({ type: b.type || 'text', role: b.role || '', text: b.text! })),
+        .map((b) => ({
+          type: b.type || 'text',
+          role: b.role || '',
+          text: b.text!,
+        })),
       toolResponses: openaiToolResponses.map((item, index) => ({
         order: index + 1,
         name: item.name || '',
@@ -448,17 +478,24 @@ export function parseLogDetailRecord(
   const promptInput = prompt?.input
   const fallbackData = deriveResponsesRequestDataFromPromptInput(promptInput)
 
-  let responsesRequestBlocks = ensureArray<ResponsesRequestBlock>(record.responsesRequestBlocks)
-  let responsesToolResponses = ensureArray<ResponsesToolResponseBlock>(record.responsesToolResponses)
+  let responsesRequestBlocks = ensureArray<ResponsesRequestBlock>(
+    record.responsesRequestBlocks
+  )
+  let responsesToolResponses = ensureArray<ResponsesToolResponseBlock>(
+    record.responsesToolResponses
+  )
   if (responsesRequestBlocks.length === 0) {
-    responsesRequestBlocks = fallbackData.requestBlocks as unknown as ResponsesRequestBlock[]
+    responsesRequestBlocks =
+      fallbackData.requestBlocks as unknown as ResponsesRequestBlock[]
   }
   if (responsesToolResponses.length === 0) {
     responsesToolResponses =
       fallbackData.toolResponses as unknown as ResponsesToolResponseBlock[]
   }
 
-  const responsesResponseBlocks = ensureArray<ResponsesResponseBlock>(record.responsesResponseBlocks)
+  const responsesResponseBlocks = ensureArray<ResponsesResponseBlock>(
+    record.responsesResponseBlocks
+  )
   const hasResponses =
     responsesRequestBlocks.length > 0 ||
     responsesToolResponses.length > 0 ||
@@ -489,7 +526,11 @@ export function parseLogDetailRecord(
       format: 'responses',
       requestBlocks: responsesRequestBlocks
         .filter((b) => b.text && b.text.trim() !== '')
-        .map((b) => ({ type: b.type || 'input_text', role: b.role || '', text: b.text! })),
+        .map((b) => ({
+          type: b.type || 'input_text',
+          role: b.role || '',
+          text: b.text!,
+        })),
       toolResponses: responsesToolResponses.map((item, index) => ({
         order: index + 1,
         name: item.name || '',

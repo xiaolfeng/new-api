@@ -19,7 +19,11 @@ For commercial licensing, please contact support@quantumnous.com
 import { t } from 'i18next'
 
 import { ERROR_MESSAGES, MESSAGE_ROLES, MESSAGE_STATUS } from '../../constants'
-import type { ChatCompletionResponse, Message, ToolCallDelta } from '../../types'
+import type {
+  ChatCompletionResponse,
+  Message,
+  ToolCallDelta,
+} from '../../types'
 import { parseThinkTags } from './message-reasoning-utils'
 import {
   completeAssistantTiming,

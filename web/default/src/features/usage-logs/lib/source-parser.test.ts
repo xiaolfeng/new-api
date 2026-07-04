@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'bun:test'
+
 import { parseClientSource, getSourceColor } from './source-parser'
 
 describe('parseClientSource', () => {

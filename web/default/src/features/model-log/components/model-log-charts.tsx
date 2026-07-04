@@ -1,17 +1,13 @@
-import { useEffect, useMemo, useState, useRef } from 'react'
 import { VChart } from '@visactor/react-vchart'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
+
 import { useTheme } from '@/context/theme-provider'
 import { VCHART_OPTION } from '@/lib/vchart'
+
 import { CHART_TABS } from '../constants'
-import {
-  transformChartData,
-  buildLineChartSpec,
-} from '../lib/chart-specs'
-import type {
-  ChartTab,
-  TokenRecordRecentItem,
-} from '../types'
+import { transformChartData, buildLineChartSpec } from '../lib/chart-specs'
+import type { ChartTab, TokenRecordRecentItem } from '../types'
 
 // Reuse theme chart colors from dashboard
 const THEME_CHART_COLOR_VARIABLES = [
@@ -107,12 +103,7 @@ export function ModelLogCharts({
         colorDomain,
         colorRange
       ),
-      tps: buildLineChartSpec(
-        'tpsData',
-        tpsData,
-        colorDomain,
-        colorRange
-      ),
+      tps: buildLineChartSpec('tpsData', tpsData, colorDomain, colorRange),
       failure_rate: buildLineChartSpec(
         'failureRateData',
         failureRateData,

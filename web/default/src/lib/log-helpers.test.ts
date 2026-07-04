@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'bun:test'
+
 import { getUserRole, hasDeveloperToolLogAccess } from './log-helpers'
 
 const mockLocalStorage = {
@@ -17,7 +18,9 @@ const mockLocalStorage = {
   },
 }
 
-;(globalThis as unknown as { localStorage: typeof mockLocalStorage }).localStorage = mockLocalStorage
+;(
+  globalThis as unknown as { localStorage: typeof mockLocalStorage }
+).localStorage = mockLocalStorage
 
 describe('getUserRole', () => {
   beforeEach(() => {

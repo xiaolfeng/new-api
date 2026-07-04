@@ -179,7 +179,9 @@ function inferOpenAIStructuredInteractionType(
   const hasToolResponse = toolResponses.length > 0
   const hasTextOutput = responseBlocks.some(
     (block) =>
-      (block.type === 'content' || block.type === 'reasoning' || block.type === 'output_text') &&
+      (block.type === 'content' ||
+        block.type === 'reasoning' ||
+        block.type === 'output_text') &&
       typeof block.content === 'string' &&
       block.content.trim() !== ''
   )
@@ -195,7 +197,7 @@ function inferOpenAIStructuredInteractionType(
 }
 
 function inferBambooStructuredInteractionType(
-  data: BambooStructuredInteractionData,
+  data: BambooStructuredInteractionData
 ): InteractionType | null {
   const requestBlocks = (
     Array.isArray(data.bambooRequestBlocks) ? data.bambooRequestBlocks : []
@@ -213,10 +215,10 @@ function inferBambooStructuredInteractionType(
     (block) =>
       block.type === 'text' &&
       typeof block.text === 'string' &&
-      block.text.trim() !== '',
+      block.text.trim() !== ''
   )
   const hasRequestInput = requestBlocks.some(
-    (block) => typeof block.text === 'string' && block.text.trim() !== '',
+    (block) => typeof block.text === 'string' && block.text.trim() !== ''
   )
 
   // Priority follows the same contract as OpenAI / Responses formats:
@@ -290,14 +292,17 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       ? (data.openaiToolResponses as unknown[])
       : []
 
-    const bambooResponseBlocks: Array<{ type?: string; text?: string; thinking?: string }> =
-      Array.isArray(data.bambooResponseBlocks)
-        ? (data.bambooResponseBlocks as Array<{
-            type?: string
-            text?: string
-            thinking?: string
-          }>)
-        : []
+    const bambooResponseBlocks: Array<{
+      type?: string
+      text?: string
+      thinking?: string
+    }> = Array.isArray(data.bambooResponseBlocks)
+      ? (data.bambooResponseBlocks as Array<{
+          type?: string
+          text?: string
+          thinking?: string
+        }>)
+      : []
 
     const bambooRequestBlocks: Array<{ text?: string }> = Array.isArray(
       data.bambooRequestBlocks

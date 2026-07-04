@@ -16,12 +16,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import type { LucideIcon } from 'lucide-react'
 /* eslint-disable react-refresh/only-export-components */
 import * as React from 'react'
-import type { LucideIcon } from 'lucide-react'
+
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { stringToColor } from '@/lib/colors'
 import { cn } from '@/lib/utils'
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 export const dotColorMap = {
   success: 'bg-emerald-500',
   warning: 'bg-amber-500',
@@ -83,7 +84,8 @@ export type StatusBadgeType = 'badge' | 'text' | 'underline'
 
 /** Context that lets ancestor components (e.g. MobileCardList field area)
  *  override the badge type without modifying every call site. */
-export const StatusBadgeTypeContext = React.createContext<StatusBadgeType>('badge')
+export const StatusBadgeTypeContext =
+  React.createContext<StatusBadgeType>('badge')
 
 const sizeMap = {
   sm: 'h-5 gap-1 px-1.5 text-sm leading-none',
@@ -166,7 +168,10 @@ export function StatusBadge({
         'inline-flex w-fit max-w-full min-w-0 shrink items-center font-medium tracking-normal whitespace-nowrap transition-colors',
         isBadge
           ? cn('rounded-4xl', sizeMap[size ?? 'sm'])
-          : cn(textSizeMap[size ?? 'sm'], type === 'underline' && 'border-b border-current pb-px'),
+          : cn(
+              textSizeMap[size ?? 'sm'],
+              type === 'underline' && 'border-b border-current pb-px'
+            ),
         textColorMap[computedVariant],
         pulse && 'animate-pulse',
         copyable &&

@@ -5079,5 +5079,6 @@
     "Tool": "Tool",
     "Tool Calls": "Tool Calls",
     "Tool Responses": "Tool Responses"
-  }
+  },
+  "Total Input": "Total Input"
 }

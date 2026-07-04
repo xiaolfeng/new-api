@@ -1,15 +1,10 @@
+import { ArrowDown, ArrowUp, RefreshCw, BarChart3 } from 'lucide-react'
 import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  ArrowDown,
-  ArrowUp,
-  RefreshCw,
-  BarChart3,
-} from 'lucide-react'
-import { Button } from '@/components/ui/button'
+
+import { SectionPageLayout } from '@/components/layout'
 import { Badge } from '@/components/ui/badge'
-import { Skeleton } from '@/components/ui/skeleton'
-import { Switch } from '@/components/ui/switch'
+import { Button } from '@/components/ui/button'
 import {
   Select,
   SelectContent,
@@ -17,13 +12,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { SectionPageLayout } from '@/components/layout'
-import { useModelLogData } from './hooks/use-model-log-data'
-import { SummaryCards } from './components/summary-cards'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Switch } from '@/components/ui/switch'
+
 import { ModelFilter } from './components/model-filter'
 import { ModelLogCharts, getChartColors } from './components/model-log-charts'
+import { SummaryCards } from './components/summary-cards'
 import { TokenHeatmap } from './components/token-heatmap'
 import { SORT_OPTIONS } from './constants'
+import { useModelLogData } from './hooks/use-model-log-data'
 import type { SortField, TokenRecordRecentItem } from './types'
 
 const TIME_RANGE_OPTIONS = [
@@ -104,9 +101,7 @@ export function ModelLogPage() {
 
   const [sortField, setSortField] = useState<SortField>('total_tokens')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [selectedModels, setSelectedModels] = useState<Set<string> | null>(
-    null
-  )
+  const [selectedModels, setSelectedModels] = useState<Set<string> | null>(null)
 
   const sortedItems = useMemo(
     () => sortItems(items, sortField, sortDirection),

@@ -1,11 +1,13 @@
-import { useTranslation } from 'react-i18next'
 import {
   Activity,
   ArrowDownToLine,
   ArrowUpFromLine,
   Layers,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+
 import { formatCompactNumber } from '@/lib/format'
+
 import type { TokenRecordOverallSummary } from '../types'
 
 interface SummaryCardsProps {
@@ -91,7 +93,7 @@ export function SummaryCards({ summary }: SummaryCardsProps) {
             </div>
             <div
               title={card.tooltip}
-              className={`mt-1 text-xl font-bold leading-tight ${style.value}`}
+              className={`mt-1 text-xl leading-tight font-bold ${style.value}`}
             >
               {card.value}
             </div>

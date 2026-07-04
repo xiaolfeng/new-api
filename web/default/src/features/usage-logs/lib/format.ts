@@ -23,6 +23,7 @@ import {
   parseTiersFromExpr,
   type ParsedTier,
 } from '@/features/pricing/lib/billing-expr'
+
 import type { UsageLog } from '../data/schema'
 import type { LogOtherData } from '../types'
 
@@ -102,7 +103,11 @@ export function parseLogOther(other: unknown): LogOtherData | null {
   if (typeof other === 'string') {
     try {
       const parsed = JSON.parse(other)
-      if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed))
+      if (
+        parsed === null ||
+        typeof parsed !== 'object' ||
+        Array.isArray(parsed)
+      )
         return null
       return parsed as LogOtherData
     } catch {

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+
 import dayjs from '@/lib/dayjs'
+
 import { getTokenRecordRecent } from '../api'
-import type {
-  TokenRecordRecentItem,
-  TokenRecordOverallSummary,
-} from '../types'
+import type { TokenRecordRecentItem, TokenRecordOverallSummary } from '../types'
 
 const AUTO_REFRESH_INTERVAL_SECONDS = 30
 const MAX_CONSECUTIVE_FAILURES = 3
