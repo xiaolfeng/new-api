@@ -448,14 +448,20 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		// to cache_creation_tokens.
 		other["cache_write_tokens"] = cacheWriteTokens
 	}
-	if usage != nil && usage.UsageSource != "" && usage.InputTokens > 0 &&
-		relayInfo.GetFinalRequestRelayFormat() != types.RelayFormatClaude {
-		other["input_tokens_total"] = usage.InputTokens
-	} else if summary.IsClaudeUsageSemantic {
+	// input_tokens_total: 前端缓存率计算的权威分母。
+	// 必须对所有供应商都写入，否则前端 fallback 可能用错误的分母导致缓存率异常。
+	//
+	// Claude 语义（含 bamboo relay 路径）：PromptTokens 是 text-only（不含 cache），
+	//   总输入 = PromptTokens + CacheTokens + CacheCreationTokens
+	// OpenAI 语义：PromptTokens 已包含 CachedTokens，
+	//   总输入 = PromptTokens（无需再加 cache）
+	if summary.IsClaudeUsageSemantic || relayInfo.GetFinalRequestRelayFormat() == types.RelayFormatClaude {
 		totalInput := summary.PromptTokens + summary.CacheTokens + summary.CacheCreationTokens
 		if totalInput > 0 {
 			other["input_tokens_total"] = totalInput
 		}
+	} else if summary.PromptTokens > 0 {
+		other["input_tokens_total"] = summary.PromptTokens
 	}
 	if tieredBillingApplied {
 		InjectTieredBillingInfo(other, relayInfo, tieredResult)
