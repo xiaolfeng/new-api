@@ -4,7 +4,7 @@ import (
 	"errors"
 	"strings"
 
-	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
+	pkgErrors "github.com/bamboo-services/bamboo-messages/pkg/errors"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/types"
 )
@@ -17,36 +17,33 @@ import (
 // NewError(ErrUnsupportedProvider, ...) 会把它包进 Err 字段，故 errors.Is 链可达。
 var ErrUnsupportedProvider = errors.New("bamboo: unsupported provider for this api type")
 
-// translateCodecError 把 bamboo CodecError 翻译为 new-api 错误。
+// translateCodecError 把 bamboo BambooError 翻译为 new-api 错误。
 //
-// 入参为 error 接口（ParseRequest/Serialize 返回裸 error），
-// 内部用 errors.As 做 *CodecError 类型断言；非 CodecError 走默认分支。
+// SDK v0.8.9 起统一使用 pkgErrors.BambooError（Category + Message + StatusCode），
+// 旧的 bamboocodec.CodecError / ErrorType 枚举已移除。
+// 错误分类通过 StatusCode 映射（与 codec/anthropic/error.go 的映射逻辑对齐）：
 //
-// CodecError.Type 实际枚举（bamboo/codec/errors.go:9-22）：
-//   ErrInvalidRequest / ErrProviderError / ErrAuthError / ErrRateLimit / ErrInternal
-//
-// ErrorCode 映射（new-api types/error.go 真实存在的常量，复审已核对全 31 个）：
-//   new-api 无 auth/rateLimit/upstream 专用码，复用语义最近的现有常量。
+//	401/403 → ErrorCodeAccessDenied（认证失败）
+//	429     → ErrorCodeBadResponse（限流，new-api 无专用码）
+//	4xx     → ErrorCodeInvalidRequest（请求格式错误）
+//	5xx/0   → ErrorCodeConvertRequestFailed（内部/上游错误）
 func translateCodecError(err error) *types.NewAPIError {
 	if err == nil {
 		return nil
 	}
-	var ce *bamboocodec.CodecError
-	if !errors.As(err, &ce) {
-		// 非 CodecError（如 provider 内部错误），用通用转换失败码
+	var be *pkgErrors.BambooError
+	if !errors.As(err, &be) {
 		return types.NewError(err, types.ErrorCodeConvertRequestFailed)
 	}
-	switch ce.Type {
-	case bamboocodec.ErrInvalidRequest:
-		return types.NewError(ce, types.ErrorCodeInvalidRequest)
-	case bamboocodec.ErrAuthError:
-		return types.NewError(ce, types.ErrorCodeAccessDenied)
-	case bamboocodec.ErrRateLimit:
-		return types.NewError(ce, types.ErrorCodeBadResponse)
-	case bamboocodec.ErrProviderError:
-		return types.NewError(ce, types.ErrorCodeBadResponseStatusCode)
-	default: // ErrInternal 等
-		return types.NewError(ce, types.ErrorCodeConvertRequestFailed)
+	switch {
+	case be.StatusCode == 401 || be.StatusCode == 403:
+		return types.NewError(be, types.ErrorCodeAccessDenied)
+	case be.StatusCode == 429:
+		return types.NewError(be, types.ErrorCodeBadResponse)
+	case be.StatusCode >= 400 && be.StatusCode < 500:
+		return types.NewError(be, types.ErrorCodeInvalidRequest)
+	default:
+		return types.NewError(be, types.ErrorCodeConvertRequestFailed)
 	}
 }
 
