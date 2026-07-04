@@ -1,5 +1,6 @@
 {
   "Complete raw request and response payload": "Complete raw request and response payload",
+  "Completion reason to synthesize when an upstream connection drops mid-stream after content has been delivered. \"Stop\" (default) returns a normal stop; \"Tool Use\" returns tool_calls when the request carries tools, keeping a ReAct agent loop alive across upstream disconnects.": "Completion reason to synthesize when an upstream connection drops mid-stream after content has been delivered. \"Stop\" (default) returns a normal stop; \"Tool Use\" returns tool_calls when the request carries tools, keeping a ReAct agent loop alive across upstream disconnects.",
   "Configure currency conversion and quota display options": "Configure currency conversion and quota display options",
   "Configure customization features and advanced behavior": "Configure customization features and advanced behavior",
   "Convert Responses to Chat Completions": "Convert Responses to Chat Completions",
@@ -11,6 +12,7 @@
   "Showing successful request output token aggregation, cumulative time, and average TPS for the last 24 hours.": "Showing successful request output token aggregation, cumulative time, and average TPS for the last 24 hours.",
   "Structured request, tool and response details": "Structured request, tool and response details",
   "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API.": "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API.",
+  "When enabled, uses legacy field names (e.g., max_tokens instead of max_completion_tokens) and omits reasoning_effort / parallel_tool_calls. Enable for endpoints that do not support the latest OpenAI/Anthropic schema.": "When enabled, uses legacy field names (e.g., max_tokens instead of max_completion_tokens) and omits reasoning_effort / parallel_tool_calls. Enable for endpoints that do not support the latest OpenAI/Anthropic schema.",
   "When filled, users must accept the privacy policy during registration.": "When filled, users must accept the privacy policy during registration.",
   "When filled, users must accept the user agreement during registration.": "When filled, users must accept the user agreement during registration."
 }

@@ -36,6 +36,7 @@ const defaultModelSettings: ModelSettings = {
   'bamboo.enable_bamboo_relay': false,
   'bamboo.enable_bamboo_debug_log': false,
   'bamboo.smooth_level': 'off',
+  'bamboo.degraded_reason': 'stop',
   'general_setting.ping_interval_enabled': false,
   'general_setting.ping_interval_seconds': 60,
   'gemini.safety_settings': '',

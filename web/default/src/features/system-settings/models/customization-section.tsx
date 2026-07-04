@@ -54,6 +54,7 @@ const customizationSchema = z.object({
     enable_bamboo_relay: z.boolean(),
     enable_bamboo_debug_log: z.boolean(),
     smooth_level: z.enum(['off', 'gentle', 'smooth', 'typewriter']).optional(),
+    degraded_reason: z.enum(['stop', 'tool_use']).optional(),
   }),
   retry_setting: z.object({
     record_consume_log_detail_enabled: z.boolean(),
@@ -265,6 +266,43 @@ export function CustomizationSection({
                         <SelectItem value='smooth'>{t('Smooth')}</SelectItem>
                         <SelectItem value='typewriter'>
                           {t('Typewriter')}
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </FormItem>
+                )}
+              />
+
+              <FormField
+                control={form.control}
+                name='bamboo.degraded_reason'
+                render={({ field }) => (
+                  <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
+                    <div className='space-y-0.5'>
+                      <FormLabel className='text-base'>
+                        {t('Stream Interrupt Degraded Reason')}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'Completion reason to synthesize when an upstream connection drops mid-stream after content has been delivered. "Stop" (default) returns a normal stop; "Tool Use" returns tool_calls when the request carries tools, keeping a ReAct agent loop alive across upstream disconnects.'
+                        )}
+                      </FormDescription>
+                    </div>
+                    <Select
+                      value={field.value ?? 'stop'}
+                      onValueChange={field.onChange}
+                    >
+                      <FormControl>
+                        <SelectTrigger className='w-48'>
+                          <SelectValue />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent alignItemWithTrigger={false}>
+                        <SelectItem value='stop'>
+                          {t('Stop (default)')}
+                        </SelectItem>
+                        <SelectItem value='tool_use'>
+                          {t('Tool Use (agent loop)')}
                         </SelectItem>
                       </SelectContent>
                     </Select>

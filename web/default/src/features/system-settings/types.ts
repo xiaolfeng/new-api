@@ -230,6 +230,7 @@ export type ModelSettings = {
   'bamboo.enable_bamboo_relay': boolean
   'bamboo.enable_bamboo_debug_log': boolean
   'bamboo.smooth_level': string
+  'bamboo.degraded_reason': string
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
   'gemini.safety_settings': string

@@ -201,6 +201,11 @@ const MODELS_SECTIONS = [
             )
               ? settings['bamboo.smooth_level']
               : 'off') as 'off' | 'gentle' | 'smooth' | 'typewriter',
+            degraded_reason: (['stop', 'tool_use'].includes(
+              settings['bamboo.degraded_reason']
+            )
+              ? settings['bamboo.degraded_reason']
+              : 'stop') as 'stop' | 'tool_use',
           },
           retry_setting: {
             record_consume_log_detail_enabled:
