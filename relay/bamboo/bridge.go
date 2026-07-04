@@ -37,6 +37,10 @@ var errStreamErrorNoDetail = errors.New("bamboo stream error event without detai
 // maxResponseBodyLen 限制 info.ResponseBody 的最大长度，防止超大日志撑爆数据库。
 const maxResponseBodyLen = 50000
 
+// maxBambooDebugStreamLen 限制流式 debug 帧收集的总字符数上限。
+// 达到上限后停止追加新帧，避免超长流式响应撑爆 debug 字段。
+const maxBambooDebugStreamLen = 50000
+
 // truncateResponseBody 按字节截断超长响应体，回退到最后一个合法 UTF-8 边界并追加截断标记。
 func truncateResponseBody(body string) string {
 	if len(body) <= maxResponseBodyLen {
@@ -291,10 +295,10 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 		streamItems = append(streamItems, string(data))
 
-		// 收集终止语义帧（message_delta / message_stop）的格式化 debug，
-		// 这些帧携带 stop_reason / usage 等关键信息，用于排查流式响应终止问题。
-		// 不收集每一帧以避免数据爆炸。
-		if info.BambooDebug != nil && (event.Type == bamboosdk.EventMessageDelta || event.Type == bamboosdk.EventMessageStop) {
+		// 收集每一帧的原始内容到 debug，供日志详情展示。
+		// SDK v0.8.10 移除了内部 debugRelayResponseFrame 调用，
+		// 由 newapi 直接收集所有帧（带总量上限防止数据爆炸）。
+		if info.BambooDebug != nil && len(info.BambooDebug.RelayResponse) < maxBambooDebugStreamLen {
 			frame := bamboorelay.FormatRelayResponseFrame("StreamRelay", outFmt, outFmt, data)
 			if info.BambooDebug.RelayResponse == "" {
 				info.BambooDebug.RelayResponse = frame

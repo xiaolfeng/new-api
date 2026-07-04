@@ -259,15 +259,27 @@ func (tc *bambooTimingCollector) result() relaycommon.BambooTimingResult {
 	counts.OutputTokens = tc.outputChars.estimateTokens()
 	counts.ToolTokens = tc.toolChars.estimateTokens()
 
-	if stats.ThinkingDuration > 0 {
-		rates.ThinkingTokensPerSec = round2(float64(counts.ThinkingTokens) / stats.ThinkingDuration.Seconds())
-	}
-	if stats.ContentDuration > 0 {
-		rates.OutputTokensPerSec = round2(float64(counts.OutputTokens) / stats.ContentDuration.Seconds())
-	}
-	if stats.ToolDuration > 0 {
-		rates.ToolTokensPerSec = round2(float64(counts.ToolTokens) / stats.ToolDuration.Seconds())
-	}
+	rates.ThinkingTokensPerSec = computeRate(counts.ThinkingTokens, stats.ThinkingDuration, tc.thinkingStart)
+	rates.OutputTokensPerSec = computeRate(counts.OutputTokens, stats.ContentDuration, tc.contentStart)
+	rates.ToolTokensPerSec = computeRate(counts.ToolTokens, stats.ToolDuration, tc.toolStart)
 
 	return relaycommon.BambooTimingResult{Stats: stats, Rates: rates, Tokens: counts}
+}
+
+// minReliableDuration 最小可信耗时阈值。
+// 低于此值时，阶段内事件密集到达（channel buffer 导致时间戳几乎相同），
+// 计算出的 token/s 严重失真（如 5k+ tok/s），用负号标记不可靠。
+const minReliableDuration = time.Millisecond
+
+// computeRate 计算 token/s 速率，含不可靠标记逻辑。
+// 阶段已发生（start != zero）但耗时低于 minReliableDuration 时，
+// 用 minReliableDuration 作为分母估算参考值并取负标记不可靠。
+func computeRate(tokens int64, duration time.Duration, phaseStart time.Time) float64 {
+	if tokens == 0 || phaseStart.IsZero() {
+		return 0
+	}
+	if duration < minReliableDuration {
+		return -round2(float64(tokens) / minReliableDuration.Seconds())
+	}
+	return round2(float64(tokens) / duration.Seconds())
 }
