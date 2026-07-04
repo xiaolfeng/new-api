@@ -82,8 +82,9 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 
 	// debug 收集：当 EnableBambooDebugLog 开启时，用 FormatRelayInput/FormatRelayParsed
-	// 收集格式化 debug 字符串，写入 info.BambooDebug 分块结构供日志详情展示。
-	// 不再调用 provider.SetDebug(true)，避免 log.Printf 刷屏。
+	// 等纯函数收集格式化 debug 字符串，写入 info.BambooDebug 分块结构供日志详情展示。
+	// SDK v0.8.9 已移除 provider.SetDebug()，Format 系列函数为纯函数（调用即返回），
+	// 由 newapi 自身的 EnableBambooDebugLog 开关控制是否收集。
 	debugEnabled := model_setting.GetBambooSettings().EnableBambooDebugLog
 	if debugEnabled {
 		info.BambooDebug = &relaycommon.BambooDebugInfo{}

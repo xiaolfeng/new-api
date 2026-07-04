@@ -22,8 +22,8 @@ type BambooSettings struct {
 	// 开启后，bridge.go 会用 FormatRelayParsed/FormatRelayInput/FormatDebugRequest
 	// 以及 FormatRelayResponse/FormatRelayResponseFrame 收集分块 debug 信息，
 	// 写入 RelayInfo.BambooDebug（*BambooDebugInfo 结构），
-	// 最终在消费日志详情的 "Bamboo" 板块分块展示。
-	// 不再调用 provider.SetDebug(true)，避免 log.Printf 刷屏。
+	// 最终在消费日志详情的 "Bamboo Debug" 板块分块展示。
+	// SDK v0.8.9 的 Format 系列函数为纯函数（调用即返回），由本开关控制是否收集。
 	EnableBambooDebugLog bool `json:"enable_bamboo_debug_log"`
 
 	// SmoothLevel 流式平滑缓冲档位，全局生效。
