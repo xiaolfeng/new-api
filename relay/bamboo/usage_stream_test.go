@@ -20,8 +20,9 @@ func TestExtractStreamUsage_MessageStart(t *testing.T) {
 
 	extractStreamUsage(usage, &event)
 
-	if usage.PromptTokens != 100 {
-		t.Fatalf("expected PromptTokens=100, got %d", usage.PromptTokens)
+	// PromptTokens 应为非缓存部分：100 - 50 - 30 = 20
+	if usage.PromptTokens != 20 {
+		t.Fatalf("expected PromptTokens=20 (non-cached), got %d", usage.PromptTokens)
 	}
 	if usage.PromptTokensDetails.CachedTokens != 50 {
 		t.Fatalf("expected CachedTokens=50, got %d", usage.PromptTokensDetails.CachedTokens)
@@ -35,8 +36,9 @@ func TestExtractStreamUsage_MessageStart(t *testing.T) {
 }
 
 func TestExtractStreamUsage_MessageDeltaOutputOnly(t *testing.T) {
+	// 模拟 MessageStart 已提取后的状态：PromptTokens=20（非缓存部分）
 	usage := &dto.Usage{
-		PromptTokens:         100,
+		PromptTokens:         20,
 		CompletionTokens:     0,
 		PromptTokensDetails: dto.InputTokenDetails{
 			CachedTokens:         50,
@@ -55,8 +57,8 @@ func TestExtractStreamUsage_MessageDeltaOutputOnly(t *testing.T) {
 	if usage.CompletionTokens != 200 {
 		t.Fatalf("expected CompletionTokens=200, got %d", usage.CompletionTokens)
 	}
-	if usage.PromptTokens != 100 {
-		t.Fatalf("expected PromptTokens unchanged (100), got %d", usage.PromptTokens)
+	if usage.PromptTokens != 20 {
+		t.Fatalf("expected PromptTokens unchanged (20), got %d", usage.PromptTokens)
 	}
 	if usage.PromptTokensDetails.CachedTokens != 50 {
 		t.Fatalf("expected CachedTokens unchanged (50), got %d", usage.PromptTokensDetails.CachedTokens)
@@ -68,7 +70,7 @@ func TestExtractStreamUsage_MessageDeltaOutputOnly(t *testing.T) {
 
 func TestExtractStreamUsage_MessageDeltaZerosDoNotOverwrite(t *testing.T) {
 	usage := &dto.Usage{
-		PromptTokens:         100,
+		PromptTokens:         20,
 		CompletionTokens:     200,
 		PromptTokensDetails: dto.InputTokenDetails{
 			CachedTokens:         50,
@@ -87,8 +89,8 @@ func TestExtractStreamUsage_MessageDeltaZerosDoNotOverwrite(t *testing.T) {
 
 	extractStreamUsage(usage, &event)
 
-	if usage.PromptTokens != 100 {
-		t.Fatalf("expected PromptTokens unchanged (100), got %d", usage.PromptTokens)
+	if usage.PromptTokens != 20 {
+		t.Fatalf("expected PromptTokens unchanged (20), got %d", usage.PromptTokens)
 	}
 	if usage.CompletionTokens != 200 {
 		t.Fatalf("expected CompletionTokens unchanged (200), got %d", usage.CompletionTokens)
@@ -122,8 +124,9 @@ func TestExtractStreamUsage_MessageStartFollowedByMessageDelta(t *testing.T) {
 	extractStreamUsage(usage, startEvent)
 	extractStreamUsage(usage, deltaEvent)
 
-	if usage.PromptTokens != 100 {
-		t.Fatalf("expected PromptTokens=100, got %d", usage.PromptTokens)
+	// PromptTokens 应为非缓存部分：100 - 50 - 30 = 20
+	if usage.PromptTokens != 20 {
+		t.Fatalf("expected PromptTokens=20, got %d", usage.PromptTokens)
 	}
 	if usage.CompletionTokens != 200 {
 		t.Fatalf("expected CompletionTokens=200, got %d", usage.CompletionTokens)
@@ -149,8 +152,9 @@ func TestExtractStreamUsage_PingCarriesInputTokens(t *testing.T) {
 
 	extractStreamUsage(usage, &event)
 
-	if usage.PromptTokens != 100 {
-		t.Fatalf("expected PromptTokens=100, got %d", usage.PromptTokens)
+	// PromptTokens 应为非缓存部分：100 - 50 - 30 = 20
+	if usage.PromptTokens != 20 {
+		t.Fatalf("expected PromptTokens=20 (non-cached), got %d", usage.PromptTokens)
 	}
 	if usage.PromptTokensDetails.CachedTokens != 50 {
 		t.Fatalf("expected CachedTokens=50, got %d", usage.PromptTokensDetails.CachedTokens)
@@ -202,8 +206,9 @@ func TestExtractStreamUsage_PingFollowedByMessageDelta(t *testing.T) {
 	extractStreamUsage(usage, pingEvent)
 	extractStreamUsage(usage, deltaEvent)
 
-	if usage.PromptTokens != 100 {
-		t.Fatalf("expected PromptTokens=100, got %d", usage.PromptTokens)
+	// PromptTokens 应为非缓存部分：100 - 50 - 30 = 20
+	if usage.PromptTokens != 20 {
+		t.Fatalf("expected PromptTokens=20, got %d", usage.PromptTokens)
 	}
 	if usage.CompletionTokens != 200 {
 		t.Fatalf("expected CompletionTokens=200, got %d", usage.CompletionTokens)

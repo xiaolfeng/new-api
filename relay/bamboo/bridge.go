@@ -220,12 +220,12 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			if event.Error != nil {
 				cause = event.Error
 			}
-			// flush 终止标记（如 OpenAI codec 的 [DONE]），
-			// 避免客户端因缺少终止符而挂起。
 			tail, _ := serializer.Flush()
 			if len(tail) > 0 {
-				writeSSE(tail)
-				streamItems = append(streamItems, string(tail))
+				for _, frame := range bamboorelay.SplitSSEFrames(tail) {
+					streamItems = append(streamItems, string(frame))
+					writeSSE(frame)
+				}
 			}
 			if smooth != nil {
 				smooth.signalEnd()
@@ -293,44 +293,50 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			return nil, translateCodecError(serr)
 		}
 
-		streamItems = append(streamItems, string(data))
-
-		// 收集每一帧的原始内容到 debug，供日志详情展示。
-		// SDK v0.8.10 移除了内部 debugRelayResponseFrame 调用，
-		// 由 newapi 直接收集所有帧（带总量上限防止数据爆炸）。
-		if info.BambooDebug != nil && len(info.BambooDebug.RelayResponse) < maxBambooDebugStreamLen {
-			frame := bamboorelay.FormatRelayResponseFrame("StreamRelay", outFmt, outFmt, data)
-			if info.BambooDebug.RelayResponse == "" {
-				info.BambooDebug.RelayResponse = frame
-			} else {
-				info.BambooDebug.RelayResponse += "\n" + frame
-			}
-		}
-
 		// TTFT：首个有效事件序列化成功后记录首次响应时间（幂等，仅首次生效）。
-		// 与原生路径 stream_scanner.go 行为一致：在上游数据到达时标记，而非客户端实际收到时。
-		// 即使 SmoothPacer 开启（输出被缓冲延迟），TTFT 仍反映上游真实首字延迟。
 		info.SetFirstResponseTime()
 
 		// 先提取 usage，再写 SSE — 即使客户端断开（writeSSE 返回 false）也能拿到 usage。
-		// EventPing 携带中间 usage 更新（SDK StreamConverter 通过 Ping 而非 MessageDelta
-		// 传递 usage，以避免携带 usage 的终止语义 chunk 导致部分客户端误判流结束）。
 		if event.Type == bamboosdk.EventMessageStart ||
 			event.Type == bamboosdk.EventMessageDelta ||
 			event.Type == bamboosdk.EventPing {
 			extractStreamUsage(&usage, &event)
 		}
 
-		if !writeSSE(data) {
-			break
+		// 过滤 nil 数据（EventContentBlockStop / EventMessageStop 等返回 nil）
+		// 并拆分合并帧（handleMessageDelta 的 marshalChunks 将 finish_reason + usage
+		// 合并为单个 []byte，需要 SplitSSEFrames 按 \n\n 边界拆分为独立 SSE 事件）
+		if data == nil {
+			continue
+		}
+		frames := bamboorelay.SplitSSEFrames(data)
+		for _, frame := range frames {
+			streamItems = append(streamItems, string(frame))
+
+			if info.BambooDebug != nil && len(info.BambooDebug.RelayResponse) < maxBambooDebugStreamLen {
+				debugFrame := bamboorelay.FormatRelayResponseFrame("StreamRelay", outFmt, outFmt, frame)
+				if info.BambooDebug.RelayResponse == "" {
+					info.BambooDebug.RelayResponse = debugFrame
+				} else {
+					info.BambooDebug.RelayResponse += "\n" + debugFrame
+				}
+			}
+
+			if !writeSSE(frame) {
+				break
+			}
 		}
 	}
 
 	// flush 剩余缓冲（如 OpenAI codec 的 [DONE] 终止符）
 	tail, _ := serializer.Flush()
 	if len(tail) > 0 {
-		writeSSE(tail)
-		streamItems = append(streamItems, string(tail))
+		for _, frame := range bamboorelay.SplitSSEFrames(tail) {
+			streamItems = append(streamItems, string(frame))
+			if !writeSSE(frame) {
+				break
+			}
+		}
 	}
 
 	// 通知 pacer 上游结束，等待所有微帧排空
@@ -448,13 +454,25 @@ func accumulateReasoningFromEvent(modelName string, usage *dto.Usage, event *bam
 // to avoid carrying usage in a terminal-semantic chunk that could mislead clients like Vercel AI SDK.
 // Therefore EventPing must also be processed here.
 //
+// bamboo SDK 的 Usage.InputTokens 是总输入（含 cache_read + cache_creation），
+// 而 new-api 的 Claude 语义计费要求 PromptTokens 仅含非缓存部分。
+// 若直接赋值，text_quota.go 的 input_tokens_total（= PromptTokens + CacheTokens +
+// CacheCreationTokens）会双重计算缓存 token，导致缓存率被稀释（最高 ≈ 50%）。
+// 此处减去缓存部分，与 bamboo codec/anthropic 的序列化语义（commit 3e1aea4）保持一致。
+//
 // Only overwrites non-zero values to avoid clobbering start data with delta zeros.
 func extractStreamUsage(usage *dto.Usage, event *bamboosdk.StreamEvent) {
 	if event.Usage == nil {
 		return
 	}
 	if event.Usage.InputTokens > 0 {
-		usage.PromptTokens = int(event.Usage.InputTokens)
+		nonCached := event.Usage.InputTokens -
+			event.Usage.CacheReadInputTokens -
+			event.Usage.CacheCreationInputTokens
+		if nonCached < 0 {
+			nonCached = 0
+		}
+		usage.PromptTokens = int(nonCached)
 	}
 	if event.Usage.OutputTokens > 0 {
 		usage.CompletionTokens = int(event.Usage.OutputTokens)
@@ -523,10 +541,18 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 
 	info.ResponseBody = truncateResponseBody(string(body))
 
+	// bamboo.Usage.InputTokens 含缓存，Claude 语义计费要求 PromptTokens 仅含非缓存部分。
+	nonCachedInput := resp.Usage.InputTokens -
+		resp.Usage.CacheReadInputTokens -
+		resp.Usage.CacheCreationInputTokens
+	if nonCachedInput < 0 {
+		nonCachedInput = 0
+	}
+
 	return &dto.Usage{
-		PromptTokens:     int(resp.Usage.InputTokens),
+		PromptTokens:     int(nonCachedInput),
 		CompletionTokens: int(resp.Usage.OutputTokens),
-		TotalTokens:      int(resp.Usage.InputTokens + resp.Usage.OutputTokens),
+		TotalTokens:      int(nonCachedInput + resp.Usage.OutputTokens),
 		UsageSemantic:    "anthropic",
 		PromptTokensDetails: dto.InputTokenDetails{
 			CachedTokens:         int(resp.Usage.CacheReadInputTokens),

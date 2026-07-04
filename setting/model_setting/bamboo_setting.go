@@ -29,6 +29,12 @@ type BambooSettings struct {
 	// SmoothLevel 流式平滑缓冲档位，全局生效。
 	// 空字符串/"off" 关闭（直接透传）；gentle/smooth/typewriter 启用 SmoothPacer。
 	SmoothLevel string `json:"smooth_level"`
+
+	// DegradedReason 流式中断降级时补发的完成原因策略，全局生效。
+	// 空字符串/"stop"（默认）：中断时补发 finish_reason=stop，普通对话场景适用。
+	// "tool_use"：带 tools 请求中断时补发 finish_reason=tool_calls，
+	// 让 ReAct Agent 继续轮询而非终止长时任务。无 tools 时回退为 stop。
+	DegradedReason string `json:"degraded_reason"`
 }
 
 // 默认配置
@@ -36,6 +42,7 @@ var defaultBambooSettings = BambooSettings{
 	EnableBambooRelay:    false,
 	EnableBambooDebugLog: false,
 	SmoothLevel:          "off",
+	DegradedReason:       "stop",
 }
 
 // 全局实例

@@ -291,6 +291,7 @@ func newAnthropicProvider(apiKey, baseURL string, headers map[string]string, leg
 	opts := []bambooanthropic.Option{
 		bambooanthropic.WithAPIKey(apiKey),
 		bambooanthropic.WithBaseURL(baseURL),
+		bambooanthropic.WithDegradedReason(resolveDegradedReason()),
 	}
 	for k, v := range headers {
 		opts = append(opts, bambooanthropic.WithHeader(k, v))
@@ -308,6 +309,7 @@ func newGeminiProvider(apiKey, baseURL string, headers map[string]string, interc
 	opts := []bamboogemini.Option{
 		bamboogemini.WithAPIKey(apiKey),
 		bamboogemini.WithBaseURL(baseURL),
+		bamboogemini.WithDegradedReason(resolveDegradedReason()),
 	}
 	for k, v := range headers {
 		opts = append(opts, bamboogemini.WithHeader(k, v))
@@ -323,6 +325,7 @@ func newResponsesProvider(apiKey, baseURL string, headers map[string]string, int
 	opts := []bambooresponses.Option{
 		bambooresponses.WithAPIKey(apiKey),
 		bambooresponses.WithBaseURL(baseURL),
+		bambooresponses.WithDegradedReason(resolveDegradedReason()),
 	}
 	for k, v := range headers {
 		opts = append(opts, bambooresponses.WithHeader(k, v))
@@ -339,6 +342,7 @@ func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string,
 	opts := []bamboocompletions.Option{
 		bamboocompletions.WithAPIKey(apiKey),
 		bamboocompletions.WithBaseURL(baseURL),
+		bamboocompletions.WithDegradedReason(resolveDegradedReason()),
 	}
 	if legacyCompat {
 		opts = append(opts, bamboocompletions.WithLegacyCompat())

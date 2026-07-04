@@ -6,6 +6,7 @@ import (
 
 	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
 	bamboorelay "github.com/bamboo-services/bamboo-messages/bamboo/relay"
+	bambooprovider "github.com/bamboo-services/bamboo-messages/provider"
 
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -61,6 +62,19 @@ func resolveSmoothLevel() dto.BambooSmoothLevelType {
 		return level
 	default:
 		return dto.BambooSmoothLevelOff
+	}
+}
+
+// resolveDegradedReason 从全局 BambooSettings 解析流式中断降级策略。
+//
+// 读取 model_setting.GetBambooSettings().DegradedReason，仅接受有效枚举值，
+// 空字符串/"stop"/未知值返回 DegradedReasonStop（默认降级为 stop）。
+func resolveDegradedReason() bambooprovider.DegradedReasonStrategy {
+	switch model_setting.GetBambooSettings().DegradedReason {
+	case "tool_use":
+		return bambooprovider.DegradedReasonToolUse
+	default:
+		return bambooprovider.DegradedReasonStop
 	}
 }
 
