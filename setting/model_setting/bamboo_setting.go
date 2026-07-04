@@ -19,9 +19,10 @@ type BambooSettings struct {
 	EnableBambooRelay bool `json:"enable_bamboo_relay"`
 
 	// EnableBambooDebugLog 控制 bamboo-messages 的 debug 信息收集。
-	// 开启后，bridge.go 会用 FormatRelayInput/FormatRelayParsed/FormatDebugRequest
-	// 收集格式化 debug 字符串，写入 RelayInfo.BambooDebug，
-	// 最终在消费日志详情的 "Bamboo" 板块展示。
+	// 开启后，bridge.go 会用 FormatRelayParsed/FormatRelayInput/FormatDebugRequest
+	// 以及 FormatRelayResponse/FormatRelayResponseFrame 收集分块 debug 信息，
+	// 写入 RelayInfo.BambooDebug（*BambooDebugInfo 结构），
+	// 最终在消费日志详情的 "Bamboo" 板块分块展示。
 	// 不再调用 provider.SetDebug(true)，避免 log.Printf 刷屏。
 	EnableBambooDebugLog bool `json:"enable_bamboo_debug_log"`
 

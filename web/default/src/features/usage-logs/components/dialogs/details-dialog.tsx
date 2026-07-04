@@ -77,6 +77,8 @@ import {
 import {
   hasStructuredData,
   parseLogDetailRecord,
+  type BambooDebugRecord,
+  type LogDetailRecord,
   type ParsedSections,
   type ToolUseRow,
 } from '../../lib/log-block-parser'
@@ -531,7 +533,6 @@ function StructuredLogContent(props: {
   const hasToolUses = sections.toolUses.length > 0
   const hasRequestBlocks = sections.requestBlocks.length > 0
   const hasToolResponses = sections.toolResponses.length > 0
-  const hasBambooDebug = sections.bambooDebug.trim() !== ''
 
   const copyAllText = JSON.stringify(
     {
@@ -713,33 +714,6 @@ function StructuredLogContent(props: {
         </DetailSection>
       )}
 
-      {hasBambooDebug && (
-        <DetailSection
-          icon={<Terminal className='size-3.5' aria-hidden='true' />}
-          label={t('Bamboo Debug')}
-        >
-          <div className='relative'>
-            <Button
-              variant='ghost'
-              size='sm'
-              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
-              onClick={() => copyToClipboard(sections.bambooDebug)}
-              title={t('Copy to clipboard')}
-              aria-label={t('Copy to clipboard')}
-            >
-              {copiedText === sections.bambooDebug ? (
-                <Check className='size-3 text-green-600' />
-              ) : (
-                <Copy className='size-3' />
-              )}
-            </Button>
-            <pre className='bg-background/60 max-h-64 overflow-auto rounded-md border p-2 text-xs whitespace-pre-wrap break-all font-mono'>
-              {sections.bambooDebug}
-            </pre>
-          </div>
-        </DetailSection>
-      )}
-
       <div className='flex justify-end'>
         <Button
           variant='ghost'
@@ -877,14 +851,106 @@ interface DetailsDialogProps {
   onOpenChange: (open: boolean) => void
 }
 
+function BambooDebugSheet(props: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  data: BambooDebugRecord
+}) {
+  const { t } = useTranslation()
+  const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
+
+  const blocks: Array<{ key: string; label: string; content: string }> = [
+    {
+      key: 'relayParsed',
+      label: t('Relay Parsed'),
+      content: props.data.relayParsed ?? '',
+    },
+    {
+      key: 'relayInput',
+      label: t('Relay Input'),
+      content: props.data.relayInput ?? '',
+    },
+    {
+      key: 'providerRequest',
+      label: t('Provider Request'),
+      content: props.data.providerRequest ?? '',
+    },
+    {
+      key: 'relayResponse',
+      label: t('Relay Response'),
+      content: props.data.relayResponse ?? '',
+    },
+  ].filter((b) => b.content.trim() !== '')
+
+  return (
+    <Sheet open={props.open} onOpenChange={props.onOpenChange}>
+      <SheetContent
+        side='right'
+        className='h-[100dvh] w-[92vw] gap-0 p-0 sm:max-w-2xl lg:max-w-3xl'
+      >
+        <SheetHeader className='flex-shrink-0 border-b pr-12'>
+          <SheetTitle>{t('Bamboo Debug')}</SheetTitle>
+          <SheetDescription>
+            {t('Bamboo relay debug information')}
+          </SheetDescription>
+        </SheetHeader>
+        <ScrollArea className='min-h-0 flex-1 overflow-hidden'>
+          <div className='space-y-2.5 p-4'>
+            {blocks.map((block) => (
+              <DetailSection
+                key={block.key}
+                icon={<Terminal className='size-3.5' aria-hidden='true' />}
+                label={block.label}
+              >
+                <div className='relative'>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+                    onClick={() => copyToClipboard(block.content)}
+                    title={t('Copy to clipboard')}
+                    aria-label={t('Copy to clipboard')}
+                  >
+                    {copiedText === block.content ? (
+                      <Check className='size-3 text-green-600' />
+                    ) : (
+                      <Copy className='size-3' />
+                    )}
+                  </Button>
+                  <pre className='bg-background/60 max-h-64 overflow-auto rounded-md border p-2 text-xs whitespace-pre-wrap break-all font-mono'>
+                    {block.content}
+                  </pre>
+                </div>
+              </DetailSection>
+            ))}
+          </div>
+        </ScrollArea>
+      </SheetContent>
+    </Sheet>
+  )
+}
+
 export function DetailsDialog(props: DetailsDialogProps) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
-  const [detailSheet, setDetailSheet] = useState<'record' | 'full_log' | null>(
-    null
-  )
+  const [detailSheet, setDetailSheet] = useState<
+    'record' | 'full_log' | 'bamboo_debug' | null
+  >(null)
   const details = props.log.content ?? ''
   const detailRecord = props.log.record ?? ''
+  const parsedDetailRecord = useMemo<LogDetailRecord | null>(() => {
+    if (!detailRecord) return null
+    try {
+      const parsed = JSON.parse(detailRecord)
+      return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as LogDetailRecord)
+        : null
+    } catch {
+      return null
+    }
+  }, [detailRecord])
+  const bambooDebugData: BambooDebugRecord | null =
+    parsedDetailRecord?.bambooDebug ?? null
   const canViewDeveloperToolLogs = hasDeveloperToolLogAccess()
   const fullLog = canViewDeveloperToolLogs ? (props.log.full_log ?? '') : ''
   const other = parseLogOther(props.log.other)
@@ -1019,11 +1085,21 @@ export function DetailsDialog(props: DetailsDialogProps) {
         ? fullLog
         : ''
   const activeSheetTitle =
-    detailSheet === 'record' ? t('Detailed Record') : t('Full Log')
+    detailSheet === 'record'
+      ? t('Detailed Record')
+      : detailSheet === 'full_log'
+        ? t('Full Log')
+        : detailSheet === 'bamboo_debug'
+          ? t('Bamboo Debug')
+          : ''
   const activeSheetDescription =
     detailSheet === 'record'
       ? t('Structured request, tool and response details')
-      : t('Complete raw request and response payload')
+      : detailSheet === 'full_log'
+        ? t('Complete raw request and response payload')
+        : detailSheet === 'bamboo_debug'
+          ? t('Bamboo relay debug information')
+          : ''
 
   return (
     <>
@@ -1079,6 +1155,18 @@ export function DetailsDialog(props: DetailsDialogProps) {
                   >
                     <FileText className='size-3.5' aria-hidden='true' />
                     {t('Full Log')}
+                  </Button>
+                )}
+                {bambooDebugData && (
+                  <Button
+                    type='button'
+                    variant='outline'
+                    size='sm'
+                    className='h-8 gap-1.5'
+                    onClick={() => setDetailSheet('bamboo_debug')}
+                  >
+                    <Terminal className='size-3.5' aria-hidden='true' />
+                    {t('Bamboo Debug')}
                   </Button>
                 )}
               </div>
@@ -1878,7 +1966,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </div>
       </Dialog>
       <LogDetailSheet
-        open={detailSheet !== null}
+        open={detailSheet === 'record' || detailSheet === 'full_log'}
         onOpenChange={(open) => {
           if (!open) setDetailSheet(null)
         }}
@@ -1887,6 +1975,15 @@ export function DetailsDialog(props: DetailsDialogProps) {
         content={activeSheetContent}
         structured={detailSheet === 'record'}
       />
+      {bambooDebugData && (
+        <BambooDebugSheet
+          open={detailSheet === 'bamboo_debug'}
+          onOpenChange={(open) => {
+            if (!open) setDetailSheet(null)
+          }}
+          data={bambooDebugData}
+        />
+      )}
     </>
   )
 }

@@ -36,7 +36,7 @@ type LogDetailRecord struct {
 	BambooResponseBlocks    []BambooResponseBlock        `json:"bambooResponseBlocks,omitempty"`
 	BambooRequestBlocks     []BambooRequestBlock         `json:"bambooRequestBlocks,omitempty"`
 	BambooToolResponses     []BambooToolResponseBlock    `json:"bambooToolResponses,omitempty"`
-	BambooDebug             string                       `json:"bambooDebug,omitempty"`
+	BambooDebug             *BambooDebugRecord           `json:"bambooDebug,omitempty"`
 }
 
 type LogToolInvokeRecord struct {
@@ -92,6 +92,15 @@ type BambooToolResponseBlock struct {
 	Type      string `json:"type,omitempty"`
 	Content   string `json:"content,omitempty"`
 	Role      string `json:"role,omitempty"`
+}
+
+// BambooDebugRecord 存储 bamboo relay 的分块 debug 信息（镜像 relay/common.BambooDebugInfo）。
+// 每个字段对应一个独立的 debug 块，前端可分块展示和单独复制。
+type BambooDebugRecord struct {
+	RelayParsed     string `json:"relayParsed,omitempty"`
+	RelayInput      string `json:"relayInput,omitempty"`
+	ProviderRequest string `json:"providerRequest,omitempty"`
+	RelayResponse   string `json:"relayResponse,omitempty"`
 }
 
 type ResponsesRequestBlock struct {

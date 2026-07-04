@@ -109,6 +109,13 @@ export interface ToolInvokeRecord {
   responseRole?: string
 }
 
+export interface BambooDebugRecord {
+  relayParsed?: string
+  relayInput?: string
+  providerRequest?: string
+  relayResponse?: string
+}
+
 export interface LogDetailRecord {
   prompt?: Record<string, unknown>
   completion?: string
@@ -126,7 +133,7 @@ export interface LogDetailRecord {
   bambooResponseBlocks?: BambooResponseBlock[]
   bambooRequestBlocks?: BambooRequestBlock[]
   bambooToolResponses?: BambooToolResponseBlock[]
-  bambooDebug?: string
+  bambooDebug?: BambooDebugRecord
 }
 
 // ---------------------------------------------------------------------------
@@ -178,7 +185,7 @@ export interface ParsedSections {
   toolUses: ToolUseRow[]
 
   /** Bamboo debug info from relay */
-  bambooDebug: string
+  bambooDebug: BambooDebugRecord | null
 }
 
 // ---------------------------------------------------------------------------
@@ -266,12 +273,15 @@ export function parseLogDetailRecord(
     thinking: '',
     answer: '',
     toolUses: [],
-    bambooDebug: '',
+    bambooDebug: null,
   }
 
   if (!record) return empty
 
-  const bambooDebug = typeof record.bambooDebug === 'string' ? record.bambooDebug : ''
+  const bambooDebug =
+    record.bambooDebug && typeof record.bambooDebug === 'object'
+      ? record.bambooDebug
+      : null
   empty.bambooDebug = bambooDebug
 
   // Bamboo format — check FIRST (bamboo data takes priority)
@@ -501,14 +511,11 @@ export function parseLogDetailRecord(
  */
 export function hasStructuredData(sections: ParsedSections): boolean {
   return (
-    sections.format !== 'none' ||
-    sections.bambooDebug.trim() !== ''
-  ) && (
-    sections.requestBlocks.length > 0 ||
-    sections.toolResponses.length > 0 ||
-    sections.thinking.trim() !== '' ||
-    sections.answer.trim() !== '' ||
-    sections.toolUses.length > 0 ||
-    sections.bambooDebug.trim() !== ''
+    sections.format !== 'none' &&
+    (sections.requestBlocks.length > 0 ||
+      sections.toolResponses.length > 0 ||
+      sections.thinking.trim() !== '' ||
+      sections.answer.trim() !== '' ||
+      sections.toolUses.length > 0)
   )
 }

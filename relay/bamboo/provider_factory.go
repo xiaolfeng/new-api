@@ -283,8 +283,9 @@ func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[str
 }
 
 // --- 以下为各 provider 的工厂方法 ---
-// debug 信息由 bridge.go 通过 FormatRelayInput/FormatRelayParsed/FormatDebugRequest
-// 收集到 RelayInfo.BambooDebug，不再调用 provider.SetDebug()。
+// debug 信息由 bridge.go 通过 FormatRelayParsed/FormatRelayInput/FormatDebugRequest
+// 以及 FormatRelayResponse/FormatRelayResponseFrame 分块收集到 RelayInfo.BambooDebug，
+// 不再调用 provider.SetDebug()。
 
 func newAnthropicProvider(apiKey, baseURL string, headers map[string]string, legacyCompat bool, interceptor provider.RequestInterceptor) provider.Provider {
 	opts := []bambooanthropic.Option{

@@ -82,28 +82,27 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 
 	// debug 收集：当 EnableBambooDebugLog 开启时，用 FormatRelayInput/FormatRelayParsed
-	// 收集格式化 debug 字符串，写入 context key 供日志详情展示。
+	// 收集格式化 debug 字符串，写入 info.BambooDebug 分块结构供日志详情展示。
 	// 不再调用 provider.SetDebug(true)，避免 log.Printf 刷屏。
 	debugEnabled := model_setting.GetBambooSettings().EnableBambooDebugLog
-	var debugBuf strings.Builder
+	if debugEnabled {
+		info.BambooDebug = &relaycommon.BambooDebugInfo{}
+	}
 
 	relayReq, parseErr := entryCodec.ParseRequest(requestBody)
 	if parseErr != nil {
-		flushBambooDebug(info, &debugBuf, debugEnabled)
 		return nil, translateCodecError(parseErr) // 内部 errors.As 断言 *CodecError
 	}
 
 	info.BambooRelayData = extractBambooRelayData(relayReq)
 
 	if debugEnabled {
-		debugBuf.WriteString(bamboorelay.FormatRelayParsed("ChatRelay", codecFmt, relayReq))
-		debugBuf.WriteByte('\n')
+		info.BambooDebug.RelayParsed = bamboorelay.FormatRelayParsed("ChatRelay", codecFmt, relayReq)
 	}
 
 	// ② 上游侧：根据 ApiType 构造 bamboo provider
 	p, upstreamRelayFormat, provErr := newProvider(c, info)
 	if provErr != nil {
-		flushBambooDebug(info, &debugBuf, debugEnabled)
 		return nil, provErr // 含 ErrUnsupportedProvider，调用方判 errors.Is 做 fallback
 	}
 
@@ -120,16 +119,13 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	if debugEnabled {
 		// 使用真实上游格式作为 out 参数（而非入口格式）
 		outCodecFmt, _ := relayFormatToCodec(effectiveUpstreamFormat)
-		debugBuf.WriteString(bamboorelay.FormatRelayInput("ChatRelay", codecFmt, outCodecFmt, requestBody))
-		debugBuf.WriteByte('\n')
-
-		debugBuf.WriteString(provider.FormatDebugRequest(
+		info.BambooDebug.RelayInput = bamboorelay.FormatRelayInput("ChatRelay", codecFmt, outCodecFmt, requestBody)
+		info.BambooDebug.ProviderRequest = provider.FormatDebugRequest(
 			"bamboo-bridge",
 			fmt.Sprintf("upstream provider=%T model=%s relayFormat=%s", p, relayReq.Config.Model, effectiveUpstreamFormat),
 			nil, relayReq.Config,
-		))
+		)
 	}
-	flushBambooDebug(info, &debugBuf, debugEnabled)
 
 	client := bamboosdk.NewClient(p)
 
@@ -137,13 +133,7 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	if relayReq.IsStream {
 		return doStreamRelay(c, info, client, entryCodec, codecFmt, relayReq)
 	}
-	return doCompleteRelay(c, info, client, entryCodec, relayReq)
-}
-
-func flushBambooDebug(info *relaycommon.RelayInfo, buf *strings.Builder, enabled bool) {
-	if enabled && buf.Len() > 0 {
-		info.BambooDebug = buf.String()
-	}
+	return doCompleteRelay(c, info, client, entryCodec, codecFmt, relayReq)
 }
 
 // doStreamRelay 消费 bamboo StreamEvent，按入口 codec 序列化为出口 SSE。
@@ -300,9 +290,16 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 		streamItems = append(streamItems, string(data))
 
-		// DEBUG: 记录 finish_reason 相关的 SSE 帧（临时排查用）
-		if event.Type == bamboosdk.EventMessageDelta || event.Type == bamboosdk.EventMessageStop {
-			common.SysLog("bamboo-debug: event=" + string(event.Type) + " sse=" + truncateResponseBody(string(data)))
+		// 收集终止语义帧（message_delta / message_stop）的格式化 debug，
+		// 这些帧携带 stop_reason / usage 等关键信息，用于排查流式响应终止问题。
+		// 不收集每一帧以避免数据爆炸。
+		if info.BambooDebug != nil && (event.Type == bamboosdk.EventMessageDelta || event.Type == bamboosdk.EventMessageStop) {
+			frame := bamboorelay.FormatRelayResponseFrame("StreamRelay", outFmt, outFmt, data)
+			if info.BambooDebug.RelayResponse == "" {
+				info.BambooDebug.RelayResponse = frame
+			} else {
+				info.BambooDebug.RelayResponse += "\n" + frame
+			}
 		}
 
 		// TTFT：首个有效事件序列化成功后记录首次响应时间（幂等，仅首次生效）。
@@ -467,7 +464,7 @@ func extractStreamUsage(usage *dto.Usage, event *bamboosdk.StreamEvent) {
 
 // doCompleteRelay 非流式中继。
 func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk.BambooClient,
-	entryCodec bamboocodec.Codec, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
+	entryCodec bamboocodec.Codec, codecFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
 
 	resp, err := client.Complete(c.Request.Context(), req.Messages, req.System, req.Config)
 	if err != nil {
@@ -511,6 +508,11 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 	if serr != nil {
 		return nil, translateCodecError(serr)
 	}
+
+	if info.BambooDebug != nil {
+		info.BambooDebug.RelayResponse = bamboorelay.FormatRelayResponse("CompleteRelay", codecFmt, codecFmt, body)
+	}
+
 	c.Writer.Header().Set("Content-Type", "application/json")
 	c.Writer.Write(body)
 

@@ -204,9 +204,11 @@ type RelayInfo struct {
 	ResponseBody string
 	// ToolInvokes 存储 Claude/Anthropic 工具调用信息，用于日志详细记录
 	ToolInvokes []ToolInvokeInfo
-	// BambooDebug 存储 bamboo-messages 的格式化 debug 字符串，
-	// 仅在 EnableBambooDebugLog 开启且走 bamboo relay 路径时非空。
-	BambooDebug string
+	// BambooDebug 存储 bamboo relay 的分块 debug 信息。
+	// 仅在 EnableBambooDebugLog 开启且走 bamboo relay 路径时非 nil。
+	// 包含 RelayParsed / RelayInput / ProviderRequest / RelayResponse 四个独立块，
+	// 供日志详情分块展示和单独复制。
+	BambooDebug *BambooDebugInfo
 
 	// BambooTiming 存储 bamboo relay 路径的分阶段流式计时数据。
 	// 仅在走 bamboo relay 流式路径（relay/bamboo/bridge.go doStreamRelay）时非 nil。
