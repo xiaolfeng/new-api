@@ -143,9 +143,8 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 
 // doStreamRelay 消费 bamboo StreamEvent，按入口 codec 序列化为出口 SSE。
 //
-// 当渠道配置了平滑缓冲（BambooSmoothLevel != off）时，序列化后的 SSE 帧
-// 经 SmoothPacer 切分为微帧并按自适应间隔匀速释放，再写入 HTTP Response；
-// 否则直接透传上游事件。
+// SDK v0.8.15 起移除 SmoothPacer 子系统，流式输出改为纯透传：
+// 序列化后的 SSE 帧直接写入 HTTP Response，不再做平滑缓冲。
 func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk.BambooClient,
 	entryCodec bamboocodec.Codec, outFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
 
@@ -174,26 +173,7 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 	var streamItems []string
 
-	// 平滑缓冲：当渠道配置了有效档位时，序列化输出经 SmoothPacer 匀速释放
-	smoothLevel := resolveSmoothLevel()
-	var smooth *smoothBufferWriter
-	if smoothLevel != dto.BambooSmoothLevelOff {
-		writeFn := func(data []byte) bool {
-			if _, werr := c.Writer.Write(data); werr != nil {
-				return false
-			}
-			c.Writer.Flush()
-			return true
-		}
-		smooth = startSmoothBuffer(ctx, outFmt, smoothLevel, writeFn)
-	}
-
-	// writeSSE 写入一帧 SSE 数据（平滑缓冲时推入 pacer，否则直接写）
 	writeSSE := func(data []byte) bool {
-		if smooth != nil {
-			smooth.push(data)
-			return true
-		}
 		if _, werr := c.Writer.Write(data); werr != nil {
 			return false
 		}
@@ -226,10 +206,6 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 					streamItems = append(streamItems, string(frame))
 					writeSSE(frame)
 				}
-			}
-			if smooth != nil {
-				smooth.signalEnd()
-				smooth.wait()
 			}
 			if len(streamItems) > 0 {
 				info.ResponseBody = truncateResponseBody(strings.Join(streamItems, "\n"))
@@ -287,9 +263,6 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 		data, serr := serializer.Serialize(event)
 		if serr != nil {
-			if smooth != nil {
-				smooth.wait()
-			}
 			return nil, translateCodecError(serr)
 		}
 
@@ -337,12 +310,6 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 				break
 			}
 		}
-	}
-
-	// 通知 pacer 上游结束，等待所有微帧排空
-	if smooth != nil {
-		smooth.signalEnd()
-		smooth.wait()
 	}
 
 	if len(streamItems) > 0 {

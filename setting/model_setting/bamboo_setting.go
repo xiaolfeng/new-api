@@ -26,10 +26,6 @@ type BambooSettings struct {
 	// SDK v0.8.9 的 Format 系列函数为纯函数（调用即返回），由本开关控制是否收集。
 	EnableBambooDebugLog bool `json:"enable_bamboo_debug_log"`
 
-	// SmoothLevel 流式平滑缓冲档位，全局生效。
-	// 空字符串/"off" 关闭（直接透传）；gentle/smooth/typewriter 启用 SmoothPacer。
-	SmoothLevel string `json:"smooth_level"`
-
 	// DegradedReason 流式中断降级时补发的完成原因策略，全局生效。
 	// 空字符串/"stop"（默认）：中断时补发 finish_reason=stop，普通对话场景适用。
 	// "tool_use"：带 tools 请求中断时补发 finish_reason=tool_calls，
@@ -41,7 +37,6 @@ type BambooSettings struct {
 var defaultBambooSettings = BambooSettings{
 	EnableBambooRelay:    false,
 	EnableBambooDebugLog: false,
-	SmoothLevel:          "off",
 	DegradedReason:       "stop",
 }
 

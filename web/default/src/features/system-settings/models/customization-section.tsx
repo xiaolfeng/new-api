@@ -53,7 +53,6 @@ const customizationSchema = z.object({
   bamboo: z.object({
     enable_bamboo_relay: z.boolean(),
     enable_bamboo_debug_log: z.boolean(),
-    smooth_level: z.enum(['off', 'gentle', 'smooth', 'typewriter']).optional(),
     degraded_reason: z.enum(['stop', 'tool_use']).optional(),
   }),
   retry_setting: z.object({
@@ -230,45 +229,6 @@ export function CustomizationSection({
                         onCheckedChange={field.onChange}
                       />
                     </FormControl>
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name='bamboo.smooth_level'
-                render={({ field }) => (
-                  <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
-                    <div className='space-y-0.5'>
-                      <FormLabel className='text-base'>
-                        {t('Streaming Smooth Strategy')}
-                      </FormLabel>
-                      <FormDescription>
-                        {t(
-                          'Controls the pacing of streamed SSE chunks to smooth out burst arrivals from upstream. Off disables buffering and passes events through directly.'
-                        )}
-                      </FormDescription>
-                    </div>
-                    <Select
-                      value={field.value ?? 'off'}
-                      onValueChange={field.onChange}
-                    >
-                      <FormControl>
-                        <SelectTrigger className='w-48'>
-                          <SelectValue />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent alignItemWithTrigger={false}>
-                        <SelectItem value='off'>
-                          {t('Off (direct passthrough)')}
-                        </SelectItem>
-                        <SelectItem value='gentle'>{t('Gentle')}</SelectItem>
-                        <SelectItem value='smooth'>{t('Smooth')}</SelectItem>
-                        <SelectItem value='typewriter'>
-                          {t('Typewriter')}
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
                   </FormItem>
                 )}
               />

@@ -20,6 +20,7 @@
   "Expose grouped Uptime Kuma status pages directly on the dashboard": "Expose grouped Uptime Kuma status pages directly on the dashboard",
   "Failure Rate": "Failure Rate",
   "Failure Rate Trend": "Failure Rate Trend",
+  "footer.columns.related.links.midjourney": "Midjourney-Proxy",
   "Full Log": "Full Log",
   "Full logging remaining {{count}} seconds": "Full logging remaining {{count}} seconds",
   "Fully record request content, response content, and HTTP headers (excluding sensitive info), only allowed for 5 minutes": "Fully record request content, response content, and HTTP headers (excluding sensitive info), only allowed for 5 minutes",
@@ -35,9 +36,9 @@
   "On (Legacy fields)": "On (Legacy fields)",
   "OpenAI Chat Completions": "OpenAI Chat Completions",
   "OpenAI Responses": "OpenAI Responses",
+  "Output Token Trend": "Output Token Trend",
   "Output TPS": "Output TPS",
   "Output TPS Trend": "Output TPS Trend",
-  "Output Token Trend": "Output Token Trend",
   "Parent Session": "Parent Session",
   "Parent Session ID": "Parent Session ID",
   "Record summary request content, response content, tool calls, and filtered HTTP headers": "Record summary request content, response content, tool calls, and filtered HTTP headers",
@@ -55,6 +56,5 @@
   "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API.": "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API.",
   "When enabled, uses legacy field names (e.g., max_tokens instead of max_completion_tokens) and omits reasoning_effort / parallel_tool_calls. Enable for endpoints that do not support the latest OpenAI/Anthropic schema.": "When enabled, uses legacy field names (e.g., max_tokens instead of max_completion_tokens) and omits reasoning_effort / parallel_tool_calls. Enable for endpoints that do not support the latest OpenAI/Anthropic schema.",
   "When filled, users must accept the privacy policy during registration.": "When filled, users must accept the privacy policy during registration.",
-  "When filled, users must accept the user agreement during registration.": "When filled, users must accept the user agreement during registration.",
-  "footer.columns.related.links.midjourney": "Midjourney-Proxy"
+  "When filled, users must accept the user agreement during registration.": "When filled, users must accept the user agreement during registration."
 }

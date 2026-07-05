@@ -18,8 +18,22 @@ import (
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/types"
 )
+
+// resolveDegradedReason 从全局 BambooSettings 解析流式中断降级策略。
+//
+// 读取 model_setting.GetBambooSettings().DegradedReason，仅接受有效枚举值，
+// 空字符串/"stop"/未知值返回 DegradedReasonStop（默认降级为 stop）。
+func resolveDegradedReason() provider.DegradedReasonStrategy {
+	switch model_setting.GetBambooSettings().DegradedReason {
+	case "tool_use":
+		return provider.DegradedReasonToolUse
+	default:
+		return provider.DegradedReasonStop
+	}
+}
 
 // versionRegex 匹配 URL path 以 /v + 数字 结尾的模式（如 /v1, /v4）。
 var versionRegex = regexp.MustCompile(`/v\d+$`)

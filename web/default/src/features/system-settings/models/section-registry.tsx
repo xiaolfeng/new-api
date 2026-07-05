@@ -196,11 +196,6 @@ const MODELS_SECTIONS = [
               settings['bamboo.enable_bamboo_relay'] ?? false,
             enable_bamboo_debug_log:
               settings['bamboo.enable_bamboo_debug_log'] ?? false,
-            smooth_level: (['off', 'gentle', 'smooth', 'typewriter'].includes(
-              settings['bamboo.smooth_level']
-            )
-              ? settings['bamboo.smooth_level']
-              : 'off') as 'off' | 'gentle' | 'smooth' | 'typewriter',
             degraded_reason: (['stop', 'tool_use'].includes(
               settings['bamboo.degraded_reason']
             )

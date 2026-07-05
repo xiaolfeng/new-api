@@ -220,3 +220,55 @@ func TestExtractStreamUsage_PingFollowedByMessageDelta(t *testing.T) {
 		t.Fatalf("expected CachedCreationTokens=30, got %d", usage.PromptTokensDetails.CachedCreationTokens)
 	}
 }
+
+// TestExtractStreamUsage_NoCacheKeepsFullInput 验证无缓存时 PromptTokens 保持原值。
+func TestExtractStreamUsage_NoCacheKeepsFullInput(t *testing.T) {
+	usage := &dto.Usage{}
+	event := &bamboosdk.StreamEvent{
+		Type: bamboosdk.EventMessageStart,
+		Usage: &bamboosdk.Usage{
+			InputTokens:  500,
+			OutputTokens: 100,
+		},
+	}
+
+	extractStreamUsage(usage, event)
+
+	if usage.PromptTokens != 500 {
+		t.Fatalf("expected PromptTokens=500 (no cache to subtract), got %d", usage.PromptTokens)
+	}
+	if usage.PromptTokensDetails.CachedTokens != 0 {
+		t.Fatalf("expected CachedTokens=0, got %d", usage.PromptTokensDetails.CachedTokens)
+	}
+}
+
+// TestExtractStreamUsage_FullCacheYieldsHighRate 验证高缓存率场景：
+// 总输入 99516，缓存读取 98880 → 非缓存仅 636，缓存率 = 98880/99516 ≈ 99.4%。
+// 修复前 PromptTokens 会是 99516（含缓存），导致 input_tokens_total = 99516+98880 = 198396，
+// 缓存率被稀释到 98880/198396 ≈ 49.8%。
+func TestExtractStreamUsage_FullCacheYieldsHighRate(t *testing.T) {
+	usage := &dto.Usage{}
+	event := &bamboosdk.StreamEvent{
+		Type: bamboosdk.EventMessageStart,
+		Usage: &bamboosdk.Usage{
+			InputTokens:          99516,
+			OutputTokens:         139,
+			CacheReadInputTokens: 98880,
+		},
+	}
+
+	extractStreamUsage(usage, event)
+
+	if usage.PromptTokens != 636 {
+		t.Fatalf("expected PromptTokens=636 (99516-98880), got %d", usage.PromptTokens)
+	}
+	if usage.PromptTokensDetails.CachedTokens != 98880 {
+		t.Fatalf("expected CachedTokens=98880, got %d", usage.PromptTokensDetails.CachedTokens)
+	}
+
+	// 验证 input_tokens_total 重构后等于原始总输入
+	totalReconstructed := usage.PromptTokens + usage.PromptTokensDetails.CachedTokens + usage.PromptTokensDetails.CachedCreationTokens
+	if totalReconstructed != 99516 {
+		t.Errorf("reconstructed total = %d, want 99516 (original InputTokens)", totalReconstructed)
+	}
+}
