@@ -205,17 +205,18 @@ func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider
 	upstreamRelayFormat := resolveUpstreamRelayFormat(info)
 
 	legacyCompat := info.ChannelOtherSettings.IsBambooLegacyCompat()
+	legacyCacheKey := info.ChannelOtherSettings.IsBambooLegacyCacheKey()
 
 	upstreamFmt := resolveUpstreamFormat(info)
 	if upstreamFmt != dto.BambooUpstreamFormatAuto {
-		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, legacyCompat, paramOverrideInterceptor)
+		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, legacyCompat, legacyCacheKey, paramOverrideInterceptor)
 		if apiErr != nil {
 			return nil, "", apiErr
 		}
 		return p, upstreamRelayFormat, nil
 	}
 
-	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers, legacyCompat, paramOverrideInterceptor)
+	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers, legacyCompat, legacyCacheKey, paramOverrideInterceptor)
 	if apiErr != nil {
 		return nil, "", apiErr
 	}
@@ -251,7 +252,7 @@ func buildParamOverrideInterceptor(info *relaycommon.RelayInfo) provider.Request
 // interceptor 可以为 nil（无参数覆盖时），此时 4 个 Provider 的 WithInterceptor
 // option 不会被触发，构造行为与升级前一致。
 func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL string,
-	headers map[string]string, legacyCompat bool,
+	headers map[string]string, legacyCompat bool, legacyCacheKey bool,
 	interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
 
 	switch fmt {
@@ -262,7 +263,7 @@ func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL str
 	case dto.BambooUpstreamFormatResponses:
 		return newResponsesProvider(apiKey, baseURL, headers, interceptor), nil
 	case dto.BambooUpstreamFormatOpenAI:
-		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
+		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat, legacyCacheKey, interceptor), nil
 	default:
 		return nil, types.NewError(ErrUnsupportedProvider, types.ErrorCodeInvalidApiType)
 	}
@@ -271,7 +272,7 @@ func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL str
 // buildProviderByApiType 按渠道 ApiType 自动推断上游协议（原 newProvider switch 逻辑）。
 // auto 模式下 legacyCompat 由调用方从 ChannelOtherSettings.BambooLegacyCompat 读取。
 func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[string]string,
-	legacyCompat bool, interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
+	legacyCompat bool, legacyCacheKey bool, interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
 	switch apiType {
 	case constant.APITypeAnthropic:
 		return newAnthropicProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
@@ -289,7 +290,7 @@ func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[str
 		constant.APITypePerplexity, constant.APITypeCohere,
 		constant.APITypeMiniMax, constant.APITypeBaiduV2,
 		constant.APITypeOpenRouter, constant.APITypeXinference:
-		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
+		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat, legacyCacheKey, interceptor), nil
 
 	default:
 		return nil, types.NewError(ErrUnsupportedProvider, types.ErrorCodeInvalidApiType)
@@ -351,7 +352,7 @@ func newResponsesProvider(apiKey, baseURL string, headers map[string]string, int
 }
 
 // buildCompletionsProvider 构造 OpenAI Completions provider，附加自定义 header。
-func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string, legacyCompat bool, interceptor provider.RequestInterceptor) provider.Provider {
+func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string, legacyCompat bool, legacyCacheKey bool, interceptor provider.RequestInterceptor) provider.Provider {
 	baseURL = ensureOpenAIBaseURL(baseURL)
 	opts := []bamboocompletions.Option{
 		bamboocompletions.WithAPIKey(apiKey),
@@ -360,6 +361,9 @@ func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string,
 	}
 	if legacyCompat {
 		opts = append(opts, bamboocompletions.WithLegacyCompat())
+	}
+	if legacyCacheKey {
+		opts = append(opts, bamboocompletions.WithLegacyCacheKey(true))
 	}
 	for k, v := range headers {
 		opts = append(opts, bamboocompletions.WithHeader(k, v))

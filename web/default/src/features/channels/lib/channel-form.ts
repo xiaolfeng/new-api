@@ -209,6 +209,7 @@ export const channelFormSchema = z
       .enum(['auto', 'openai', 'anthropic', 'gemini', 'responses'])
       .optional(),
     bamboo_legacy_compat: z.boolean().optional(),
+    bamboo_legacy_cache_key: z.boolean().optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -351,6 +352,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   disable_task_polling_sleep: false,
   bamboo_upstream_format: 'auto',
   bamboo_legacy_compat: false,
+  bamboo_legacy_cache_key: false,
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
@@ -418,6 +420,7 @@ export function transformChannelToFormDefaults(
     | 'gemini'
     | 'responses' = 'auto'
   let bambooLegacyCompat = false
+  let bambooLegacyCacheKey = false
 
   if (channel.settings) {
     try {
@@ -456,6 +459,9 @@ export function transformChannelToFormDefaults(
       }
       if (parsed.bamboo_legacy_compat === true) {
         bambooLegacyCompat = true
+      }
+      if (parsed.bamboo_legacy_cache_key === true) {
+        bambooLegacyCacheKey = true
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -510,6 +516,7 @@ export function transformChannelToFormDefaults(
     advanced_custom: advancedCustom,
     bamboo_upstream_format: bambooUpstreamFormat,
     bamboo_legacy_compat: bambooLegacyCompat,
+    bamboo_legacy_cache_key: bambooLegacyCacheKey,
   }
 }
 
@@ -667,6 +674,17 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.bamboo_legacy_compat = true
   } else {
     delete settingsObj.bamboo_legacy_compat
+  }
+
+  // Bamboo legacy cache key mode
+  if (
+    formData.bamboo_legacy_cache_key &&
+    (formData.bamboo_upstream_format === 'openai' ||
+      formData.bamboo_upstream_format === 'anthropic')
+  ) {
+    settingsObj.bamboo_legacy_cache_key = true
+  } else {
+    delete settingsObj.bamboo_legacy_cache_key
   }
 
   return JSON.stringify(settingsObj)

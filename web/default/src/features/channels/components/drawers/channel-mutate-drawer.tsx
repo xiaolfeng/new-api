@@ -4136,6 +4136,51 @@ export function ChannelMutateDrawer({
                                     )}
                                   />
                                 )}
+                                {form.watch('bamboo_upstream_format') ===
+                                  'openai' &&
+                                  form.watch('bamboo_legacy_compat') ===
+                                    true && (
+                                  <FormField
+                                    control={form.control}
+                                    name='bamboo_legacy_cache_key'
+                                    render={({ field }) => (
+                                      <FormItem className='space-y-2'>
+                                        <div className='space-y-0.5'>
+                                          <FormLabel>
+                                            {t('Legacy Cache Key')}
+                                          </FormLabel>
+                                          <FormDescription>
+                                            {t(
+                                              'When enabled, sends prompt_cache_key in Legacy compatibility mode. Use for endpoints that support it (e.g. Kimi/Moonshot).'
+                                            )}
+                                          </FormDescription>
+                                        </div>
+                                        <Select
+                                          value={
+                                            field.value ? 'true' : 'false'
+                                          }
+                                          onValueChange={(v) =>
+                                            field.onChange(v === 'true')
+                                          }
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className='w-full'>
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            <SelectItem value='false'>
+                                              {t('Off (No cache key)')}
+                                            </SelectItem>
+                                            <SelectItem value='true'>
+                                              {t('On (Send cache key)')}
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </FormItem>
+                                    )}
+                                  />
+                                )}
                               </div>
                             )}
 

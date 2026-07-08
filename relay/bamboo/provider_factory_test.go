@@ -424,3 +424,56 @@ func TestNewProvider_BambooLegacyCompat(t *testing.T) {
 		})
 	}
 }
+
+func TestNewProvider_BambooLegacyCacheKey(t *testing.T) {
+	boolPtr := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name           string
+		apiType        int
+		upstreamFmt    string
+		legacyCacheKey *bool
+	}{
+		{"nil default fallback to false", constant.APITypeOpenAI, "", nil},
+		{"force legacy cache key true", constant.APITypeOpenAI, "", boolPtr(true)},
+		{"force legacy cache key false", constant.APITypeOpenAI, "", boolPtr(false)},
+		{"manual anthropic format with legacy cache key", constant.APITypeAnthropic, "openai", boolPtr(true)},
+		{"manual openai format with legacy cache key", constant.APITypeOpenAI, "openai", boolPtr(true)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := makeInfo(tt.apiType)
+			info.ChannelOtherSettings.BambooLegacyCacheKey = tt.legacyCacheKey
+			info.ChannelOtherSettings.BambooUpstreamFormat = tt.upstreamFmt
+
+			p, _, err := newProvider(nil, info)
+			if err != nil {
+				t.Fatalf("newProvider returned error: %v (type: %T, msg: %q)", err, err, err.Error())
+			}
+			assert.NotNil(t, p)
+		})
+	}
+}
+
+func TestNewProvider_BambooLegacyCacheKey_Disabled(t *testing.T) {
+	boolPtr := func(b bool) *bool { return &b }
+
+	info := makeInfo(constant.APITypeOpenAI)
+	info.ChannelOtherSettings.BambooLegacyCacheKey = boolPtr(false)
+
+	p, _, err := newProvider(nil, info)
+	if err != nil {
+		t.Fatalf("newProvider returned error: %v (type: %T, msg: %q)", err, err, err.Error())
+	}
+	assert.NotNil(t, p)
+}
+
+func TestNewProvider_BambooLegacyCacheKey_Nil(t *testing.T) {
+	info := makeInfo(constant.APITypeOpenAI)
+
+	p, _, err := newProvider(nil, info)
+	if err != nil {
+		t.Fatalf("newProvider returned error: %v (type: %T, msg: %q)", err, err, err.Error())
+	}
+	assert.NotNil(t, p)
+}
