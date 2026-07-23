@@ -18,10 +18,8 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-
-import { Skeleton } from '@/components/ui/skeleton'
 import { api } from '@/lib/api'
-import dayjs from '@/lib/dayjs'
+import { Skeleton } from '@/components/ui/skeleton'
 
 interface TokenRecordDailyItem {
   date: string
@@ -68,60 +66,25 @@ function getColorLevel(
   return isDark ? DARK_COLORS[4] : LIGHT_COLORS[4]
 }
 
-function UserHeatmapDayLabels() {
-  const { i18n } = useTranslation()
-  const fmt = new Intl.DateTimeFormat(i18n.language, { weekday: 'short' })
-  // 2024-01-01 = Monday, 2024-01-03 = Wednesday, 2024-01-05 = Friday
-  const mon = fmt.format(new Date(2024, 0, 1))
-  const wed = fmt.format(new Date(2024, 0, 3))
-  const fri = fmt.format(new Date(2024, 0, 5))
-  return (
-    <div className='text-muted-foreground flex flex-col gap-[3px] pt-5 text-[10px]'>
-      <span className='flex h-[11px] items-center'>{mon}</span>
-      <span className='h-[11px]' />
-      <span className='flex h-[11px] items-center'>{wed}</span>
-      <span className='h-[11px]' />
-      <span className='flex h-[11px] items-center'>{fri}</span>
-      <span className='h-[11px]' />
-    </div>
-  )
-}
-
 export function UserHeatmap() {
-  const { t, i18n } = useTranslation()
+  const { t } = useTranslation()
   const isDark = useIsDark()
   const [data, setData] = useState<TokenRecordDailyItem[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    let cancelled = false
-    const fetchData = async () => {
-      setLoading(true)
-      try {
-        const res = await api.get<{
-          success: boolean
-          data: TokenRecordDailyItem[]
-        }>('/api/token_record/daily/self')
-        if (!cancelled && res.data?.success !== false) {
-          const raw = res.data?.data ?? []
-          const normalized = raw.map((item) => ({
-            ...item,
-            date: item.date ? dayjs(item.date).format('YYYY-MM-DD') : item.date,
-          }))
-          setData(normalized)
+    setLoading(true)
+    api
+      .get<{ success: boolean; data: TokenRecordDailyItem[] }>(
+        '/api/token_record/daily/self'
+      )
+      .then((res) => {
+        if (res.data?.success !== false) {
+          setData(res.data?.data ?? [])
         }
-      } catch (err) {
-        if (!cancelled) {
-          console.warn('Failed to fetch user heatmap data', err)
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    fetchData()
-    return () => {
-      cancelled = true
-    }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false))
   }, [])
 
   const dataMap = useMemo(() => {
@@ -138,7 +101,7 @@ export function UserHeatmap() {
     for (let i = 364; i >= 0; i--) {
       const d = new Date(today)
       d.setDate(d.getDate() - i)
-      allDates.push(dayjs(d).format('YYYY-MM-DD'))
+      allDates.push(d.toISOString().slice(0, 10))
     }
 
     const nonZeroValues = data
@@ -162,16 +125,15 @@ export function UserHeatmap() {
 
     const weeksCount = Math.ceil(allDates.length / 7)
     const labels: (string | null)[] = []
-    const monthFormatter = new Intl.DateTimeFormat(i18n.language, {
-      month: 'short',
-    })
     for (let w = 0; w < weeksCount; w++) {
       const weekDates = allDates.slice(w * 7, w * 7 + 7)
       const monthStart = weekDates.find((dateStr) => {
-        return dayjs(dateStr).date() === 1
+        return new Date(dateStr).getDate() === 1
       })
       if (monthStart) {
-        labels.push(monthFormatter.format(dayjs(monthStart).toDate()))
+        labels.push(
+          new Date(monthStart).toLocaleString('default', { month: 'short' })
+        )
       } else {
         labels.push(null)
       }
@@ -183,7 +145,7 @@ export function UserHeatmap() {
       hasActivity: nonZeroValues.length > 0,
       monthLabels: labels,
     }
-  }, [data, i18n.language])
+  }, [data])
 
   if (loading) {
     return (
@@ -210,10 +172,17 @@ export function UserHeatmap() {
       </div>
       <div className='px-4 py-3 sm:px-5'>
         <div className='flex gap-2'>
-          <UserHeatmapDayLabels />
+          <div className='flex flex-col gap-[3px] pt-5 text-[10px] text-muted-foreground'>
+            <span className='flex h-[11px] items-center'>Mon</span>
+            <span className='h-[11px]' />
+            <span className='flex h-[11px] items-center'>Wed</span>
+            <span className='h-[11px]' />
+            <span className='flex h-[11px] items-center'>Fri</span>
+            <span className='h-[11px]' />
+          </div>
           <div className='overflow-x-auto'>
             <div className='min-w-max'>
-              <div className='text-muted-foreground mb-1 flex gap-[3px] text-[10px]'>
+              <div className='mb-1 flex gap-[3px] text-[10px] text-muted-foreground'>
                 {monthLabels.map((label, i) => (
                   <span
                     key={i}
@@ -232,7 +201,7 @@ export function UserHeatmap() {
                       key={date}
                       className='h-[11px] w-[11px] rounded-sm'
                       style={{ backgroundColor: bg }}
-                      title={`${date}: ${tokens.toLocaleString()} ${t('tokens')}`}
+                      title={`${date}: ${tokens.toLocaleString()} tokens`}
                     />
                   )
                 })}
@@ -241,7 +210,7 @@ export function UserHeatmap() {
           </div>
         </div>
         {!hasActivity && (
-          <p className='text-muted-foreground mt-3 text-center text-xs'>
+          <p className='mt-3 text-center text-xs text-muted-foreground'>
             {t('dashboard.models.noActivityYet')}
           </p>
         )}

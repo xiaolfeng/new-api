@@ -34,7 +34,7 @@ func TestTextResponseConversion(t *testing.T) {
 		},
 	}
 
-	resp, usage, err := ChatCompletionsResponseToResponsesResponse(chatResp, nil, "resp_test123")
+	resp, usage, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_test123")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestToolCallResponseConversion(t *testing.T) {
 		},
 	}
 
-	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, nil, "resp_tool_test")
+	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_tool_test")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestUsageMapping(t *testing.T) {
 		},
 	}
 
-	_, usage, err := ChatCompletionsResponseToResponsesResponse(chatResp, nil, "resp_usage")
+	_, usage, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_usage")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -231,7 +231,7 @@ func TestIDGeneration(t *testing.T) {
 		Usage: dto.Usage{},
 	}
 
-	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, nil, "resp_idtest")
+	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_idtest")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -279,7 +279,7 @@ func TestIDGeneration(t *testing.T) {
 		Usage: dto.Usage{},
 	}
 
-	resp2, _, err := ChatCompletionsResponseToResponsesResponse(chatResp2, nil, "resp_fctest")
+	resp2, _, err := ChatCompletionsResponseToResponsesResponse(chatResp2, "resp_fctest")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -331,7 +331,7 @@ func TestEchoFields(t *testing.T) {
 		Usage: dto.Usage{},
 	}
 
-	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, origReq, "resp_echo")
+	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_echo")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -387,7 +387,7 @@ func TestIncompleteResponse(t *testing.T) {
 		Usage: dto.Usage{},
 	}
 
-	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, nil, "resp_inc")
+	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_inc")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -398,8 +398,8 @@ func TestIncompleteResponse(t *testing.T) {
 	if resp.IncompleteDetails == nil {
 		t.Fatal("expected IncompleteDetails to be non-nil")
 	}
-	if resp.IncompleteDetails.Reasoning != "max_output_tokens" {
-		t.Errorf("expected IncompleteDetails.Reasoning 'max_output_tokens', got %q", resp.IncompleteDetails.Reasoning)
+	if resp.IncompleteDetails.Reason != "max_output_tokens" {
+		t.Errorf("expected IncompleteDetails.Reason 'max_output_tokens', got %q", resp.IncompleteDetails.Reason)
 	}
 }
 
@@ -464,7 +464,7 @@ func TestEmptyResponse(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			resp, _, err := ChatCompletionsResponseToResponsesResponse(tt.chatResp, nil, "resp_empty")
+			resp, _, err := ChatCompletionsResponseToResponsesResponse(tt.chatResp, "resp_empty")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -484,7 +484,7 @@ func TestEmptyResponse(t *testing.T) {
 
 // TestNilChatResponse verifies that a nil chat response returns an error.
 func TestNilChatResponse(t *testing.T) {
-	resp, usage, err := ChatCompletionsResponseToResponsesResponse(nil, nil, "resp_nil")
+	resp, usage, err := ChatCompletionsResponseToResponsesResponse(nil, "resp_nil")
 	if err == nil {
 		t.Fatal("expected error for nil chat response")
 	}
@@ -533,7 +533,7 @@ func TestToolCallWithText(t *testing.T) {
 		},
 	}
 
-	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, nil, "resp_mixed")
+	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_mixed")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -600,7 +600,7 @@ func TestMultipleToolCalls(t *testing.T) {
 		Usage: dto.Usage{},
 	}
 
-	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, nil, "resp_multi")
+	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_multi")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -675,7 +675,7 @@ func TestCreatedField(t *testing.T) {
 				Usage: dto.Usage{},
 			}
 
-			resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, nil, "resp_created")
+			resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_created")
 			if err != nil {
 				t.Fatalf("unexpected error: %v", err)
 			}
@@ -713,7 +713,7 @@ func TestReasoningEcho(t *testing.T) {
 		Usage: dto.Usage{},
 	}
 
-	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, origReq, "resp_reasoning")
+	resp, _, err := ChatCompletionsResponseToResponsesResponse(chatResp, "resp_reasoning")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

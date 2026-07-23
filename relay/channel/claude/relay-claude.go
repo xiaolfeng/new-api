@@ -16,6 +16,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relay/reasonmap"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/service/relayconvert"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/types"
@@ -721,7 +722,7 @@ func buildOpenAIStyleUsageFromClaudeUsage(usage *dto.Usage) dto.Usage {
 		return dto.Usage{}
 	}
 	clone := *usage
-	clone.ClaudeCacheCreation5mTokens, clone.ClaudeCacheCreation1hTokens = service.NormalizeCacheCreationSplit(
+	clone.ClaudeCacheCreation5mTokens, clone.ClaudeCacheCreation1hTokens = relayconvert.NormalizeCacheCreationSplit(
 		usage.PromptTokensDetails.CachedCreationTokens,
 		usage.ClaudeCacheCreation5mTokens,
 		usage.ClaudeCacheCreation1hTokens,
@@ -764,7 +765,7 @@ func buildMessageDeltaPatchUsage(claudeResponse *dto.ClaudeResponse, claudeInfo 
 		cacheCreation5m = claudeInfo.Usage.ClaudeCacheCreation5mTokens
 		cacheCreation1h = claudeInfo.Usage.ClaudeCacheCreation1hTokens
 	}
-	cacheCreation5m, cacheCreation1h = service.NormalizeCacheCreationSplit(
+	cacheCreation5m, cacheCreation1h = relayconvert.NormalizeCacheCreationSplit(
 		usage.CacheCreationInputTokens,
 		cacheCreation5m,
 		cacheCreation1h,
