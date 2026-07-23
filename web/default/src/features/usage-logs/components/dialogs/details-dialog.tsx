@@ -534,6 +534,12 @@ function StructuredLogContent(props: {
   const hasToolUses = sections.toolUses.length > 0
   const hasRequestBlocks = sections.requestBlocks.length > 0
   const hasToolResponses = sections.toolResponses.length > 0
+  const hasHeaders = Object.keys(sections.headers).length > 0
+
+  const headersJson = useMemo(
+    () => JSON.stringify(sections.headers, null, 2),
+    [sections.headers]
+  )
 
   const copyAllText = JSON.stringify(
     {
@@ -547,6 +553,47 @@ function StructuredLogContent(props: {
 
   return (
     <div className='space-y-2.5'>
+      {hasHeaders && (
+        <DetailSection
+          icon={<FileText className='size-3.5' aria-hidden='true' />}
+          label={t('Request Headers')}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() => copyToClipboard(headersJson)}
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText === headersJson ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <div className='max-h-64 overflow-y-auto pr-5'>
+              <dl className='space-y-1'>
+                {Object.entries(sections.headers).map(([key, value]) => (
+                  <div
+                    key={key}
+                    className='flex items-start gap-2 border-b border-dashed border-border/40 pb-1 last:border-0 last:pb-0'
+                  >
+                    <dt className='text-muted-foreground w-1/3 shrink-0 break-all font-mono text-[11px] font-semibold'>
+                      {key}
+                    </dt>
+                    <dd className='min-w-0 flex-1 break-all font-mono text-[11px] leading-relaxed'>
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </div>
+        </DetailSection>
+      )}
+
       {hasRequestBlocks && (
         <DetailSection
           icon={<ArrowDownToLine className='size-3.5' aria-hidden='true' />}

@@ -184,6 +184,9 @@ export interface ParsedSections {
   /** Tool calls issued by the model */
   toolUses: ToolUseRow[]
 
+  /** Request headers (sensitive-filtered, raw passthrough) */
+  headers: Record<string, string>
+
   /** Bamboo debug info from relay */
   bambooDebug: BambooDebugRecord | null
 }
@@ -274,6 +277,15 @@ function deriveResponsesRequestDataFromPromptInput(promptInput: unknown): {
 export function parseLogDetailRecord(
   record: LogDetailRecord | null
 ): ParsedSections {
+  const rawHeaders =
+    record?.headers && typeof record.headers === 'object'
+      ? record.headers
+      : {}
+  const headers: Record<string, string> = {}
+  for (const [key, value] of Object.entries(rawHeaders)) {
+    headers[key] = typeof value === 'string' ? value : String(value)
+  }
+
   const empty: ParsedSections = {
     format: 'none',
     requestBlocks: [],
@@ -281,6 +293,7 @@ export function parseLogDetailRecord(
     thinking: '',
     answer: '',
     toolUses: [],
+    headers,
     bambooDebug: null,
   }
 
@@ -347,6 +360,7 @@ export function parseLogDetailRecord(
       thinking: thinkingParts.join('\n\n'),
       answer: answerParts.join('\n\n'),
       toolUses,
+      headers,
       bambooDebug,
     }
   }
@@ -405,6 +419,7 @@ export function parseLogDetailRecord(
       thinking: thinkingParts.join('\n\n'),
       answer: answerParts.join('\n\n'),
       toolUses,
+      headers,
       bambooDebug,
     }
   }
@@ -469,6 +484,7 @@ export function parseLogDetailRecord(
       thinking: thinkingParts.join('\n\n'),
       answer: answerParts.join('\n\n'),
       toolUses,
+      headers,
       bambooDebug,
     }
   }
@@ -540,6 +556,7 @@ export function parseLogDetailRecord(
       thinking: '',
       answer: answerParts.join('\n\n'),
       toolUses,
+      headers,
       bambooDebug,
     }
   }
@@ -551,12 +568,14 @@ export function parseLogDetailRecord(
  * Returns true when the parsed sections contain any meaningful structured data.
  */
 export function hasStructuredData(sections: ParsedSections): boolean {
+  const hasHeaders = Object.keys(sections.headers).length > 0
   return (
-    sections.format !== 'none' &&
-    (sections.requestBlocks.length > 0 ||
-      sections.toolResponses.length > 0 ||
-      sections.thinking.trim() !== '' ||
-      sections.answer.trim() !== '' ||
-      sections.toolUses.length > 0)
+    hasHeaders ||
+    (sections.format !== 'none' &&
+      (sections.requestBlocks.length > 0 ||
+        sections.toolResponses.length > 0 ||
+        sections.thinking.trim() !== '' ||
+        sections.answer.trim() !== '' ||
+        sections.toolUses.length > 0))
   )
 }
