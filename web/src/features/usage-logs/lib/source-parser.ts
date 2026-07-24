@@ -35,6 +35,8 @@ export function parseClientSource(userAgent: string): ParsedSource {
     return { name: 'Roo Code', color: getSourceColor('Roo Code') }
   if (ua.includes('opencode/') || ua.includes('crush/'))
     return { name: 'OpenCode', color: getSourceColor('OpenCode') }
+  if (ua.includes('zcode/'))
+    return { name: 'ZCode', color: getSourceColor('ZCode') }
   if (ua.includes('aider/') || ua.includes('litellm/'))
     return { name: 'Aider', color: getSourceColor('Aider') }
   if (

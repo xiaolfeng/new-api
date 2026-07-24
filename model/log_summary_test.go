@@ -252,6 +252,54 @@ func TestExtractLogDetailSummariesWithGenericSessionPriority(t *testing.T) {
 	require.Equal(t, "parent-session", parentSessionId)
 }
 
+func TestParseClientSourceZCode(t *testing.T) {
+	source := parseClientSource("ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24")
+	require.Equal(t, "ZCode", source)
+}
+
+func TestIsDeveloperToolLogSourceZCode(t *testing.T) {
+	require.True(t, IsDeveloperToolLogSource("ZCode"))
+}
+
+func TestExtractLogDetailSummariesWithZCodeSubAgentSession(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":        "ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24",
+			"X-Zcode-Trace-Id":  "trace_abc123",
+			"X-Session-Id":      "sess_def456",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "ZCode SubAgent 请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, agentId, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "ZCode", source)
+	require.Empty(t, agentId)
+	require.Equal(t, "sess_def456", sessionId)
+	require.Equal(t, "trace_abc123", parentSessionId)
+}
+
+func TestExtractLogDetailSummariesWithZCodeMainThreadSession(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":        "ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24",
+			"X-Zcode-Trace-Id":  "trace_main_thread",
+			"X-Session-Id":      "sess_main_thread",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "ZCode 主线程请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "ZCode", source)
+	require.Equal(t, "sess_main_thread", sessionId)
+	require.Equal(t, "trace_main_thread", parentSessionId)
+}
+
 func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 	tests := []struct {
 		name           string

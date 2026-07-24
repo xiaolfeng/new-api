@@ -63,13 +63,13 @@ func ExtractLogDetailSummaries(record string) (string, string, string, string, s
 
 	source := parseClientSourceFromHeaders(detailRecord.Headers)
 	interactionType := parseInteractionTypeFromDetailRecord(&detailRecord)
-	agentId, sessionId, parentSessionId := parseAgentSessionFromHeaders(detailRecord.Headers)
+	agentId, sessionId, parentSessionId := parseAgentSessionFromHeaders(detailRecord.Headers, source)
 	return source, interactionType, agentId, sessionId, parentSessionId
 }
 
 func IsDeveloperToolLogSource(source string) bool {
 	switch strings.TrimSpace(source) {
-	case "Claude Code", "Codex", "OpenCode":
+	case "Claude Code", "Codex", "OpenCode", "ZCode":
 		return true
 	default:
 		return false
@@ -93,9 +93,15 @@ func parseClientSourceFromHeaders(headers map[string]string) string {
 	return parseClientSource(userAgent)
 }
 
-func parseAgentSessionFromHeaders(headers map[string]string) (agentId, sessionId, parentSessionId string) {
+func parseAgentSessionFromHeaders(headers map[string]string, source string) (agentId, sessionId, parentSessionId string) {
 	if len(headers) == 0 {
 		return "", "", ""
+	}
+	// ZCode: X-Zcode-Trace-Id 是主线程（主会话），X-Session-Id 是当前运行 Agent 的会话。
+	if source == "ZCode" {
+		parentSessionId = getHeaderIgnoreCase(headers, "X-Zcode-Trace-Id")
+		sessionId = getHeaderIgnoreCase(headers, "X-Session-Id")
+		return "", sessionId, parentSessionId
 	}
 	// OpenCode headers (highest priority)
 	sessionId = getHeaderIgnoreCase(headers, "X-Session-Affinity")
@@ -150,6 +156,8 @@ func parseClientSource(userAgent string) string {
 		return "Roo Code"
 	case strings.Contains(ua, "opencode/"), strings.Contains(ua, "crush/"):
 		return "OpenCode"
+	case strings.Contains(ua, "zcode/"):
+		return "ZCode"
 	case strings.Contains(ua, "aider/"), strings.Contains(ua, "litellm/"):
 		return "Aider"
 	case strings.Contains(ua, "amazon-q"), strings.Contains(ua, "amazonq"), strings.Contains(ua, "q-developer"):
