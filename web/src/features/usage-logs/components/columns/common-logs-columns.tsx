@@ -17,7 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { type ColumnDef } from '@tanstack/react-table'
-import { CircleAlert, GitBranch, Sparkles, KeyRound } from 'lucide-react'
+import { GitBranch, Sparkles, KeyRound } from 'lucide-react'
 import { useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -40,7 +40,6 @@ import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import {
-  formatUseTime,
   formatLogQuota,
   formatTimestampToDate,
 } from '@/lib/format'
@@ -55,8 +54,6 @@ import {
   parseLogOther,
   isViolationFeeLog,
   renderAuditContent,
-  getFirstResponseTimeColor,
-  getResponseTimeColor,
 } from '../../lib/format'
 import {
   parseInteractionType,
@@ -928,187 +925,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     },
 
     {
-      accessorKey: 'use_time',
-      header: t('Timing'),
-      cell: ({ row }) => {
-        const log = row.original
-        if (!isTimingLogType(log.type)) return null
-
-        const useTime = row.getValue('use_time') as number
-        const other = parseLogOther(log.other)
-        const frt = other?.frt
-        const timeVariant = getResponseTimeColor(useTime, log.completion_tokens)
-
-        const timingBgMap: Record<string, string> = {
-          success:
-            'border border-emerald-200/40 bg-emerald-50/35 !text-emerald-600 dark:border-emerald-900/40 dark:bg-emerald-950/15 dark:!text-emerald-400',
-          warning:
-            'border border-amber-200/45 bg-amber-50/35 !text-amber-600 dark:border-amber-900/40 dark:bg-amber-950/15 dark:!text-amber-400',
-          danger:
-            'border border-rose-200/50 bg-rose-50/35 !text-red-600 dark:border-rose-900/40 dark:bg-rose-950/15 dark:!text-red-400',
-          neutral:
-            'border border-border/60 bg-muted/30 dark:border-border/40 dark:bg-muted/20',
-        }
-
-        const bt = other?.bamboo_timing
-        const ttftMs =
-          typeof bt?.ttft_ms === 'number' && bt.ttft_ms > 0
-            ? bt.ttft_ms
-            : typeof frt === 'number'
-              ? frt
-              : null
-
-        const thinkingMs =
-          typeof bt?.thinking_ms === 'number' && bt.thinking_ms > 0
-            ? bt.thinking_ms
-            : null
-        const contentMs =
-          typeof bt?.content_ms === 'number' && bt.content_ms > 0
-            ? bt.content_ms
-            : null
-        const toolMs =
-          typeof bt?.tool_ms === 'number' && bt.tool_ms > 0 ? bt.tool_ms : null
-        const hasPhaseTiming =
-          thinkingMs != null || contentMs != null || toolMs != null
-
-        const ttftBadge = log.is_stream ? (
-          ttftMs != null && ttftMs > 0 ? (
-            <StatusBadge
-              label={formatUseTime(ttftMs / 1000)}
-              variant={
-                getFirstResponseTimeColor(
-                  ttftMs / 1000
-                ) as StatusBadgeProps['variant']
-              }
-              size='sm'
-              showDot={false}
-              copyable={false}
-              className={cn(
-                'rounded-md font-mono',
-                timingBgMap[getFirstResponseTimeColor(ttftMs / 1000)]
-              )}
-            />
-          ) : (
-            <StatusBadge
-              label='N/A'
-              variant='neutral'
-              size='sm'
-              showDot={false}
-              copyable={false}
-              className={cn('rounded-md font-mono', timingBgMap.neutral)}
-            />
-          )
-        ) : null
-
-        const totalBadge = (
-          <StatusBadge
-            label={formatUseTime(useTime)}
-            variant={timeVariant as StatusBadgeProps['variant']}
-            size='sm'
-            copyable={false}
-            className={cn('rounded-md font-mono', timingBgMap[timeVariant])}
-          />
-        )
-
-        return (
-          <div className='flex flex-col gap-1'>
-            {hasPhaseTiming ? (
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <div className='flex items-center gap-1.5'>
-                        {totalBadge}
-                        {ttftBadge}
-                      </div>
-                    }
-                  ></TooltipTrigger>
-                  <TooltipContent side='bottom' className='max-w-[220px] p-2'>
-                    <div className='space-y-1 text-xs'>
-                      {thinkingMs != null && (
-                        <div className='flex items-center gap-1.5'>
-                          <span className='text-violet-500 dark:text-violet-400'>
-                            ◆
-                          </span>
-                          <span className='text-muted-foreground'>
-                            {t('Thinking')}
-                          </span>
-                          <span className='ml-auto font-mono text-violet-600 tabular-nums dark:text-violet-400'>
-                            {(thinkingMs / 1000).toFixed(2)}s
-                          </span>
-                        </div>
-                      )}
-                      {contentMs != null && (
-                        <div className='flex items-center gap-1.5'>
-                          <span className='text-sky-500 dark:text-sky-400'>
-                            ◆
-                          </span>
-                          <span className='text-muted-foreground'>
-                            {t('Output')}
-                          </span>
-                          <span className='ml-auto font-mono text-sky-600 tabular-nums dark:text-sky-400'>
-                            {(contentMs / 1000).toFixed(2)}s
-                          </span>
-                        </div>
-                      )}
-                      {toolMs != null && (
-                        <div className='flex items-center gap-1.5'>
-                          <span className='text-amber-500 dark:text-amber-400'>
-                            ◆
-                          </span>
-                          <span className='text-muted-foreground'>
-                            {t('Tool')}
-                          </span>
-                          <span className='ml-auto font-mono text-amber-600 tabular-nums dark:text-amber-400'>
-                            {(toolMs / 1000).toFixed(2)}s
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-            ) : (
-              <div className='flex items-center gap-1.5'>
-                {totalBadge}
-                {ttftBadge}
-              </div>
-            )}
-            {log.is_stream &&
-              other?.stream_status &&
-              other.stream_status.status !== 'ok' && (
-                <div className='flex items-center gap-1 [font-family:var(--font-body)] !text-xs leading-none'>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger
-                        render={
-                          <CircleAlert className='size-3 shrink-0 text-red-500' />
-                        }
-                      ></TooltipTrigger>
-                      <TooltipContent>
-                        <div className='space-y-0.5 text-xs'>
-                          <p>
-                            {t('Stream Status')}: {t('Error')}
-                          </p>
-                          <p>{other.stream_status.end_reason || 'unknown'}</p>
-                          {(other.stream_status.error_count ?? 0) > 0 && (
-                            <p>
-                              {t('Soft Errors')}:{' '}
-                              {other.stream_status.error_count}
-                            </p>
-                          )}
-                        </div>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
-              )}
-          </div>
-        )
-      },
-      size: 110,
-    },
-    {
       accessorKey: 'prompt_tokens',
       header: 'Tokens',
       cell: ({ row }) => {
@@ -1325,6 +1141,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
+        const bt = other?.bamboo_timing
 
         return (
           <TimingMetricsCell
@@ -1332,9 +1149,28 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             completionTokens={log.completion_tokens}
             frtMs={other?.frt}
             isStream={log.is_stream}
+            phaseTiming={
+              bt
+                ? {
+                    thinkingMs:
+                      typeof bt.thinking_ms === 'number' && bt.thinking_ms > 0
+                        ? bt.thinking_ms
+                        : null,
+                    contentMs:
+                      typeof bt.content_ms === 'number' && bt.content_ms > 0
+                        ? bt.content_ms
+                        : null,
+                    toolMs:
+                      typeof bt.tool_ms === 'number' && bt.tool_ms > 0
+                        ? bt.tool_ms
+                        : null,
+                  }
+                : undefined
+            }
           />
         )
       },
+      size: 110,
     },
 
     {

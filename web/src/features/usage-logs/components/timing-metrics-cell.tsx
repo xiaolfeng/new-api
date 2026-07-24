@@ -50,6 +50,12 @@ const barColorMap: Record<StatusVariant, string> = {
   neutral: 'bg-neutral/80',
 }
 
+interface PhaseTiming {
+  thinkingMs?: number | null
+  contentMs?: number | null
+  toolMs?: number | null
+}
+
 interface TimingMetricsCellProps {
   useTimeSec: number
   completionTokens: number
@@ -63,6 +69,13 @@ interface TimingMetricsCellProps {
    * indicator used elsewhere on the mobile card.
    */
   indicator?: 'bar' | 'dot'
+  /**
+   * Optional per-phase breakdown (thinking / output / tool) sourced from
+   * `other.bamboo_timing`. When any segment is present the cell is wrapped in
+   * a tooltip revealing the phase durations, preserving the detail that the
+   * legacy inline Timing column used to show inline.
+   */
+  phaseTiming?: PhaseTiming
 }
 
 export function TimingMetricsCell(props: TimingMetricsCellProps) {
@@ -82,6 +95,21 @@ export function TimingMetricsCell(props: TimingMetricsCellProps) {
   const firstTokenLabel =
     firstTokenSeconds == null ? t('N/A') : formatUseTime(firstTokenSeconds)
   const totalTimeLabel = formatUseTime(props.useTimeSec)
+
+  const phase = props.phaseTiming
+  const thinkingMs =
+    typeof phase?.thinkingMs === 'number' && phase.thinkingMs > 0
+      ? phase.thinkingMs
+      : null
+  const contentMs =
+    typeof phase?.contentMs === 'number' && phase.contentMs > 0
+      ? phase.contentMs
+      : null
+  const toolMs =
+    typeof phase?.toolMs === 'number' && phase.toolMs > 0
+      ? phase.toolMs
+      : null
+  const hasPhaseTiming = thinkingMs != null || contentMs != null || toolMs != null
 
   const labels = (
     <div className='flex min-h-8 min-w-0 flex-col justify-center gap-0.5 text-xs leading-tight'>
@@ -123,12 +151,25 @@ export function TimingMetricsCell(props: TimingMetricsCellProps) {
   )
 
   if (indicator === 'dot') {
-    return (
+    const cell = (
       <div className={cn('flex items-stretch', props.className)}>{labels}</div>
+    )
+    if (!hasPhaseTiming) return cell
+    return (
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger render={cell} />
+          <PhaseTimingTooltipContent
+            thinkingMs={thinkingMs}
+            contentMs={contentMs}
+            toolMs={toolMs}
+          />
+        </Tooltip>
+      </TooltipProvider>
     )
   }
 
-  return (
+  const cell = (
     <div className={cn('flex items-stretch gap-2', props.className)}>
       <span
         aria-hidden
@@ -146,6 +187,70 @@ export function TimingMetricsCell(props: TimingMetricsCellProps) {
       </span>
       {labels}
     </div>
+  )
+  if (!hasPhaseTiming) return cell
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger render={cell} />
+        <PhaseTimingTooltipContent
+          thinkingMs={thinkingMs}
+          contentMs={contentMs}
+          toolMs={toolMs}
+        />
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+/**
+ * Phase breakdown tooltip body. Mirrors the inline layout the legacy Timing
+ * column used to render directly inside its cell — violet / sky / amber dots
+ * keyed to thinking / output / tool — so the detail survives the move into
+ * the shared `TimingMetricsCell` component.
+ */
+function PhaseTimingTooltipContent({
+  thinkingMs,
+  contentMs,
+  toolMs,
+}: {
+  thinkingMs: number | null
+  contentMs: number | null
+  toolMs: number | null
+}) {
+  const { t } = useTranslation()
+  return (
+    <TooltipContent side='bottom' className='max-w-[220px] p-2'>
+      <div className='space-y-1 text-xs'>
+        {thinkingMs != null && (
+          <div className='flex items-center gap-1.5'>
+            <span className='text-violet-500 dark:text-violet-400'>◆</span>
+            <span className='text-muted-foreground'>{t('Thinking')}</span>
+            <span className='ml-auto font-mono text-violet-600 tabular-nums dark:text-violet-400'>
+              {(thinkingMs / 1000).toFixed(2)}s
+            </span>
+          </div>
+        )}
+        {contentMs != null && (
+          <div className='flex items-center gap-1.5'>
+            <span className='text-sky-500 dark:text-sky-400'>◆</span>
+            <span className='text-muted-foreground'>{t('Output')}</span>
+            <span className='ml-auto font-mono text-sky-600 tabular-nums dark:text-sky-400'>
+              {(contentMs / 1000).toFixed(2)}s
+            </span>
+          </div>
+        )}
+        {toolMs != null && (
+          <div className='flex items-center gap-1.5'>
+            <span className='text-amber-500 dark:text-amber-400'>◆</span>
+            <span className='text-muted-foreground'>{t('Tool')}</span>
+            <span className='ml-auto font-mono text-amber-600 tabular-nums dark:text-amber-400'>
+              {(toolMs / 1000).toFixed(2)}s
+            </span>
+          </div>
+        )}
+      </div>
+    </TooltipContent>
   )
 }
 
