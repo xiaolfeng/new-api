@@ -3,12 +3,15 @@ import { useTranslation } from 'react-i18next'
 
 import { api } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
+import { toIntlLocale } from '@/i18n/languages'
 
 import type { TokenRecordDailyItem } from '../types'
 
 interface DayCell {
   date: string
   tokens: number
+  promptTokens: number
+  completionTokens: number
   level: number
 }
 
@@ -45,6 +48,12 @@ export function TokenHeatmap() {
   const { t, i18n } = useTranslation()
   const [data, setData] = useState<TokenRecordDailyItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [hovered, setHovered] = useState<DayCell | null>(null)
+  const [tooltipPos, setTooltipPos] = useState<{
+    x: number
+    y: number
+    showBelow: boolean
+  } | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -76,6 +85,11 @@ export function TokenHeatmap() {
     }
   }, [])
 
+  const totalTokens = useMemo(
+    () => data.reduce((sum, item) => sum + (item.total_tokens || 0), 0),
+    [data]
+  )
+
   const { weeks, monthLabels } = useMemo(() => {
     const dataMap = new Map<string, TokenRecordDailyItem>()
     data.forEach((item) => {
@@ -97,7 +111,7 @@ export function TokenHeatmap() {
     const weeks: DayCell[][] = []
     const seenMonths = new Set<string>()
     const monthLabels: { weekIndex: number; month: string }[] = []
-    const monthFormatter = new Intl.DateTimeFormat(i18n.language, {
+    const monthFormatter = new Intl.DateTimeFormat(toIntlLocale(i18n.language), {
       month: 'short',
     })
 
@@ -107,11 +121,13 @@ export function TokenHeatmap() {
         const d = new Date(startDate)
         d.setDate(d.getDate() + week * 7 + day)
         const dateStr = dayjs(d).format('YYYY-MM-DD')
-        const tokens = dataMap.get(dateStr)?.total_tokens || 0
-
+        const record = dataMap.get(dateStr)
+        const tokens = record?.total_tokens || 0
         days.push({
           date: dateStr,
           tokens,
+          promptTokens: record?.prompt_tokens || 0,
+          completionTokens: record?.completion_tokens || 0,
           level: getLevel(tokens, thresholds),
         })
       }
@@ -146,6 +162,36 @@ export function TokenHeatmap() {
     return { weeks, monthLabels }
   }, [data, i18n.language])
 
+  // Generate localized short weekday names (Mon, Wed, Fri equivalents)
+  const weekdayFormatter = new Intl.DateTimeFormat(toIntlLocale(i18n.language), {
+    weekday: 'short',
+  })
+  const monLabel = weekdayFormatter.format(new Date(2024, 0, 1)) // Jan 1, 2024 = Monday
+  const wedLabel = weekdayFormatter.format(new Date(2024, 0, 3)) // Jan 3, 2024 = Wednesday
+  const friLabel = weekdayFormatter.format(new Date(2024, 0, 5)) // Jan 5, 2024 = Friday
+
+  const hasActivity = data.some((item) => item.total_tokens > 0)
+
+  // Localized long date for tooltip header (e.g. "July 25, 2026" / "2026年7月25日")
+  const longDateFormatter = new Intl.DateTimeFormat(
+    toIntlLocale(i18n.language),
+    { year: 'numeric', month: 'long', day: 'numeric' }
+  )
+  const formatLongDate = (dateStr: string) => {
+    const d = dayjs(dateStr).toDate()
+    return Number.isNaN(d.getTime()) ? dateStr : longDateFormatter.format(d)
+  }
+
+  const handleCellEnter = (day: DayCell, e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = e.currentTarget.getBoundingClientRect()
+    setHovered(day)
+    setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top, showBelow: rect.top < 120 })
+  }
+  const handleCellLeave = () => {
+    setHovered(null)
+    setTooltipPos(null)
+  }
+
   if (loading) {
     return (
       <div
@@ -158,34 +204,35 @@ export function TokenHeatmap() {
     )
   }
 
-  // Generate localized short weekday names (Mon, Wed, Fri equivalents)
-  const weekdayFormatter = new Intl.DateTimeFormat(i18n.language, {
-    weekday: 'short',
-  })
-  const monLabel = weekdayFormatter.format(new Date(2024, 0, 1)) // Jan 1, 2024 = Monday
-  const wedLabel = weekdayFormatter.format(new Date(2024, 0, 3)) // Jan 3, 2024 = Wednesday
-  const friLabel = weekdayFormatter.format(new Date(2024, 0, 5)) // Jan 5, 2024 = Friday
-
-  const hasActivity = data.some((item) => item.total_tokens > 0)
-
   return (
-    <div className='bg-card rounded-lg border p-4'>
-      <h3 className='mb-3 text-sm font-medium'>{t('Token Usage Heatmap')}</h3>
+    <div className='bg-card rounded-lg border p-4 sm:p-5'>
+      <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
+        <div className='flex items-baseline gap-2'>
+          <h3 className='text-sm font-medium'>{t('Token Usage Heatmap')}</h3>
+          <span className='text-muted-foreground text-xs'>
+            {totalTokens.toLocaleString()} {t('tokens')}
+          </span>
+        </div>
+        <div className='text-muted-foreground flex items-center gap-1.5 text-[10px]'>
+          <span>{t('Less')}</span>
+          {HEATMAP_COLORS.map((c, i) => (
+            <div
+              key={i}
+              className={`h-[10px] w-[10px] rounded-[3px] ${c}`}
+            />
+          ))}
+          <span>{t('More')}</span>
+        </div>
+      </div>
 
       <div className='flex items-start'>
-        <div className='text-muted-foreground flex flex-col gap-[3px] pt-5 pr-2 text-[10px]'>
-          <span className='flex h-[11px] items-center leading-[11px]'>
-            {monLabel}
-          </span>
-          <span className='h-[11px]' />
-          <span className='flex h-[11px] items-center leading-[11px]'>
-            {wedLabel}
-          </span>
-          <span className='h-[11px]' />
-          <span className='flex h-[11px] items-center leading-[11px]'>
-            {friLabel}
-          </span>
-          <span className='h-[11px]' />
+        <div className='text-muted-foreground flex flex-col gap-[3px] pt-[18px] pr-2 text-[10px] leading-none'>
+          <span className='flex h-[12px] items-center'>{monLabel}</span>
+          <span className='h-[12px]' />
+          <span className='flex h-[12px] items-center'>{wedLabel}</span>
+          <span className='h-[12px]' />
+          <span className='flex h-[12px] items-center'>{friLabel}</span>
+          <span className='h-[12px]' />
         </div>
 
         <div className='overflow-x-auto'>
@@ -195,7 +242,7 @@ export function TokenHeatmap() {
               return (
                 <div
                   key={i}
-                  className='text-muted-foreground relative w-[11px] text-[10px] leading-[11px]'
+                  className='text-muted-foreground relative w-[12px] text-[10px] leading-[12px]'
                 >
                   {label && (
                     <span className='absolute left-0 whitespace-nowrap'>
@@ -214,17 +261,63 @@ export function TokenHeatmap() {
             {weeks.flat().map((day, i) => (
               <div
                 key={i}
-                className={`h-[11px] w-[11px] rounded-sm ${HEATMAP_COLORS[day.level]}`}
-                title={`${day.date}: ${day.tokens.toLocaleString()} ${t('tokens')}`}
+                className={`relative h-[12px] w-[12px] rounded-[3px] transition-[outline] duration-150 hover:z-10 hover:outline-1 hover:outline-foreground/40 ${HEATMAP_COLORS[day.level]}`}
+                role='gridcell'
+                aria-label={`${day.date}: ${day.tokens.toLocaleString()} ${t('tokens')}`}
+                onMouseEnter={(e) => handleCellEnter(day, e)}
+                onMouseLeave={handleCellLeave}
               />
             ))}
           </div>
         </div>
       </div>
+
       {!hasActivity && (
         <p className='text-muted-foreground mt-3 text-center text-xs'>
           {t('No token usage data in this period')}
         </p>
+      )}
+
+      {hovered && tooltipPos && (
+        <div
+          role='tooltip'
+          className='bg-foreground text-background pointer-events-none fixed z-50 min-w-[160px] rounded-md px-3 py-2 text-xs shadow-lg'
+          style={{
+            left: tooltipPos.x,
+            top: tooltipPos.showBelow ? tooltipPos.y + 14 : tooltipPos.y - 10,
+            transform: tooltipPos.showBelow
+              ? 'translate(-50%, 0)'
+              : 'translate(-50%, -100%)',
+          }}
+        >
+          <div className='font-medium'>{formatLongDate(hovered.date)}</div>
+          {hovered.tokens > 0 ? (
+            <div className='mt-1.5 space-y-1'>
+              <div className='flex items-center justify-between gap-3'>
+                <span className='text-background/60'>{t('Total')}</span>
+                <span className='font-medium tabular-nums'>
+                  {hovered.tokens.toLocaleString()} {t('tokens')}
+                </span>
+              </div>
+              <div className='flex items-center justify-between gap-3'>
+                <span className='text-background/60'>{t('Prompt')}</span>
+                <span className='tabular-nums'>
+                  {hovered.promptTokens.toLocaleString()}
+                </span>
+              </div>
+              <div className='flex items-center justify-between gap-3'>
+                <span className='text-background/60'>{t('Completion')}</span>
+                <span className='tabular-nums'>
+                  {hovered.completionTokens.toLocaleString()}
+                </span>
+              </div>
+            </div>
+          ) : (
+            <div className='text-background/60 mt-1'>
+              {t('No token usage data in this period')}
+            </div>
+          )}
+        </div>
       )}
     </div>
   )
