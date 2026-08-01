@@ -61,6 +61,7 @@ type ChannelOtherSettings struct {
 	BambooUpstreamFormat                  string                `json:"bamboo_upstream_format,omitempty"`     // bamboo 灰度模式下手动指定上游协议格式
 	BambooLegacyCompat                    *bool                 `json:"bamboo_legacy_compat,omitempty"`       // bamboo 传统模式：使用 max_tokens 旧字段名而非 max_completion_tokens，不发送 reasoning_effort / parallel_tool_calls
 	BambooLegacyCacheKey                  *bool                 `json:"bamboo_legacy_cache_key,omitempty"`  // bamboo Legacy 模式下是否发送 prompt_cache_key（如 Kimi/Moonshot 支持，GLM 不支持）
+	BambooStripThinkTags                  *bool                 `json:"bamboo_strip_think_tags,omitempty"`  // bamboo 内联 think 标签剥离：将 content 中 XML 风格 think 标签包裹的推理内容转为 thinking 事件（适用于 DeepSeek-R1 早期格式、GLM、QwQ 等）
 	UpstreamModelUpdateCheckEnabled       bool                  `json:"upstream_model_update_check_enabled,omitempty"`        // 是否检测上游模型更新
 	UpstreamModelUpdateAutoSyncEnabled    bool                  `json:"upstream_model_update_auto_sync_enabled,omitempty"`    // 是否自动同步上游模型更新
 	UpstreamModelUpdateLastCheckTime      int64                 `json:"upstream_model_update_last_check_time,omitempty"`      // 上次检测时间
@@ -89,6 +90,13 @@ func (s *ChannelOtherSettings) IsBambooLegacyCacheKey() bool {
 		return false
 	}
 	return *s.BambooLegacyCacheKey
+}
+
+func (s *ChannelOtherSettings) IsBambooStripThinkTags() bool {
+	if s == nil || s.BambooStripThinkTags == nil {
+		return false
+	}
+	return *s.BambooStripThinkTags
 }
 
 const (

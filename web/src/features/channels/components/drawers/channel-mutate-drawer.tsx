@@ -4327,6 +4327,49 @@ export function ChannelMutateDrawer({
                                     )}
                                   />
                                 )}
+                                {form.watch('bamboo_upstream_format') ===
+                                  'openai' && (
+                                  <FormField
+                                    control={form.control}
+                                    name='bamboo_strip_think_tags'
+                                    render={({ field }) => (
+                                      <FormItem className='space-y-2'>
+                                        <div className='space-y-0.5'>
+                                          <FormLabel>
+                                            {t('Strip Think Tags')}
+                                          </FormLabel>
+                                          <FormDescription>
+                                            {t(
+                                              'When enabled, strips inline XML-style think tags from content and converts them to thinking events. Use for endpoints that leak reasoning as literal tags (e.g. DeepSeek-R1 early format, GLM, QwQ).'
+                                            )}
+                                          </FormDescription>
+                                        </div>
+                                        <Select
+                                          value={
+                                            field.value ? 'true' : 'false'
+                                          }
+                                          onValueChange={(v) =>
+                                            field.onChange(v === 'true')
+                                          }
+                                        >
+                                          <FormControl>
+                                            <SelectTrigger className='w-full'>
+                                              <SelectValue />
+                                            </SelectTrigger>
+                                          </FormControl>
+                                          <SelectContent>
+                                            <SelectItem value='false'>
+                                              {t('Off (Passthrough)')}
+                                            </SelectItem>
+                                            <SelectItem value='true'>
+                                              {t('On (Strip tags)')}
+                                            </SelectItem>
+                                          </SelectContent>
+                                        </Select>
+                                      </FormItem>
+                                    )}
+                                  />
+                                )}
                               </div>
                             )}
 

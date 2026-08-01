@@ -246,6 +246,7 @@ export const channelFormSchema = z
       .optional(),
     bamboo_legacy_compat: z.boolean().optional(),
     bamboo_legacy_cache_key: z.boolean().optional(),
+    bamboo_strip_think_tags: z.boolean().optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -399,6 +400,7 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   bamboo_upstream_format: 'auto',
   bamboo_legacy_compat: false,
   bamboo_legacy_cache_key: false,
+  bamboo_strip_think_tags: false,
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
@@ -467,6 +469,7 @@ export function transformChannelToFormDefaults(
     | 'responses' = 'auto'
   let bambooLegacyCompat = false
   let bambooLegacyCacheKey = false
+  let bambooStripThinkTags = false
 
   if (channel.settings) {
     try {
@@ -508,6 +511,9 @@ export function transformChannelToFormDefaults(
       }
       if (parsed.bamboo_legacy_cache_key === true) {
         bambooLegacyCacheKey = true
+      }
+      if (parsed.bamboo_strip_think_tags === true) {
+        bambooStripThinkTags = true
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -563,6 +569,7 @@ export function transformChannelToFormDefaults(
     bamboo_upstream_format: bambooUpstreamFormat,
     bamboo_legacy_compat: bambooLegacyCompat,
     bamboo_legacy_cache_key: bambooLegacyCacheKey,
+    bamboo_strip_think_tags: bambooStripThinkTags,
   }
 }
 
@@ -740,6 +747,16 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.bamboo_legacy_cache_key = true
   } else {
     delete settingsObj.bamboo_legacy_cache_key
+  }
+
+  // Bamboo strip think tags (only applies to openai upstream format / Completions provider)
+  if (
+    formData.bamboo_strip_think_tags &&
+    formData.bamboo_upstream_format === 'openai'
+  ) {
+    settingsObj.bamboo_strip_think_tags = true
+  } else {
+    delete settingsObj.bamboo_strip_think_tags
   }
 
   return JSON.stringify(settingsObj)

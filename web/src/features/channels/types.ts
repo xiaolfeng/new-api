@@ -109,6 +109,7 @@ export interface ChannelOtherSettings {
     | 'responses'
   bamboo_legacy_compat?: boolean
   bamboo_legacy_cache_key?: boolean
+  bamboo_strip_think_tags?: boolean
   upstream_model_update_check_enabled?: boolean
   upstream_model_update_auto_sync_enabled?: boolean
   upstream_model_update_ignored_models?: string[]
