@@ -85,6 +85,7 @@ import {
   type ParsedSections,
   type ToolUseRow,
 } from '../../lib/log-block-parser'
+import { parseLogSession } from '../../lib/session-parser'
 import {
   getLogTypeConfig,
   isPerCallBilling,
@@ -612,12 +613,12 @@ function StructuredLogContent(props: {
                 {Object.entries(sections.headers).map(([key, value]) => (
                   <div
                     key={key}
-                    className='flex items-start gap-2 border-b border-dashed border-border/40 pb-1 last:border-0 last:pb-0'
+                    className='border-border/40 flex items-start gap-2 border-b border-dashed pb-1 last:border-0 last:pb-0'
                   >
-                    <dt className='text-muted-foreground w-1/3 shrink-0 break-all font-mono text-[11px] font-semibold'>
+                    <dt className='text-muted-foreground w-1/3 shrink-0 font-mono text-[11px] font-semibold break-all'>
                       {key}
                     </dt>
-                    <dd className='min-w-0 flex-1 break-all font-mono text-[11px] leading-relaxed'>
+                    <dd className='min-w-0 flex-1 font-mono text-[11px] leading-relaxed break-all'>
                       {value}
                     </dd>
                   </div>
@@ -1036,6 +1037,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const canViewDeveloperToolLogs = hasDeveloperToolLogAccess()
   const fullLog = canViewDeveloperToolLogs ? (props.log.full_log ?? '') : ''
   const other = parseLogOther(props.log.other)
+  const session = parseLogSession(props.log)
   const typeConfig = getLogTypeConfig(props.log.type)
 
   const isViolation = isViolationFeeLog(other)
@@ -1271,21 +1273,25 @@ export function DetailsDialog(props: DetailsDialogProps) {
               />
             )}
 
-            {(other?.session_name ||
-              other?.agent_name ||
-              other?.parent_session_id) && (
+            {(session.sessionName ||
+              session.agentName ||
+              session.agentId ||
+              session.sessionId ||
+              session.parentSessionId) && (
               <DetailSection label={t('Session Info')}>
                 {(() => {
-                  const hasParent = !!other?.parent_session_name
+                  const hasParent =
+                    !!session.parentSessionName || !!session.parentSessionId
                   const mainSessionName = hasParent
-                    ? other.parent_session_name
-                    : other.session_name
+                    ? session.parentSessionName
+                    : session.sessionName
                   const mainSessionId = hasParent
-                    ? other.parent_session_id
-                    : other.session_id
-                  const subSessionName = hasParent ? other.session_name : null
-                  const subSessionId = hasParent ? other.session_id : null
-                  const subAgentName = other.agent_name
+                    ? session.parentSessionId
+                    : session.sessionId
+                  const subSessionName = hasParent ? session.sessionName : null
+                  const subSessionId = hasParent ? session.sessionId : null
+                  const subAgentName = session.agentName
+                  const subAgentId = session.agentId
 
                   return (
                     <>
@@ -1336,10 +1342,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
                           value={subAgentName}
                         />
                       )}
-                      {other.agent_id && (
+                      {subAgentId && (
                         <DetailRow
                           label={t('Agent ID')}
-                          value={other.agent_id}
+                          value={subAgentId}
                           mono
                         />
                       )}
@@ -1529,8 +1535,8 @@ export function DetailsDialog(props: DetailsDialogProps) {
                       </span>
                       {r.tps != null && r.tps !== 0 && (
                         <span className='text-muted-foreground/60 font-mono text-[10px] tabular-nums'>
-                          {r.tps < 0 ? '~' : ''}
-                          ({Math.abs(r.tps).toFixed(1)} t/s)
+                          {r.tps < 0 ? '~' : ''}({Math.abs(r.tps).toFixed(1)}{' '}
+                          t/s)
                         </span>
                       )}
                       {r.tokens != null && r.tokens > 0 && (

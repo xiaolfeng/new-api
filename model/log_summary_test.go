@@ -264,9 +264,9 @@ func TestIsDeveloperToolLogSourceZCode(t *testing.T) {
 func TestExtractLogDetailSummariesWithZCodeSubAgentSession(t *testing.T) {
 	recordBytes, err := common.Marshal(LogDetailRecord{
 		Headers: map[string]string{
-			"User-Agent":        "ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24",
-			"X-Zcode-Trace-Id":  "trace_abc123",
-			"X-Session-Id":      "sess_def456",
+			"User-Agent":       "ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24",
+			"X-Zcode-Trace-Id": "trace_abc123",
+			"X-Session-Id":     "sess_def456",
 		},
 		OpenAIRequestBlocks: []OpenAIRequestBlock{
 			{Type: "text", Role: "user", Text: "ZCode SubAgent 请求"},
@@ -284,9 +284,9 @@ func TestExtractLogDetailSummariesWithZCodeSubAgentSession(t *testing.T) {
 func TestExtractLogDetailSummariesWithZCodeMainThreadSession(t *testing.T) {
 	recordBytes, err := common.Marshal(LogDetailRecord{
 		Headers: map[string]string{
-			"User-Agent":        "ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24",
-			"X-Zcode-Trace-Id":  "trace_main_thread",
-			"X-Session-Id":      "sess_main_thread",
+			"User-Agent":       "ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24",
+			"X-Zcode-Trace-Id": "trace_main_thread",
+			"X-Session-Id":     "sess_main_thread",
 		},
 		OpenAIRequestBlocks: []OpenAIRequestBlock{
 			{Type: "text", Role: "user", Text: "ZCode 主线程请求"},
@@ -303,8 +303,8 @@ func TestExtractLogDetailSummariesWithZCodeMainThreadSession(t *testing.T) {
 func TestExtractLogDetailSummariesWithCodexWindowSession(t *testing.T) {
 	recordBytes, err := common.Marshal(LogDetailRecord{
 		Headers: map[string]string{
-			"User-Agent":         "codex_cli_rs/0.20.0",
-			"X-Codex-Window-Id":  "win_abc123",
+			"User-Agent":        "codex_cli_rs/0.20.0",
+			"X-Codex-Window-Id": "win_abc123",
 		},
 		OpenAIRequestBlocks: []OpenAIRequestBlock{
 			{Type: "text", Role: "user", Text: "Codex 窗口会话请求"},
@@ -337,6 +337,61 @@ func TestExtractLogDetailSummariesCodexWindowIdTakesPrecedence(t *testing.T) {
 	// Codex 分支提前返回，X-Codex-Window-Id 独占会话标识，不走通用回退链
 	require.Equal(t, "win_codex_session", sessionId)
 	require.Empty(t, parentSessionId)
+}
+
+func TestExtractLogDetailSummariesWithCodexTurnMetadataFallback(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":            "codex_cli_rs/0.20.0",
+			"X-Codex-Turn-Metadata": `{"session_id":"sess_abc","thread_id":"thread_abc","window_id":"019fbd87-1caa-7fd1-b7db-53756e002c02:0"}`,
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Codex turn metadata 兜底请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "Codex", source)
+	require.Equal(t, "019fbd87-1caa-7fd1-b7db-53756e002c02:0", sessionId)
+	require.Empty(t, parentSessionId)
+}
+
+func TestExtractLogDetailSummariesWithCodexDesktopClient(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":        "codex_vscode/0.146.0-alpha.9.2",
+			"X-Codex-Window-Id": "win_desktop",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Codex Desktop 请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "Codex", source)
+	require.Equal(t, "win_desktop", sessionId)
+	require.Empty(t, parentSessionId)
+}
+
+func TestExtractLogDetailSummariesWithCodexParentThread(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":               "codex_cli_rs/0.20.0",
+			"X-Codex-Window-Id":        "win_sub",
+			"X-Codex-Parent-Thread-Id": "thread_parent",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Codex 子线程请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "Codex", source)
+	require.Equal(t, "win_sub", sessionId)
+	require.Equal(t, "thread_parent", parentSessionId)
 }
 
 func TestInferOpenAIStructuredInteractionType(t *testing.T) {

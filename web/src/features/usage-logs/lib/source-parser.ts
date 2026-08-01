@@ -13,8 +13,16 @@ export function parseClientSource(userAgent: string): ParsedSource {
   // AI coding assistants
   if (ua.includes('claude-cli'))
     return { name: 'Claude Code', color: getSourceColor('Claude Code') }
-  if (ua.includes('codex_cli_rs') || ua.includes('codex-cli-rs'))
+  if (
+    ua.includes('codex_cli_rs') ||
+    ua.includes('codex-cli-rs') ||
+    ua.includes('codex_vscode') ||
+    ua.includes('codex-tui') ||
+    ua.includes('codex-desktop') ||
+    ua.includes('codex desktop')
+  ) {
     return { name: 'Codex', color: getSourceColor('Codex') }
+  }
   if (ua.includes('cherrystudio/'))
     return { name: 'Cherry Studio', color: getSourceColor('Cherry Studio') }
   if (ua.includes('cursor/'))

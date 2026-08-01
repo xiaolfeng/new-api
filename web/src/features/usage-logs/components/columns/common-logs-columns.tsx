@@ -39,10 +39,7 @@ import {
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import {
-  formatLogQuota,
-  formatTimestampToDate,
-} from '@/lib/format'
+import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { LOG_TYPE_ALL_VALUE } from '../../constants'
@@ -59,6 +56,7 @@ import {
   parseInteractionType,
   type InteractionType,
 } from '../../lib/interaction-parser'
+import { parseLogSession } from '../../lib/session-parser'
 import { parseClientSource } from '../../lib/source-parser'
 import {
   isDisplayableLogType,
@@ -708,24 +706,44 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
 
-        const other = parseLogOther(log.other)
-        if (
-          !other?.session_name &&
-          !other?.agent_name &&
-          !other?.parent_session_id
-        )
-          return null
+        const session = parseLogSession(log)
 
         // When parent_session_id exists, the parent is the main conversation
         // and the current session is the sub-agent/child session.
         // When no parent, session_name is the main conversation and
         // agent_name is the sub-agent.
-        const hasParent = !!other.parent_session_name
+        const hasParent =
+          !!session.parentSessionName || !!session.parentSessionId
         const mainSessionName = hasParent
-          ? other.parent_session_name
-          : other.session_name
-        const subSessionName = hasParent ? other.session_name : null
-        const subAgentName = other.agent_name
+          ? session.parentSessionName
+          : session.sessionName
+        const mainSessionId = hasParent
+          ? session.parentSessionId
+          : session.sessionId
+        const subSessionName = hasParent ? session.sessionName : null
+        const subSessionId = hasParent ? session.sessionId : null
+        const subAgentName = session.agentName
+        const subAgentId = session.agentId
+
+        if (
+          !mainSessionName &&
+          !mainSessionId &&
+          !subSessionName &&
+          !subSessionId &&
+          !subAgentName &&
+          !subAgentId
+        ) {
+          return null
+        }
+
+        const renderSessionId = (id: string) => (
+          <span
+            title={id}
+            className='text-muted-foreground/80 max-w-[10rem] truncate rounded-full border px-2 py-0.5 font-mono text-[11px]'
+          >
+            #{id.length > 16 ? `${id.slice(0, 16)}…` : id}
+          </span>
+        )
 
         return (
           <div className='flex flex-col items-start gap-0.5'>
@@ -740,14 +758,27 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
                   </span>
                 )
               })()}
+            {!mainSessionName &&
+              mainSessionId &&
+              renderSessionId(mainSessionId)}
             {subSessionName && (
               <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                 ↳ {subSessionName}
               </span>
             )}
+            {!subSessionName && subSessionId && (
+              <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
+                ↳ {renderSessionId(subSessionId)}
+              </span>
+            )}
             {subAgentName && (
               <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                 ↳ {subAgentName}
+              </span>
+            )}
+            {!subAgentName && subAgentId && (
+              <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
+                ↳ {renderSessionId(subAgentId)}
               </span>
             )}
           </div>

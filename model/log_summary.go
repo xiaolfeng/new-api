@@ -8,12 +8,12 @@ import (
 )
 
 const (
-	LogOtherClientSourceKey    = "client_source"
-	LogOtherInteractionTypeKey = "interaction_type"
-	LogOtherAgentIdKey         = "agent_id"
-	LogOtherSessionIdKey       = "session_id"
-	LogOtherAgentNameKey       = "agent_name"
-	LogOtherSessionNameKey     = "session_name"
+	LogOtherClientSourceKey      = "client_source"
+	LogOtherInteractionTypeKey   = "interaction_type"
+	LogOtherAgentIdKey           = "agent_id"
+	LogOtherSessionIdKey         = "session_id"
+	LogOtherAgentNameKey         = "agent_name"
+	LogOtherSessionNameKey       = "session_name"
 	LogOtherParentSessionIdKey   = "parent_session_id"
 	LogOtherParentSessionNameKey = "parent_session_name"
 )
@@ -103,10 +103,15 @@ func parseAgentSessionFromHeaders(headers map[string]string, source string) (age
 		sessionId = getHeaderIgnoreCase(headers, "X-Session-Id")
 		return "", sessionId, parentSessionId
 	}
-	// Codex: X-Codex-Window-Id 是 Codex CLI 的窗口级会话标识。
+	// Codex: X-Codex-Window-Id 是 Codex CLI/Desktop 的窗口级会话标识，
+	// 形如 "<thread_id>:<window_number>"；缺失时从 X-Codex-Turn-Metadata 兜底。
 	if source == "Codex" {
 		sessionId = getHeaderIgnoreCase(headers, "X-Codex-Window-Id")
-		return "", sessionId, ""
+		if sessionId == "" {
+			sessionId = parseCodexWindowIdFromTurnMetadata(headers)
+		}
+		parentSessionId = getHeaderIgnoreCase(headers, "X-Codex-Parent-Thread-Id")
+		return "", sessionId, parentSessionId
 	}
 	// OpenCode headers (highest priority)
 	sessionId = getHeaderIgnoreCase(headers, "X-Session-Affinity")
@@ -121,6 +126,23 @@ func parseAgentSessionFromHeaders(headers map[string]string, source string) (age
 	}
 	agentId = getHeaderIgnoreCase(headers, "X-Claude-Code-Agent-Id")
 	return agentId, sessionId, parentSessionId
+}
+
+// parseCodexWindowIdFromTurnMetadata 从 X-Codex-Turn-Metadata JSON 中提取 window_id。
+func parseCodexWindowIdFromTurnMetadata(headers map[string]string) string {
+	raw := getHeaderIgnoreCase(headers, "X-Codex-Turn-Metadata")
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	var metadata map[string]interface{}
+	if err := common.UnmarshalJsonStr(raw, &metadata); err != nil {
+		return ""
+	}
+	windowId, ok := metadata["window_id"].(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(windowId)
 }
 
 func getHeaderIgnoreCase(headers map[string]string, target string) string {
@@ -143,7 +165,9 @@ func parseClientSource(userAgent string) string {
 	switch {
 	case strings.Contains(ua, "claude-cli"), strings.Contains(ua, "claudecode"):
 		return "Claude Code"
-	case strings.Contains(ua, "codex_cli_rs"), strings.Contains(ua, "codex-cli-rs"):
+	case strings.Contains(ua, "codex_cli_rs"), strings.Contains(ua, "codex-cli-rs"),
+		strings.Contains(ua, "codex_vscode"), strings.Contains(ua, "codex-tui"),
+		strings.Contains(ua, "codex-desktop"), strings.Contains(ua, "codex desktop"):
 		return "Codex"
 	case strings.Contains(ua, "cherrystudio/"):
 		return "Cherry Studio"
