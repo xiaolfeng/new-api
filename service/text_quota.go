@@ -544,3 +544,33 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		perfmetrics.RecordRelaySample(relayInfo, true, int64(summary.CompletionTokens))
 	})
 }
+
+// RecordBambooRelayErrorLog 记录 bamboo relay 失败且无 usage 时的消费日志。
+//
+// bamboo 中继桥在失败且无计费信息（usage == nil）时直接返回错误，不会调用
+// PostTextConsumeQuota，导致失败请求的请求体 / 上游请求详情（BambooDebug）
+// 完全不可追溯。此函数在失败路径补写一条消费日志，携带 BuildLogRecord /
+// BuildFullLogRecord（含 RelayInput / RelayParsed / ProviderRequest debug
+// 信息），便于排查上游拒绝（如输入长度超限）等失败场景。
+func RecordBambooRelayErrorLog(c *gin.Context, relayInfo *relaycommon.RelayInfo, relayErr *types.NewAPIError) {
+	if relayInfo == nil {
+		return
+	}
+	startTime := common.GetContextKeyTime(c, constant.ContextKeyRequestStartTime)
+	if startTime.IsZero() {
+		startTime = relayInfo.StartTime
+	}
+	useTimeSeconds := int(time.Since(startTime).Seconds())
+	model.RecordConsumeLog(c, relayInfo.UserId, model.RecordConsumeLogParams{
+		ChannelId:      relayInfo.ChannelId,
+		ModelName:      relayInfo.OriginModelName,
+		TokenName:      c.GetString("token_name"),
+		TokenId:        relayInfo.TokenId,
+		UseTimeSeconds: useTimeSeconds,
+		IsStream:       relayInfo.IsStream,
+		Group:          relayInfo.UsingGroup,
+		Content:        "bamboo relay error: " + relayErr.Error(),
+		Record:         BuildLogRecord(relayInfo),
+		FullLog:        BuildFullLogRecord(relayInfo),
+	})
+}

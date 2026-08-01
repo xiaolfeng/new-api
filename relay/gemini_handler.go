@@ -150,6 +150,10 @@ func GeminiHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 			}
 			if usage != nil {
 				service.PostTextConsumeQuota(c, info, usage, []string{"bamboo relay error: " + relayErr.Error()})
+			} else {
+				// 失败且无计费信息时也补写日志（含 bamboo debug），
+				// 否则失败请求的请求体与上游请求详情完全不可追溯。
+				service.RecordBambooRelayErrorLog(c, info, relayErr)
 			}
 			return relayErr
 		}
