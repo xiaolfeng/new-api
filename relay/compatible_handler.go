@@ -17,6 +17,7 @@ import (
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
 	"github.com/QuantumNous/new-api/types"
 	"github.com/samber/lo"
@@ -81,6 +82,9 @@ func TextHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types
 
 	// bamboo 中继桥：灰度开启时由 bamboo 替代协议转换三段式内核
 	if model_setting.GetBambooSettings().EnableBambooRelay {
+		// 归一化第三方扩展 effort（max→xhigh）：qwen 等上游只接受
+		// none/minimal/low/medium/high/xhigh，直接透传 "max" 会被拒绝。
+		request.ReasoningEffort = reasoning.NormalizeEffort(request.ReasoningEffort)
 		bodyBytes, mErr := common.Marshal(request)
 		if mErr != nil {
 			return types.NewError(mErr, types.ErrorCodeJsonMarshalFailed, types.ErrOptionWithSkipRetry())
