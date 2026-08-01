@@ -73,16 +73,21 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 		})
 	}
 	if reasoning := choice.Message.GetReasoningContent(); reasoning != "" {
+		// 三槽位对齐官方 schema（与 bamboo-messages v0.9.0 一致）：
+		//   content           — reasoning_text 承载原始思考全文
+		//   summary           — 启发式摘要；chat 转换层不具备摘要能力，给空数组
+		//   encrypted_content — chat 路径无上游签名，留空
 		out.Output = append(out.Output, dto.ResponsesOutput{
 			Type:   responsesOutputTypeReasoning,
 			ID:     fmt.Sprintf("%s_reasoning_0", id),
 			Status: responseOutputStatus(out),
 			Content: []dto.ResponsesOutputContent{
 				{
-					Type: "summary_text",
+					Type: "reasoning_text",
 					Text: reasoning,
 				},
 			},
+			Summary: []dto.ResponsesReasoningSummaryPart{},
 		})
 	}
 

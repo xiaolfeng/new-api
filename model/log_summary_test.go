@@ -300,6 +300,45 @@ func TestExtractLogDetailSummariesWithZCodeMainThreadSession(t *testing.T) {
 	require.Equal(t, "trace_main_thread", parentSessionId)
 }
 
+func TestExtractLogDetailSummariesWithCodexWindowSession(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":         "codex_cli_rs/0.20.0",
+			"X-Codex-Window-Id":  "win_abc123",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Codex 窗口会话请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, agentId, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "Codex", source)
+	require.Empty(t, agentId)
+	require.Equal(t, "win_abc123", sessionId)
+	require.Empty(t, parentSessionId)
+}
+
+func TestExtractLogDetailSummariesCodexWindowIdTakesPrecedence(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":         "codex_cli_rs/0.20.0",
+			"X-Codex-Window-Id":  "win_codex_session",
+			"X-Session-Id":       "generic_session_should_be_ignored",
+			"X-Session-Affinity": "affinity_should_be_ignored",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Codex 优先级测试"},
+		},
+	})
+	require.NoError(t, err)
+
+	_, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	// Codex 分支提前返回，X-Codex-Window-Id 独占会话标识，不走通用回退链
+	require.Equal(t, "win_codex_session", sessionId)
+	require.Empty(t, parentSessionId)
+}
+
 func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 	tests := []struct {
 		name           string

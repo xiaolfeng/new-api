@@ -362,16 +362,21 @@ type IncompleteDetails struct {
 }
 
 type ResponsesOutput struct {
-	Type      string                   `json:"type"`
-	ID        string                   `json:"id"`
-	Status    string                   `json:"status"`
-	Role      string                   `json:"role"`
-	Content   []ResponsesOutputContent `json:"content"`
-	Quality   string                   `json:"quality"`
-	Size      string                   `json:"size"`
-	CallId    string                   `json:"call_id,omitempty"`
-	Name      string                   `json:"name,omitempty"`
-	Arguments json.RawMessage          `json:"arguments,omitempty"`
+	Type    string                   `json:"type"`
+	ID      string                   `json:"id"`
+	Status  string                   `json:"status"`
+	Role    string                   `json:"role"`
+	Content []ResponsesOutputContent `json:"content"`
+	// Summary reasoning 专用：启发式提取的推理摘要数组，提取不出则为空数组。
+	Summary []ResponsesReasoningSummaryPart `json:"summary,omitempty"`
+	// EncryptedContent 服务端加密的推理内容（多轮回传时原样携带），
+	// 保证加密推理链在 relay 转发过程中不断裂。
+	EncryptedContent string          `json:"encrypted_content,omitempty"`
+	Quality          string          `json:"quality"`
+	Size             string          `json:"size"`
+	CallId           string          `json:"call_id,omitempty"`
+	Name             string          `json:"name,omitempty"`
+	Arguments        json.RawMessage `json:"arguments,omitempty"`
 }
 
 // ArgumentsString returns function call arguments in the string form expected by Chat Completions.

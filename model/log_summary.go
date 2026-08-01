@@ -103,6 +103,11 @@ func parseAgentSessionFromHeaders(headers map[string]string, source string) (age
 		sessionId = getHeaderIgnoreCase(headers, "X-Session-Id")
 		return "", sessionId, parentSessionId
 	}
+	// Codex: X-Codex-Window-Id 是 Codex CLI 的窗口级会话标识。
+	if source == "Codex" {
+		sessionId = getHeaderIgnoreCase(headers, "X-Codex-Window-Id")
+		return "", sessionId, ""
+	}
 	// OpenCode headers (highest priority)
 	sessionId = getHeaderIgnoreCase(headers, "X-Session-Affinity")
 	parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Session-Id")

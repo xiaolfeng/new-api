@@ -219,9 +219,23 @@ func ExtractReasoningTextFromResponses(resp *dto.OpenAIResponsesResponse) string
 		if out.Type != responsesOutputTypeReasoning {
 			continue
 		}
+		// 优先取 content 的 reasoning_text 原始思考全文（v0.9.0 主轨道）
 		for _, c := range out.Content {
 			if c.Text != "" {
 				sb.WriteString(c.Text)
+			}
+		}
+	}
+	// 兜底：content 为空时回退到 summary（摘要为有损内容，仅作兼容旧响应）
+	if sb.Len() == 0 {
+		for _, out := range resp.Output {
+			if out.Type != responsesOutputTypeReasoning {
+				continue
+			}
+			for _, s := range out.Summary {
+				if s.Text != "" {
+					sb.WriteString(s.Text)
+				}
 			}
 		}
 	}

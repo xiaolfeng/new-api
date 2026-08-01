@@ -61,7 +61,7 @@ require (
 )
 
 require (
-	github.com/bamboo-services/bamboo-messages v0.8.17
+	github.com/bamboo-services/bamboo-messages v0.9.0
 	github.com/waffo-com/waffo-pancake-sdk-go v0.3.1
 	gorm.io/driver/clickhouse v0.6.0
 )
@@ -83,8 +83,8 @@ require (
 	github.com/quic-go/quic-go v0.59.1 // indirect
 	github.com/rogpeppe/go-internal v1.13.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
-	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect
 	github.com/yuin/gopher-lua v1.1.1 // indirect
+	go.mongodb.org/mongo-driver/v2 v2.6.0 // indirect
 	go.opentelemetry.io/otel v1.34.0 // indirect
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
 )

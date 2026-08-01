@@ -47,6 +47,11 @@ func ChatCompletionsStreamToResponsesHandler(
 		contentIndex        int
 		accumulatedText     strings.Builder
 
+		// reasoning 状态：对齐 bamboo-messages v0.9.0 三槽位模型
+		reasoningItemID      string
+		hasOpenReasoningItem bool
+		accumulatedReasoning strings.Builder
+
 		toolCallItemIDs         = make(map[int]string)
 		toolCallArgAccumulators = make(map[int]string)
 		toolCallNames           = make(map[int]string)
@@ -89,9 +94,80 @@ func ChatCompletionsStreamToResponsesHandler(
 		return true
 	}
 
+	// emitReasoningItemAdded 在首个 reasoning delta 到达时发出 reasoning output_item.added。
+	emitReasoningItemAdded := func() bool {
+		if hasOpenReasoningItem {
+			return true
+		}
+		if !emitResponseCreated() {
+			return false
+		}
+		reasoningItemID = fmt.Sprintf("rs_%s", c.GetString(common.RequestIdKey))
+		oi := outputIndex
+		if !sendEvent("response.output_item.added", &dto.ResponsesStreamResponse{
+			Type:        "response.output_item.added",
+			OutputIndex: &oi,
+			Item: &dto.ResponsesOutput{
+				Type:    "reasoning",
+				ID:      reasoningItemID,
+				Status:  "in_progress",
+				Content: []dto.ResponsesOutputContent{},
+				Summary: []dto.ResponsesReasoningSummaryPart{},
+			},
+		}) {
+			return false
+		}
+		hasOpenReasoningItem = true
+		return true
+	}
+
+	// closeReasoningItem 关闭 reasoning 项：发出 summary_text.done 与 output_item.done，
+	// done 事件的 content 承载 reasoning_text 全文（v0.9.0 主轨道），summary 留空数组。
+	closeReasoningItem := func() bool {
+		if !hasOpenReasoningItem {
+			return true
+		}
+		oi := outputIndex
+		si := 0
+		text := accumulatedReasoning.String()
+
+		if !sendEvent("response.reasoning_summary_text.done", &dto.ResponsesStreamResponse{
+			Type:         "response.reasoning_summary_text.done",
+			OutputIndex:  &oi,
+			SummaryIndex: &si,
+			Text:         text,
+		}) {
+			return false
+		}
+		if !sendEvent("response.output_item.done", &dto.ResponsesStreamResponse{
+			Type:        "response.output_item.done",
+			OutputIndex: &oi,
+			Item: &dto.ResponsesOutput{
+				Type:   "reasoning",
+				ID:     reasoningItemID,
+				Status: "completed",
+				Content: []dto.ResponsesOutputContent{
+					{Type: "reasoning_text", Text: text},
+				},
+				Summary: []dto.ResponsesReasoningSummaryPart{},
+			},
+		}) {
+			return false
+		}
+
+		outputIndex++
+		hasOpenReasoningItem = false
+		accumulatedReasoning.Reset()
+		return true
+	}
+
 	emitMessageItemAdded := func() bool {
 		if hasOpenMessageItem {
 			return true
+		}
+		// reasoning → text 转场：先关闭 reasoning 项再开 message 项
+		if !closeReasoningItem() {
+			return false
 		}
 		if !emitResponseCreated() {
 			return false
@@ -215,6 +291,9 @@ func ChatCompletionsStreamToResponsesHandler(
 	}
 
 	emitResponseCompleted := func(status string) bool {
+		if !closeReasoningItem() {
+			return false
+		}
 		if !closeMessageItem() {
 			return false
 		}
@@ -281,13 +360,14 @@ func ChatCompletionsStreamToResponsesHandler(
 		}
 
 		if reasoning := delta.GetReasoningContent(); reasoning != "" {
-			if !emitResponseCreated() {
+			if !emitReasoningItemAdded() {
 				sr.Stop(streamErr)
 				return
 			}
 			if currentMode != "reasoning" && currentMode != "text" {
 				currentMode = "reasoning"
 			}
+			accumulatedReasoning.WriteString(reasoning)
 			usageText.WriteString(reasoning)
 			oi := outputIndex
 			si := 0
@@ -333,6 +413,11 @@ func ChatCompletionsStreamToResponsesHandler(
 				}
 
 				if _, exists := toolCallItemIDs[toolIdx]; !exists {
+					// reasoning → tool_call 转场
+					if !closeReasoningItem() {
+						sr.Stop(streamErr)
+						return
+					}
 					if !closeMessageItem() {
 						sr.Stop(streamErr)
 						return
