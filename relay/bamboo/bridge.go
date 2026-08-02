@@ -141,6 +141,30 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	return doCompleteRelay(c, info, client, entryCodec, codecFmt, relayReq)
 }
 
+// isClientCancel 判断错误或请求上下文是否表明客户端已断开（取消）。
+//
+// 优先通过 errors.Is 识别 SDK 的 BambooError.Unwrap 链（v0.9.6 起
+// "对话已取消"错误携带 context.Canceled 作为 cause）；兜底检查请求
+// 上下文是否已结束，避免 SDK 未显式标记取消时漏判。
+func isClientCancel(c *gin.Context, err error) bool {
+	if err != nil && errors.Is(err, context.Canceled) {
+		return true
+	}
+	return c != nil && c.Request != nil && c.Request.Context().Err() != nil
+}
+
+// ensureStreamStatus 惰性初始化 relayInfo.StreamStatus 并返回非 nil 实例。
+//
+// bamboo 链路平时不初始化 StreamStatus（官方 stream_scanner 无条件新建），
+// 这里在需要标记流结束状态（取消/正常结束/流层错误）时按需初始化，
+// 使 service/log_info_generate.go 的 appendStreamStatus 能写入日志详情。
+func ensureStreamStatus(info *relaycommon.RelayInfo) *relaycommon.StreamStatus {
+	if info.StreamStatus == nil {
+		info.StreamStatus = relaycommon.NewStreamStatus()
+	}
+	return info.StreamStatus
+}
+
 // doStreamRelay 消费 bamboo StreamEvent，按入口 codec 序列化为出口 SSE。
 //
 // SDK v0.8.15 起移除 SmoothPacer 子系统，流式输出改为纯透传：
@@ -158,6 +182,13 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 	eventCh, err := client.Chat(ctx, req.Messages, req.System, req.Config)
 	if err != nil {
+		if isClientCancel(c, err) {
+			// 客户端在首个事件前断开：标记流状态为 client_gone 并正常结束，
+			// 与官方 stream_scanner 在 c.Request.Context().Done() 时的行为对齐，
+			// 不产生 status_code=500 错误日志。
+			ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonClientGone, err)
+			return nil, nil
+		}
 		return nil, translateSDKError(err)
 	}
 
@@ -200,6 +231,15 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			if event.Error != nil {
 				cause = event.Error
 			}
+			// 客户端取消（SDK 在 ctx 取消时注入"对话已取消"错误事件）：
+			// 按已收到内容结算并标记 client_gone，不当作错误日志；
+			// 真实流层错误则标记 ScannerErr 后走错误路径。
+			cancelled := isClientCancel(c, cause)
+			if cancelled {
+				ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonClientGone, cause)
+			} else {
+				ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonScannerErr, cause)
+			}
 			tail, _ := serializer.Flush()
 			if len(tail) > 0 {
 				for _, frame := range bamboorelay.SplitSSEFrames(tail) {
@@ -211,6 +251,9 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 				info.ResponseBody = truncateResponseBody(strings.Join(streamItems, "\n"))
 			}
 			usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
+			if cancelled {
+				return &usage, nil
+			}
 			return &usage, types.NewError(cause, types.ErrorCodeBadResponseBody)
 		}
 
@@ -386,6 +429,14 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 		common.SetContextKey(c, constant.ContextKeyEmptyResponse, true)
 	}
 
+	// 标记流结束状态：writeSSE 失败（客户端断开）标记 client_gone，
+	// 否则自然结束标记 done，供日志详情展示 stream_status。
+	if c.Request.Context().Err() != nil {
+		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+	} else {
+		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
+	}
+
 	return &usage, nil
 }
 
@@ -458,6 +509,11 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 
 	resp, err := client.Complete(c.Request.Context(), req.Messages, req.System, req.Config)
 	if err != nil {
+		if isClientCancel(c, err) {
+			// 客户端断开：正常结束（不记错误日志）。非流式无 StreamStatus 标记，
+			// 与 appendStreamStatus 仅对流式生效的官方行为一致。
+			return nil, nil
+		}
 		return nil, translateSDKError(err)
 	}
 
