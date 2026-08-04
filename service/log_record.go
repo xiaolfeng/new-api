@@ -1066,7 +1066,9 @@ func buildResponsesResponseBlocksFromSSE(responseBody string) []model.ResponsesR
 					if state.Block.Name == "" {
 						state.Block.Name = strings.TrimSpace(streamResp.Item.Name)
 					}
-					mergeResponsesText(&state.ArgumentsRaw, string(streamResp.Item.Arguments))
+					// arguments 以 function_call_arguments.delta 流式累积为准；
+					// added/done 项的完整 arguments 仅在无累积时兜底，避免重复叠加。
+					mergeResponsesArgumentsOnce(&state.ArgumentsRaw, string(streamResp.Item.Arguments))
 				}
 				continue
 			}
@@ -1105,7 +1107,8 @@ func buildResponsesResponseBlocksFromSSE(responseBody string) []model.ResponsesR
 				state.Block.CallID = strings.TrimSpace(streamResp.ItemID)
 			})
 			if state != nil {
-				mergeResponsesText(&state.ArgumentsRaw, streamResp.Arguments)
+				// arguments 以流式 delta 累积为准，done 的完整值仅在无累积时兜底。
+				mergeResponsesArgumentsOnce(&state.ArgumentsRaw, streamResp.Arguments)
 			}
 		}
 	}
@@ -1193,6 +1196,28 @@ func mergeResponsesText(builder *strings.Builder, next string) {
 	if !strings.Contains(current, next) {
 		builder.WriteString(next)
 	}
+}
+
+// mergeResponsesArgumentsOnce 在无流式累积时，将 function_call 项的完整
+// arguments（JSON 字符串）解析为原始参数 JSON 写入 builder。
+//
+// 仅当 builder 为空时生效（SSE 中 arguments 以 function_call_arguments.delta
+// 流式累积为准）；已累积则忽略，避免与 added/done 事件的完整值重复叠加。
+// 完整值外层带 JSON 字符串引号（如 "{\"cmd\":\"pwd\"}"），需解析出内层 JSON。
+func mergeResponsesArgumentsOnce(builder *strings.Builder, argsText string) {
+	if builder == nil || builder.Len() > 0 {
+		return
+	}
+	argsText = strings.TrimSpace(argsText)
+	if argsText == "" || argsText == `""` {
+		return
+	}
+	var parsed string
+	if err := common.UnmarshalJsonStr(argsText, &parsed); err == nil && strings.TrimSpace(parsed) != "" {
+		builder.WriteString(strings.TrimSpace(parsed))
+		return
+	}
+	builder.WriteString(argsText)
 }
 
 func sanitizeResponsesJSONLikeValue(value any) any {
@@ -1967,45 +1992,45 @@ func buildResponsesPromptMessageContent(content any, role string) []responsesInp
 	}
 }
 
-// selectResponsesInputSegment 从扁平化的 input items 中选取「当前请求输入」片段。
+// selectResponsesInputSegment 从扁平化的 input items 中选取「本次请求」片段。
 //
 // 选取规则：
-//   - 从末尾向前找到最后一个用户输入（input_text/text），跳过末尾的 AI 活动区（output_text / function_call / function_call_output）。
-//     这些末尾的 AI 活动属于「本次请求已带出的上下文 / 上游工具链」，需要连同用户输入一起返回。
-//   - 从该用户输入继续向前，收集所有连续的用户输入项（支持 AgentSDK 多输入场景）。
-//   - 遇到非用户输入项（output_text / function_call / function_call_output）即为上一轮对话边界，停止回溯。
-//
-// 返回结果为 [首个连续用户输入 .. 末尾]，涵盖了触发本次请求的用户输入及随之携带的工具链 / AI 输出上下文。
+//   - 末尾是用户输入（input_text/text）：保留最后一个连续用户输入区，
+//     向前跳过连续的用户输入项，遇到非用户输入项（output_text /
+//     function_call / function_call_output）即为上一轮对话边界，停止回溯。
+//   - 末尾是工具结果 / AI 输出区（output_text / function_call / function_call_output）：
+//     从最后一个 function_call_output（最新工具结果）开始保留到末尾，
+//     丢弃更早的用户输入与工具声明，避免日志记录过多历史上下文。
 func selectResponsesInputSegment(items []responsesInputSegmentItem) []responsesInputSegmentItem {
 	if len(items) == 0 {
 		return nil
 	}
 
 	lastIndex := len(items) - 1
+	lastType := strings.TrimSpace(items[lastIndex].Type)
 
-	cursor := lastIndex
-	for cursor >= 0 {
-		t := strings.TrimSpace(items[cursor].Type)
-		if t == "input_text" || t == "text" {
-			break
+	// 末尾是用户输入：保留最新连续用户输入区（含其后的 AI 活动）。
+	if lastType == "input_text" || lastType == "text" {
+		cursor := lastIndex
+		for cursor >= 0 {
+			t := strings.TrimSpace(items[cursor].Type)
+			if t != "input_text" && t != "text" {
+				break
+			}
+			cursor--
 		}
-		cursor--
+		return append([]responsesInputSegmentItem(nil), items[cursor+1:lastIndex+1]...)
 	}
 
-	if cursor < 0 {
-		return append([]responsesInputSegmentItem(nil), items...)
-	}
-
-	start := cursor
-	for start >= 0 {
-		t := strings.TrimSpace(items[start].Type)
-		if t != "input_text" && t != "text" {
-			break
+	// 末尾是 AI 活动区：只保留最新工具结果及之后片段。
+	for i := lastIndex; i >= 0; i-- {
+		if items[i].Type == "function_call_output" {
+			return append([]responsesInputSegmentItem(nil), items[i:lastIndex+1]...)
 		}
-		start--
 	}
 
-	return append([]responsesInputSegmentItem(nil), items[start+1:lastIndex+1]...)
+	// 兜底：既无工具结果也无用户输入，返回全部。
+	return append([]responsesInputSegmentItem(nil), items...)
 }
 
 // extractLastUserMessageTextFromResponsesInput 从 Responses API input 字段中提取最后一个用户消息的文本
