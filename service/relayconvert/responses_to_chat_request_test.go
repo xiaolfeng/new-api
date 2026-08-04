@@ -201,21 +201,27 @@ func TestMultiModalContent(t *testing.T) {
 	msg := out.Messages[0]
 	assert.Equal(t, "user", msg.Role)
 
-	parts, ok := msg.Content.([]dto.MediaContent)
-	require.True(t, ok, "content should be []dto.MediaContent")
+	parts, ok := msg.Content.([]any)
+	require.True(t, ok, "content should be []any（MediaContent 解析由 dto.Message.ParseContent 完成）")
 	require.Len(t, parts, 3)
 
 	// input_text → text
-	assert.Equal(t, "text", parts[0].Type)
-	assert.Equal(t, "Describe this image", parts[0].Text)
+	textPart, ok := parts[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "text", textPart["type"])
+	assert.Equal(t, "Describe this image", textPart["text"])
 
 	// input_image → image_url
-	assert.Equal(t, "image_url", parts[1].Type)
-	assert.NotNil(t, parts[1].ImageUrl)
+	imgPart, ok := parts[1].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "image_url", imgPart["type"])
+	require.NotNil(t, imgPart["image_url"])
 
 	// input_file → file
-	assert.Equal(t, "file", parts[2].Type)
-	assert.NotNil(t, parts[2].File)
+	filePart, ok := parts[2].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "file", filePart["type"])
+	require.NotNil(t, filePart["file"])
 }
 
 // ---------- Test 7: Tools Format ----------
