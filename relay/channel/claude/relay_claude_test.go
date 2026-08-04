@@ -347,8 +347,8 @@ func TestResponseClaude2OpenAIAggregatesNonStreamBlocks(t *testing.T) {
 	if got := choice.Message.StringContent(); got != text1+text2 {
 		t.Fatalf("content = %q, want %q", got, text1+text2)
 	}
-	if got := choice.Message.ReasoningContent; got != thinking1+thinking2 {
-		t.Fatalf("reasoning_content = %q, want %q", got, thinking1+thinking2)
+	if got := choice.Message.ReasoningContent; got == nil || *got != thinking1+thinking2 {
+		t.Fatalf("reasoning_content = %v, want %q", got, thinking1+thinking2)
 	}
 	if got := choice.FinishReason; got != "tool_calls" {
 		t.Fatalf("finish_reason = %q, want %q", got, "tool_calls")

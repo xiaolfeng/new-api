@@ -111,11 +111,8 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 	}
 	var responseText string
 	var responseThinking string
-	if len(claudeResponse.Content) > 0 {
-		responseText = claudeResponse.Content[0].GetText()
-		if claudeResponse.Content[0].Thinking != nil {
-			responseThinking = *claudeResponse.Content[0].Thinking
-		}
+	if len(claudeResponse.Content) > 0 && claudeResponse.Content[0].Thinking != nil {
+		responseThinking = *claudeResponse.Content[0].Thinking
 	}
 	tools := make([]dto.ToolCallResponse, 0)
 	thinkingContent := ""
@@ -134,11 +131,13 @@ func ResponseClaude2OpenAI(claudeResponse *dto.ClaudeResponse) *dto.OpenAITextRe
 				},
 			})
 		case "thinking":
+			// 多个 thinking 块按出现顺序聚合拼接，而非仅保留最后一个。
 			if message.Thinking != nil {
-				thinkingContent = *message.Thinking
+				thinkingContent += *message.Thinking
 			}
 		case "text":
-			responseText = message.GetText()
+			// 多个 text 块按出现顺序聚合拼接，而非仅保留最后一个。
+			responseText += message.GetText()
 		}
 	}
 	choice := dto.OpenAITextResponseChoice{
