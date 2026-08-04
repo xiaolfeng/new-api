@@ -66,7 +66,7 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 	if text := choice.Message.StringContent(); text != "" {
 		out.Output = append(out.Output, dto.ResponsesOutput{
 			Type:   responsesOutputTypeMessage,
-			ID:     fmt.Sprintf("%s_msg_0", id),
+			ID:     fmt.Sprintf("msg_%s_0", id),
 			Status: responseOutputStatus(out),
 			Role:   "assistant",
 			Content: []dto.ResponsesOutputContent{
@@ -85,7 +85,7 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 		//   encrypted_content — chat 路径无上游签名，留空
 		out.Output = append(out.Output, dto.ResponsesOutput{
 			Type:   responsesOutputTypeReasoning,
-			ID:     fmt.Sprintf("%s_reasoning_0", id),
+			ID:     fmt.Sprintf("reasoning_%s_0", id),
 			Status: responseOutputStatus(out),
 			Content: []dto.ResponsesOutputContent{
 				{
@@ -245,14 +245,17 @@ func responseStatusString(resp *dto.OpenAIResponsesResponse) string {
 }
 
 func chatToolCallToResponsesOutput(toolCall dto.ToolCallRequest, responseID string, index int, status string) (dto.ResponsesOutput, error) {
+	// 工具调用 ID（call_id）透传 chat 的 tool_call ID，跨格式保持可追踪。
 	callID := strings.TrimSpace(toolCall.ID)
 	if callID == "" {
 		callID = fmt.Sprintf("%s_call_%d", responseID, index)
 	}
+	// output item 的唯一 ID 贴近 OpenAI Responses 实际格式（fc_ 前缀）。
+	outputID := fmt.Sprintf("fc_%s_%d", responseID, index)
 	if toolCall.Type == "" || toolCall.Type == "function" {
 		return dto.ResponsesOutput{
 			Type:      responsesOutputTypeFunctionCall,
-			ID:        callID,
+			ID:        outputID,
 			Status:    status,
 			CallId:    callID,
 			Name:      toolCall.Function.Name,
@@ -261,7 +264,7 @@ func chatToolCallToResponsesOutput(toolCall dto.ToolCallRequest, responseID stri
 	}
 	return dto.ResponsesOutput{
 		Type:      toolCall.Type,
-		ID:        callID,
+		ID:        outputID,
 		Status:    status,
 		CallId:    callID,
 		Arguments: toolCall.Custom,

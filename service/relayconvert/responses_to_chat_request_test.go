@@ -455,17 +455,18 @@ func TestPreviousResponseIdError(t *testing.T) {
 
 func TestUnsupportedFieldsStripped(t *testing.T) {
 	req := &dto.OpenAIResponsesRequest{
-		Model:            "gpt-4o",
-		Input:            mustRaw([]map[string]any{{"role": "user", "content": "hi"}}),
-		ContextManagement: mustRaw(map[string]any{"enabled": true}),
-		Include:          mustRaw([]string{"message"}),
-		Conversation:     mustRaw(map[string]any{}),
-		Truncation:       mustRaw("auto"),
-		MaxToolCalls:     func() *uint { v := uint(5); return &v }(),
-		Preset:           mustRaw("default"),
+		Model:        "gpt-4o",
+		Input:        mustRaw([]map[string]any{{"role": "user", "content": "hi"}}),
+		Include:      mustRaw([]string{"message"}),
+		Truncation:   mustRaw("auto"),
+		MaxToolCalls: func() *uint { v := uint(5); return &v }(),
+		Preset:       mustRaw("default"),
 	}
 
-	// Should not error — unsupported fields are silently dropped
+	// Should not error — chat 不支持的普通可选参数（include/truncation/
+	// max_tool_calls/preset）被静默剥离，转换仍正常进行。stateful 字段
+	// （conversation/context_management 等）的拒绝由
+	// TestResponsesRequestToChatCompletionsRequestRejectsStatefulFields 覆盖。
 	out, err := ResponsesRequestToChatCompletionsRequest(req)
 	require.NoError(t, err)
 	require.NotNil(t, out)
