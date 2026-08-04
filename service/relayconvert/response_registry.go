@@ -795,7 +795,7 @@ func convertOAIChatResponseToOAIResponses(_ *gin.Context, _ *relaycommon.RelayIn
 	if id == "" {
 		id = fmt.Sprintf("resp_%s", common.GetUUID())
 	}
-	return ChatCompletionsResponseToResponsesResponse(chatResponse, id)
+	return ChatCompletionsResponseToResponsesResponse(chatResponse, id, nil)
 }
 
 func convertOAIResponsesResponseToOAIChat(_ *gin.Context, _ *relaycommon.RelayInfo, response any) (any, *dto.Usage, error) {

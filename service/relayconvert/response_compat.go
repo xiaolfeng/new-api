@@ -80,8 +80,8 @@ func StreamResponseGeminiChat2OpenAI(geminiResponse *dto.GeminiChatResponse) (*d
 	return geminichat.StreamResponseGeminiChat2OpenAI(geminiResponse)
 }
 
-func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id string) (*dto.OpenAIResponsesResponse, *dto.Usage, error) {
-	return oaichat.ChatCompletionsResponseToResponsesResponse(resp, id)
+func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id string, origReq *dto.OpenAIResponsesRequest) (*dto.OpenAIResponsesResponse, *dto.Usage, error) {
+	return oaichat.ChatCompletionsResponseToResponsesResponse(resp, id, origReq)
 }
 
 func ResponsesStatusFromChatFinishReason(finishReason string) (string, *dto.IncompleteDetails) {

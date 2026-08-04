@@ -38,7 +38,7 @@ func ChatCompletionsToResponsesHandler(c *gin.Context, info *relaycommon.RelayIn
 	}
 
 	responseID := fmt.Sprintf("resp_%s", c.GetString(common.RequestIdKey))
-	responsesResp, usage, err := relayconvert.ChatCompletionsResponseToResponsesResponse(&chatResp, responseID)
+	responsesResp, usage, err := relayconvert.ChatCompletionsResponseToResponsesResponse(&chatResp, responseID, origReq)
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeBadResponseBody, http.StatusInternalServerError)
 	}

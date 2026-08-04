@@ -31,7 +31,7 @@ const (
 	responsesIncompleteReasonMaxTokens     = "max_output_tokens"
 )
 
-func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id string) (*dto.OpenAIResponsesResponse, *dto.Usage, error) {
+func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id string, origReq *dto.OpenAIResponsesRequest) (*dto.OpenAIResponsesResponse, *dto.Usage, error) {
 	if resp == nil {
 		return nil, nil, errors.New("response is nil")
 	}
@@ -46,6 +46,12 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 		Output:    make([]dto.ResponsesOutput, 0),
 		Usage:     usage,
 	}
+
+	// 回显原请求参数（Responses API 语义：response.created 需携带客户端传入的
+	// instructions/temperature/tool_choice 等配置字段，保证客户端拿到的响应与
+	// 请求一致）。origReq 为 nil 时跳过，兼容无请求上下文的转换路径（如
+	// response_registry 注册的通用格式转换器）。
+	echoResponsesRequestFields(out, origReq)
 
 	if len(resp.Choices) == 0 {
 		return out, usage, nil
@@ -100,6 +106,70 @@ func ChatCompletionsResponseToResponsesResponse(resp *dto.OpenAITextResponse, id
 	}
 
 	return out, usage, nil
+}
+
+// echoResponsesRequestFields 将原 Responses 请求的参数回显到响应中。
+//
+// Responses API 规范要求 response.created 回显客户端传入的请求字段
+// （instructions、max_output_tokens、temperature、top_p、tool_choice、
+// store、truncation、user、metadata、reasoning 等），使客户端拿到的响应
+// 与请求配置一致。origReq 为 nil 或字段缺失时保持响应零值，不覆盖。
+func echoResponsesRequestFields(out *dto.OpenAIResponsesResponse, origReq *dto.OpenAIResponsesRequest) {
+	if origReq == nil {
+		return
+	}
+	if len(origReq.Instructions) > 0 {
+		out.Instructions = origReq.Instructions
+	}
+	if origReq.MaxOutputTokens != nil {
+		out.MaxOutputTokens = int(*origReq.MaxOutputTokens)
+	}
+	if origReq.Temperature != nil {
+		out.Temperature = *origReq.Temperature
+	}
+	if origReq.TopP != nil {
+		out.TopP = *origReq.TopP
+	}
+	if len(origReq.ToolChoice) > 0 {
+		out.ToolChoice = origReq.ToolChoice
+	}
+	if len(origReq.User) > 0 {
+		out.User = origReq.User
+	}
+	if len(origReq.Metadata) > 0 {
+		out.Metadata = origReq.Metadata
+	}
+	if len(origReq.Truncation) > 0 {
+		out.Truncation = origReq.Truncation
+	}
+	// Store / ParallelToolCalls 在请求中为 JSON 布尔值（"true"/"false"），
+	// 解析后回显到响应布尔字段；解析失败时保持默认值。
+	if len(origReq.Store) > 0 {
+		var store bool
+		if err := common.Unmarshal(origReq.Store, &store); err == nil {
+			out.Store = store
+		}
+	}
+	if len(origReq.ParallelToolCalls) > 0 {
+		var parallel bool
+		if err := common.Unmarshal(origReq.ParallelToolCalls, &parallel); err == nil {
+			out.ParallelToolCalls = parallel
+		}
+	}
+	if origReq.PreviousResponseID != "" {
+		if raw, err := common.Marshal(origReq.PreviousResponseID); err == nil {
+			out.PreviousResponseID = raw
+		}
+	}
+	if origReq.Reasoning != nil {
+		out.Reasoning = origReq.Reasoning
+	}
+	if len(origReq.Tools) > 0 {
+		var tools []map[string]any
+		if err := common.Unmarshal(origReq.Tools, &tools); err == nil && tools != nil {
+			out.Tools = tools
+		}
+	}
 }
 
 func ResponsesStatusFromChatFinishReason(finishReason string) (string, *dto.IncompleteDetails) {
