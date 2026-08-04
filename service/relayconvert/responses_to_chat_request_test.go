@@ -635,12 +635,14 @@ func TestInputImageStructure(t *testing.T) {
 		require.NotNil(t, out)
 
 		require.Len(t, out.Messages, 1)
-		parts, ok := out.Messages[0].Content.([]dto.MediaContent)
+		parts, ok := out.Messages[0].Content.([]any)
 		require.True(t, ok)
 		require.Len(t, parts, 1)
 
-		assert.Equal(t, "image_url", parts[0].Type)
-		imgMap, ok := parts[0].ImageUrl.(map[string]any)
+		imgPart, ok := parts[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "image_url", imgPart["type"])
+		imgMap, ok := imgPart["image_url"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "https://example.com/img.png", imgMap["url"])
 	})
@@ -662,11 +664,15 @@ func TestInputImageStructure(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, out)
 
-		parts, ok := out.Messages[0].Content.([]dto.MediaContent)
+		require.Len(t, out.Messages, 1)
+		parts, ok := out.Messages[0].Content.([]any)
 		require.True(t, ok)
 		require.Len(t, parts, 1)
 
-		imgMap, ok := parts[0].ImageUrl.(map[string]any)
+		imgPart, ok := parts[0].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "image_url", imgPart["type"])
+		imgMap, ok := imgPart["image_url"].(map[string]any)
 		require.True(t, ok)
 		assert.Equal(t, "https://example.com/img.png", imgMap["url"])
 		assert.Equal(t, "high", imgMap["detail"])
@@ -697,18 +703,25 @@ func TestInputFileStructure(t *testing.T) {
 	require.NotNil(t, out)
 
 	require.Len(t, out.Messages, 1)
-	parts, ok := out.Messages[0].Content.([]dto.MediaContent)
+	parts, ok := out.Messages[0].Content.([]any)
 	require.True(t, ok)
 	require.Len(t, parts, 1)
 
-	assert.Equal(t, "file", parts[0].Type)
-	fileMap, ok := parts[0].File.(map[string]any)
+	filePart, ok := parts[0].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, "file", filePart["type"])
+	fileMap, ok := filePart["file"].(map[string]any)
 	require.True(t, ok)
 	assert.Equal(t, "data:application/pdf;base64,AAA", fileMap["file_data"])
 	assert.Equal(t, "doc.pdf", fileMap["filename"])
 }
 
 // ---------- Test 20: Reasoning Effort Mapping ----------
+//
+// 转换层仅透传 reasoning.effort，不做归一化：effort 的归一化（max→xhigh）
+// 由 relay 入口的 reasoning.NormalizeEffort 负责（relay/responses_handler.go），
+// none 的丢弃由 openai channel adaptor 负责（relay/channel/openai/adaptor.go）。
+// 此处验证转换层不意外改写标准值域内的 effort。
 
 func TestReasoningEffortMapping(t *testing.T) {
 	tests := []struct {
@@ -719,9 +732,9 @@ func TestReasoningEffortMapping(t *testing.T) {
 		{"low_passthrough", "low", "low"},
 		{"medium_passthrough", "medium", "medium"},
 		{"high_passthrough", "high", "high"},
-		{"minimal_to_low", "minimal", "low"},
-		{"xhigh_to_high", "xhigh", "high"},
-		{"none_dropped", "none", ""},
+		{"minimal_passthrough", "minimal", "minimal"},
+		{"xhigh_passthrough", "xhigh", "xhigh"},
+		{"none_passthrough", "none", "none"},
 	}
 
 	for _, tt := range tests {

@@ -78,6 +78,12 @@ func ResponsesRequestToChatCompletionsRequest(req *dto.OpenAIResponsesRequest) (
 	if req.Reasoning != nil {
 		out.ReasoningEffort = req.Reasoning.Effort
 	}
+	if req.TopLogProbs != nil {
+		// Chat Completions 语义：请求 top_logprobs 时必须同时开启 logprobs，
+		// 否则 OpenAI 等上游会直接拒绝。这里自动联动开启。
+		logProbs := true
+		out.LogProbs = &logProbs
+	}
 	if req.ServiceTier != "" {
 		out.ServiceTier, _ = common.Marshal(req.ServiceTier)
 	}
@@ -185,8 +191,13 @@ func responsesInputItemToChatMessages(item map[string]any, messages []dto.Messag
 	}
 
 	role := strings.TrimSpace(common.Interface2String(item["role"]))
-	if role == "" {
+	switch role {
+	case "":
 		role = "user"
+	case "developer":
+		// Responses API 的 developer 角色在 Chat Completions 中没有对应值，
+		// 语义上等价于 system（系统指令），映射避免上游不识别而拒绝请求。
+		role = "system"
 	}
 	content, err := responsesInputContentToChatContent(item["content"])
 	if err != nil {
@@ -331,7 +342,8 @@ func responsesRequestToolsToChat(raw json.RawMessage) ([]dto.ToolCallRequest, er
 	out := make([]dto.ToolCallRequest, 0, len(tools))
 	for _, tool := range tools {
 		toolType := strings.TrimSpace(common.Interface2String(tool["type"]))
-		if toolType == "function" {
+		switch toolType {
+		case "function":
 			out = append(out, dto.ToolCallRequest{
 				Type: "function",
 				Function: dto.FunctionRequest{
@@ -340,17 +352,32 @@ func responsesRequestToolsToChat(raw json.RawMessage) ([]dto.ToolCallRequest, er
 					Parameters:  tool["parameters"],
 				},
 			})
-			continue
+		case "namespace":
+			// MCP namespace 工具：将命名空间内的 function 工具展开为独立
+			// 工具供 Chat Completions 上游使用。仅保留 function 子项，其余
+			// 类型（如 tool_search）与空 namespace 直接忽略。
+			subTools, ok := tool["tools"].([]any)
+			if !ok {
+				continue
+			}
+			for _, rawSub := range subTools {
+				sub, ok := rawSub.(map[string]any)
+				if !ok || strings.TrimSpace(common.Interface2String(sub["type"])) != "function" {
+					continue
+				}
+				out = append(out, dto.ToolCallRequest{
+					Type: "function",
+					Function: dto.FunctionRequest{
+						Name:        strings.TrimSpace(common.Interface2String(sub["name"])),
+						Description: common.Interface2String(sub["description"]),
+						Parameters:  sub["parameters"],
+					},
+				})
+			}
+		default:
+			// Responses 内置工具（web_search 等）在 Chat Completions 中没有
+			// 对应类型，上游无法识别，直接忽略避免请求被拒绝。
 		}
-
-		rawTool, err := common.Marshal(tool)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, dto.ToolCallRequest{
-			Type:   toolType,
-			Custom: rawTool,
-		})
 	}
 	return out, nil
 }
@@ -425,7 +452,16 @@ func RequestTextToChatResponseFormat(raw json.RawMessage) (*dto.ResponseFormat, 
 
 func responsesImagePartToChatImageURL(part map[string]any) any {
 	if imageURL, ok := part["image_url"]; ok {
-		return imageURL
+		switch v := imageURL.(type) {
+		case string:
+			// Chat Completions 规范要求 image_url 为对象结构，
+			// 字符串形式（Responses API 允许）统一包装为 {"url": ...}。
+			return map[string]any{"url": v}
+		case map[string]any:
+			return v
+		default:
+			return imageURL
+		}
 	}
 	imageURL := map[string]any{}
 	for _, key := range []string{"url", "file_id", "detail"} {
