@@ -158,22 +158,20 @@ func TestFunctionCallOutput(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, out)
 
-	// The assistant message is added first, then function_call goes to pending.
-	// function_call_output flushes: always creates a new assistant with tool_calls, then adds tool result.
-	require.Len(t, out.Messages, 3)
+	// 空 assistant 消息与后续 function_call 合并为同一个 assistant 回合
+	//（appendToolCallToLastAssistant 合并到最后一条 assistant，避免产生
+	// 连续 assistant 消息），随后紧跟 tool 结果。
+	require.Len(t, out.Messages, 2)
 
 	assert.Equal(t, "assistant", out.Messages[0].Role)
-	assert.Equal(t, "", out.Messages[0].Content)
-
-	assert.Equal(t, "assistant", out.Messages[1].Role)
-	toolCalls := out.Messages[1].ParseToolCalls()
+	toolCalls := out.Messages[0].ParseToolCalls()
 	require.Len(t, toolCalls, 1)
 	assert.Equal(t, "fc_123", toolCalls[0].ID)
 	assert.Equal(t, "calc", toolCalls[0].Function.Name)
 
-	assert.Equal(t, "tool", out.Messages[2].Role)
-	assert.Equal(t, "fc_123", out.Messages[2].ToolCallId)
-	assert.Equal(t, "42", out.Messages[2].Content)
+	assert.Equal(t, "tool", out.Messages[1].Role)
+	assert.Equal(t, "fc_123", out.Messages[1].ToolCallId)
+	assert.Equal(t, "42", out.Messages[1].Content)
 }
 
 // ---------- Test 6: Multi-Modal Content ----------

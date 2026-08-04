@@ -154,10 +154,15 @@ func TestToolCallResponseConversion(t *testing.T) {
 		t.Errorf("expected output status 'completed', got %q", out.Status)
 	}
 
-	// Verify arguments
-	var args map[string]string
-	if err := common.Unmarshal(out.Arguments, &args); err != nil {
+	// Verify arguments — Responses API 的 arguments 为 JSON 对象字符串
+	//（客户端 JSON.parse 得到参数对象），先解析外层字符串再验证内容。
+	var argsStr string
+	if err := common.Unmarshal(out.Arguments, &argsStr); err != nil {
 		t.Fatalf("failed to unmarshal arguments: %v", err)
+	}
+	var args map[string]string
+	if err := common.Unmarshal([]byte(argsStr), &args); err != nil {
+		t.Fatalf("failed to unmarshal arguments payload: %v", err)
 	}
 	if args["city"] != "Tokyo" {
 		t.Errorf("expected city 'Tokyo', got %q", args["city"])
