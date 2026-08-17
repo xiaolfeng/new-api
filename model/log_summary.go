@@ -278,6 +278,14 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 		return interactionType
 	}
 
+	if interactionType := inferClaudeStructuredInteractionType(
+		detailRecord.ClaudeRequestBlocks,
+		detailRecord.ClaudeToolResponses,
+		detailRecord.ClaudeResponseBlocks,
+	); interactionType != "" {
+		return interactionType
+	}
+
 	if interactionType := inferBambooStructuredInteractionType(
 		detailRecord.BambooRequestBlocks,
 		detailRecord.BambooToolResponses,
@@ -333,9 +341,9 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 		len(detailRecord.BambooResponseBlocks) > 0
 
 	switch {
-	case hasNonToolInput:
+	case hasNonToolInput && !hasToolInput:
 		return "输入"
-	case !hasNonToolInput && hasTextOutput && !hasToolUse:
+	case hasTextOutput && !hasToolUse:
 		return "输出"
 	case hasToolInput || hasToolUse || hasAnyOutput:
 		return "回调"
@@ -442,11 +450,13 @@ func inferResponsesStructuredInteractionType(
 	hasToolUse := hasResponsesFunctionCallBlocks(responseBlocks)
 
 	switch {
-	case hasRequestInput:
+	case hasRequestInput && !hasToolResponse:
 		return "输入"
-	case !hasRequestInput && hasTextOutput && !hasToolUse:
+	case hasToolUse:
+		return "回调"
+	case hasTextOutput:
 		return "输出"
-	case hasToolResponse || hasToolUse || len(responseBlocks) > 0:
+	case hasToolResponse || len(responseBlocks) > 0:
 		return "回调"
 	default:
 		return ""
@@ -471,7 +481,40 @@ func inferOpenAIStructuredInteractionType(
 	}
 
 	switch {
-	case hasRequestInput:
+	case hasRequestInput && !hasToolResponse:
+		return "输入"
+	case hasToolUse:
+		return "回调"
+	case hasTextOutput:
+		return "输出"
+	case hasToolResponse:
+		return "回调"
+	case len(responseBlocks) > 0:
+		return "回调"
+	default:
+		return ""
+	}
+}
+
+func inferClaudeStructuredInteractionType(
+	requestBlocks []ClaudeRequestBlock,
+	toolResponses []ClaudeToolResponseBlock,
+	responseBlocks []ClaudeResponseBlock,
+) string {
+	hasToolResponse := len(toolResponses) > 0
+	hasTextOutput := hasClaudeTextResponseBlocks(responseBlocks)
+	hasToolUse := hasClaudeToolUseBlocks(responseBlocks)
+
+	hasRequestInput := false
+	for _, block := range requestBlocks {
+		if strings.TrimSpace(block.Text) != "" {
+			hasRequestInput = true
+			break
+		}
+	}
+
+	switch {
+	case hasRequestInput && !hasToolResponse:
 		return "输入"
 	case hasToolUse:
 		return "回调"
@@ -493,6 +536,7 @@ func inferBambooStructuredInteractionType(
 ) string {
 	hasToolUse := hasBambooToolUseBlocks(responseBlocks)
 	hasTextOutput := hasBambooTextResponseBlocks(responseBlocks)
+	hasToolResponse := len(toolResponses) > 0
 
 	hasRequestInput := false
 	for _, block := range requestBlocks {
@@ -503,7 +547,7 @@ func inferBambooStructuredInteractionType(
 	}
 
 	switch {
-	case hasRequestInput:
+	case hasRequestInput && !hasToolResponse:
 		return "输入"
 	case hasToolUse:
 		return "回调"

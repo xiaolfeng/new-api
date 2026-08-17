@@ -569,6 +569,33 @@ func TestParseInteractionType(t *testing.T) {
 		})
 	}
 
+	t.Run("claude leftover request text + tool result + final text → 输出", func(t *testing.T) {
+		result := inferClaudeStructuredInteractionType(
+			[]ClaudeRequestBlock{{Type: "text", Text: "original user prompt"}},
+			[]ClaudeToolResponseBlock{{ToolUseID: "1", Name: "Read", Type: "tool_result"}},
+			[]ClaudeResponseBlock{{Type: "text", Content: "Here is the file."}},
+		)
+		require.Equal(t, "输出", result)
+	})
+
+	t.Run("claude leftover request text + tool result + tool_use → 回调", func(t *testing.T) {
+		result := inferClaudeStructuredInteractionType(
+			[]ClaudeRequestBlock{{Type: "text", Text: "original user prompt"}},
+			[]ClaudeToolResponseBlock{{ToolUseID: "1", Name: "Read", Type: "tool_result"}},
+			[]ClaudeResponseBlock{{Type: "tool_use", ID: "2", Name: "Edit"}},
+		)
+		require.Equal(t, "回调", result)
+	})
+
+	t.Run("claude user turn with tool_use and no tool result → 输入", func(t *testing.T) {
+		result := inferClaudeStructuredInteractionType(
+			[]ClaudeRequestBlock{{Type: "text", Text: "fix the bug"}},
+			nil,
+			[]ClaudeResponseBlock{{Type: "tool_use", ID: "1", Name: "Read"}},
+		)
+		require.Equal(t, "输入", result)
+	})
+
 	t.Run("bamboo 空字段兜底", func(t *testing.T) {
 		recordBytes, err := common.Marshal(LogDetailRecord{
 			Prompt: map[string]interface{}{
