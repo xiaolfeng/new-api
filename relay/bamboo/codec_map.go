@@ -2,7 +2,7 @@ package bamboo
 
 import (
 	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 // relayFormatToCodec 把 new-api 的 RelayFormat 映射为 bamboo codec 的 FormatType。

@@ -204,7 +204,10 @@ export function useStreamRequest() {
   const sendStreamRequest = useCallback(
     (
       payload: ChatCompletionRequest,
-      onUpdate: (type: 'reasoning' | 'content' | 'tool_call', chunk: string) => void,
+      onUpdate: (
+        type: 'reasoning' | 'content' | 'tool_call',
+        chunk: string
+      ) => void,
       onComplete: () => void,
       onError: (error: string, errorCode?: string) => void
     ) =>

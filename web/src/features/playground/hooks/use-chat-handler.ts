@@ -189,7 +189,12 @@ export function useChatHandler({
 
   // Handle stream update
   const handleStreamUpdate = useCallback(
-    (generation: number, type: 'reasoning' | 'content' | 'tool_call', chunk: string) => {
+    (
+      generation: number,
+      type: 'reasoning' | 'content' | 'tool_call',
+      chunk: string
+    ) => {
+      if (generation !== requestGenerationRef.current) return
       if (type === 'tool_call') {
         flushStreamUpdates(generation)
         onMessageUpdate((prev) =>
@@ -199,7 +204,7 @@ export function useChatHandler({
         )
         return
       }
-
+      if (pendingStreamChunksRef.current.generation !== generation) return
       pendingStreamChunksRef.current[type] = mergePendingStreamChunk(
         pendingStreamChunksRef.current[type],
         chunk

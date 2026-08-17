@@ -5,39 +5,104 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	appconstant "github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/dto"
 	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/bamboo"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
 	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
-	"github.com/QuantumNous/new-api/service/relayconvert"
 	"github.com/QuantumNous/new-api/setting/model_setting"
-	"github.com/QuantumNous/new-api/setting/reasoning"
 	"github.com/QuantumNous/new-api/setting/ratio_setting"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 
 	"github.com/gin-gonic/gin"
 )
 
+const responsesToChatFallbackTTL = 5 * time.Minute
+
+type responsesToChatFallbackEntry struct {
+	ExpiresAt time.Time
+}
+
+var responsesToChatFallbackCache sync.Map
+
+func shouldResponsesUseChatCompletions(info *relaycommon.RelayInfo) bool {
+	if info == nil || !model_setting.IsResponsesToChatCompletionsEnabled() {
+		return false
+	}
+	for _, format := range info.RequestConversionChain {
+		if format == types.RelayFormatOpenAI {
+			return false
+		}
+	}
+	return true
+}
+
+func responsesToChatCompletionsFallbackCacheKey(info *relaycommon.RelayInfo) string {
+	if info == nil || info.ChannelMeta == nil {
+		return ""
+	}
+	parts := []string{
+		strconv.Itoa(info.ChannelId),
+		strconv.Itoa(info.ChannelType),
+		strings.TrimSpace(info.UpstreamModelName),
+		strings.TrimSpace(info.ApiVersion),
+		strconv.Itoa(info.RelayMode),
+	}
+	return strings.Join(parts, "|")
+}
+
+func shouldResponsesUseChatCompletionsCached(info *relaycommon.RelayInfo) bool {
+	if !shouldResponsesUseChatCompletions(info) {
+		return false
+	}
+	key := responsesToChatCompletionsFallbackCacheKey(info)
+	if key == "" {
+		return false
+	}
+	raw, ok := responsesToChatFallbackCache.Load(key)
+	if !ok {
+		return false
+	}
+	entry, ok := raw.(responsesToChatFallbackEntry)
+	if !ok || time.Now().After(entry.ExpiresAt) {
+		responsesToChatFallbackCache.Delete(key)
+		return false
+	}
+	return true
+}
+
+func markResponsesToChatCompletionsFallback(info *relaycommon.RelayInfo) {
+	if info == nil || !model_setting.IsResponsesToChatCompletionsEnabled() {
+		return
+	}
+	key := responsesToChatCompletionsFallbackCacheKey(info)
+	if key == "" {
+		return
+	}
+	responsesToChatFallbackCache.Store(key, responsesToChatFallbackEntry{
+		ExpiresAt: time.Now().Add(responsesToChatFallbackTTL),
+	})
+}
+
 func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
 	info.InitChannelMeta(c)
-	if info.RelayMode == relayconstant.RelayModeResponsesCompact {
-		switch info.ApiType {
-		case appconstant.APITypeOpenAI, appconstant.APITypeCodex:
-		default:
-			return types.NewErrorWithStatusCode(
-				fmt.Errorf("unsupported endpoint %q for api type %d", "/v1/responses/compact", info.ApiType),
-				types.ErrorCodeInvalidRequest,
-				http.StatusBadRequest,
-				types.ErrOptionWithSkipRetry(),
-			)
-		}
+	if info.RelayMode == relayconstant.RelayModeResponsesCompact &&
+		!common.SupportsResponsesCompact(info.ChannelType, info.ApiType) {
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("unsupported endpoint %q for api type %d", "/v1/responses/compact", info.ApiType),
+			types.ErrorCodeInvalidRequest,
+			http.StatusBadRequest,
+			types.ErrOptionWithSkipRetry(),
+		)
 	}
 
 	var responsesReq *dto.OpenAIResponsesRequest
@@ -86,7 +151,7 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 	if info.RelayMode != relayconstant.RelayModeResponsesCompact &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		relayconvert.ShouldResponsesUseChatCompletionsCached(info) {
+		shouldResponsesUseChatCompletionsCached(info) {
 		return originalResponsesRelay(c, info, request, responsesReq)
 	}
 
@@ -142,11 +207,11 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	responsesToChatFallbackEnabled := info.RelayMode != relayconstant.RelayModeResponsesCompact &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		relayconvert.ShouldResponsesUseChatCompletions(info)
+		shouldResponsesUseChatCompletions(info)
 	if info.RelayMode != relayconstant.RelayModeResponsesCompact &&
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
-		relayconvert.ShouldResponsesUseChatCompletionsCached(info) {
+		shouldResponsesUseChatCompletionsCached(info) {
 		usage, newApiErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
 		if newApiErr != nil {
 			return newApiErr
@@ -162,7 +227,7 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
 		}
-		requestBody = common.ReaderOnly(storage)
+		requestBody = common.NewReplayableBodyReader(storage)
 	} else {
 		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
 		if err != nil {
@@ -172,7 +237,7 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 				if fallbackErr != nil {
 					return fallbackErr
 				}
-				relayconvert.MarkResponsesToChatCompletionsFallback(info)
+				markResponsesToChatCompletionsFallback(info)
 				postResponsesUsageQuota(c, info, usage)
 				return nil
 			}
@@ -199,13 +264,12 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		}
 
 		logger.LogDebug(c, "requestBody: %s", jsonData)
-		body, size, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
+		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
 		if err != nil {
 			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		defer closer.Close()
 		jsonData = nil
-		info.UpstreamRequestBodySize = size
 		requestBody = body
 	}
 
@@ -218,7 +282,7 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 			if fallbackErr != nil {
 				return fallbackErr
 			}
-			relayconvert.MarkResponsesToChatCompletionsFallback(info)
+			markResponsesToChatCompletionsFallback(info)
 			postResponsesUsageQuota(c, info, usage)
 			return nil
 		}
@@ -239,7 +303,7 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 				if fallbackErr != nil {
 					return fallbackErr
 				}
-				relayconvert.MarkResponsesToChatCompletionsFallback(info)
+				markResponsesToChatCompletionsFallback(info)
 				postResponsesUsageQuota(c, info, usage)
 				return nil
 			}

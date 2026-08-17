@@ -9,7 +9,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"sync"
 )
 
 type stringWriter interface {
@@ -48,16 +47,16 @@ var dataReplacer = strings.NewReplacer(
 	"\n", "\n",
 	"\r", "\\r")
 
+// CustomEvent does not synchronize writes to the response writer. Streaming
+// callers must serialize event writes at the stream level.
 type CustomEvent struct {
 	Event string
 	Id    string
 	Retry uint
 	Data  interface{}
-
-	Mutex sync.Mutex
 }
 
-func encode(writer io.Writer, event *CustomEvent) error {
+func encode(writer io.Writer, event CustomEvent) error {
 	w := checkWriter(writer)
 	return writeData(w, event.Data)
 }
@@ -70,14 +69,12 @@ func writeData(w stringWriter, data interface{}) error {
 	return nil
 }
 
-func (r *CustomEvent) Render(w http.ResponseWriter) error {
+func (r CustomEvent) Render(w http.ResponseWriter) error {
 	r.WriteContentType(w)
 	return encode(w, r)
 }
 
-func (r *CustomEvent) WriteContentType(w http.ResponseWriter) {
-	r.Mutex.Lock()
-	defer r.Mutex.Unlock()
+func (r CustomEvent) WriteContentType(w http.ResponseWriter) {
 	header := w.Header()
 	header["Content-Type"] = writeContentType
 

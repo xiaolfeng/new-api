@@ -13,7 +13,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 // mockUpstreamServer 构造一个 mock 上游 HTTP server，记录收到的 body 和 header。

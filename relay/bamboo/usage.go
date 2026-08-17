@@ -1,6 +1,6 @@
 package bamboo
 
-import "github.com/QuantumNous/new-api/dto"
+import "github.com/QuantumNous/new-api/relaykit/dto"
 
 // accumulateReasoning 把 thinking delta 的 token 数累计到 Usage 的 reasoning 字段。
 //

@@ -123,15 +123,12 @@ func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 		sourceFromRecord, interactionFromRecord, agentIdFromRecord, sessionIdFromRecord, parentSessionIdFromRecord := ExtractLogDetailSummaries(logs[i].Record)
 
 		otherMap := map[string]interface{}{}
-		otherParsed := false
-		originalOther := logs[i].Other
 		if logs[i].Other != "" {
 			parsedOtherMap, err := common.StrToMap(logs[i].Other)
 			if err != nil {
 				logger.LogWarn(context.TODO(), fmt.Sprintf("formatUserLogs: failed to parse other field: %v", err))
 			} else {
 				otherMap = parsedOtherMap
-				otherParsed = true
 			}
 		}
 
@@ -154,16 +151,12 @@ func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 			otherMap[LogOtherParentSessionIdKey] = parentSessionIdFromRecord
 			otherMap[LogOtherParentSessionNameKey] = naming.SessionName(parentSessionIdFromRecord)
 		}
-		if otherParsed || len(otherMap) > 0 {
-			delete(otherMap, "admin_info")
-			// Remove operation-audit details (operator/route info), admin-only.
-			delete(otherMap, "audit_info")
-			// delete(otherMap, "reject_reason")
-			delete(otherMap, "stream_status")
-			logs[i].Other = common.MapToJsonStr(otherMap)
-		} else {
-			logs[i].Other = originalOther
-		}
+		// Remove admin-only debug fields.
+		delete(otherMap, "admin_info")
+		// Remove operation-audit details (operator/route info), admin-only.
+		delete(otherMap, "audit_info")
+		// delete(otherMap, "reject_reason")
+		// delete(otherMap, "stream_status")
 
 		if viewer != nil {
 			summarySource := strings.TrimSpace(common.Interface2String(otherMap[LogOtherClientSourceKey]))
@@ -339,14 +332,26 @@ func RecordTopupLog(userId int, content string, callerIp string, paymentMethod s
 }
 
 func RecordErrorLog(c *gin.Context, userId int, channelId int, modelName string, tokenName string, content string, tokenId int, useTimeSeconds int,
-	isStream bool, group string, other map[string]interface{}, record string, fullLog string) {
+	isStream bool, group string, other map[string]interface{}, extras ...string) {
 	logger.LogInfo(c, fmt.Sprintf("record error log: userId=%d, channelId=%d, modelName=%s, tokenName=%s, content=%s", userId, channelId, modelName, tokenName, common.LocalLogPreview(content)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
 	otherStr := common.MapToJsonStr(other)
-	// IP 记录永久开启，忽略用户设置
-	needRecordIp := true
+	record, fullLog := "", ""
+	if len(extras) > 0 {
+		record = extras[0]
+	}
+	if len(extras) > 1 {
+		fullLog = extras[1]
+	}
+	// 判断是否需要记录 IP
+	needRecordIp := false
+	if settingMap, err := GetUserSetting(userId, false); err == nil {
+		if settingMap.RecordIpLog {
+			needRecordIp = true
+		}
+	}
 	log := &Log{
 		UserId:           userId,
 		Username:         username,
@@ -429,14 +434,20 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	if !common.LogConsumeEnabled {
 		return
 	}
+	logger.LogInfo(c, fmt.Sprintf("record consume log: userId=%d, params=%s", userId, common.GetJsonString(params)))
 	username := c.GetString("username")
 	requestId := c.GetString(common.RequestIdKey)
-	createdAt := common.GetTimestamp()
 	upstreamRequestId := c.GetString(common.UpstreamRequestIdKey)
+	createdAt := common.GetTimestamp()
 	params.Other = AppendLogDetailSummaries(params.Other, params.Record)
 	otherStr := common.MapToJsonStr(params.Other)
-	// IP 记录永久开启，忽略用户设置
-	needRecordIp := true
+	// 判断是否需要记录 IP
+	needRecordIp := false
+	if settingMap, err := GetUserSetting(userId, false); err == nil {
+		if settingMap.RecordIpLog {
+			needRecordIp = true
+		}
+	}
 	log := &Log{
 		UserId:           userId,
 		Username:         username,

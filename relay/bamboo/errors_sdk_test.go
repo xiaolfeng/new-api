@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 // TestTranslateSDKError_NilError 验证 nil error 返回 nil（防 panic 契约）。

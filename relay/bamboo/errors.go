@@ -6,7 +6,7 @@ import (
 
 	pkgErrors "github.com/bamboo-services/bamboo-messages/pkg/errors"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 // ErrUnsupportedProvider 表示该上游 ApiType 未被 bamboo 覆盖，

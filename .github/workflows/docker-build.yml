@@ -28,9 +28,6 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ==========================================================================
-  # Step 1: 多架构原生构建（amd64 + arm64 各自跑在对应 runner 上）
-  # ==========================================================================
   build_single_arch:
     name: Build & push (${{ matrix.arch }})
     strategy:
@@ -44,6 +41,8 @@ jobs:
             platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
 
     permissions:
       packages: write
@@ -52,12 +51,13 @@ jobs:
 
     steps:
       - name: Check out
-        uses: actions/checkout@v4
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           fetch-depth: ${{ github.event_name == 'workflow_dispatch' && 0 || 1 }}
           ref: ${{ github.event.inputs.tag || github.ref }}
 
       - name: Resolve tag & write VERSION
+        id: version
         run: |
           if [ -n "${{ github.event.inputs.tag }}" ]; then
             TAG="${{ github.event.inputs.tag }}"
@@ -68,29 +68,30 @@ jobs:
           else
             TAG=${GITHUB_REF#refs/tags/}
           fi
-          echo "TAG=$TAG" >> $GITHUB_ENV
-          echo "$TAG" > VERSION
-          echo "Building tag: $TAG for ${{ matrix.arch }}"
+          echo "TAG=${TAG}" >> $GITHUB_ENV
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+          echo "${TAG}" > VERSION
+          echo "Building tag: ${TAG} for ${{ matrix.arch }}"
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4.3.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Extract metadata (labels)
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: |
             ${{ env.IMAGE_NAME }}
 
-      - name: Build & push single-arch image
+      - name: Build & push
         id: build
-        uses: docker/build-push-action@v7
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           platforms: ${{ matrix.platform }}
@@ -105,64 +106,63 @@ jobs:
           sbom: true
 
       - name: Install cosign
-        uses: sigstore/cosign-installer@v3
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
 
       - name: Sign image with cosign
         run: cosign sign --yes ${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
 
-      - name: Output digest
+      - name: Image summary
         run: |
           echo "### Docker Image Digest (${{ matrix.arch }})" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ env.IMAGE_NAME }}:${{ env.TAG }}-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
-          echo "${{ env.IMAGE_NAME }}:latest-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.IMAGE_NAME }}:${TAG}-${{ matrix.arch }}" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-  # ==========================================================================
-  # Step 2: 合并多架构 manifest（版本标签 + latest 标签）
-  # ==========================================================================
   create_manifests:
     name: Create multi-arch manifests
     needs: [build_single_arch]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
 
+    permissions:
+      id-token: write
+
     steps:
-      - name: Extract tag
-        run: |
-          if [ -n "${{ github.event.inputs.tag }}" ]; then
-            echo "TAG=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
-          else
-            echo "TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
-          fi
+      - name: Set version
+        run: echo "TAG=${{ needs.build_single_arch.outputs.tag }}" >> $GITHUB_ENV
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        uses: docker/login-action@c99871dec2022cc055c062a10cc1a1310835ceb4 # v4.3.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Create & push manifest (version tag)
+      - name: Create & push manifest (version)
         run: |
           docker buildx imagetools create \
             -t ${{ env.IMAGE_NAME }}:${TAG} \
             ${{ env.IMAGE_NAME }}:${TAG}-amd64 \
             ${{ env.IMAGE_NAME }}:${TAG}-arm64
 
-      - name: Create & push manifest (latest tag)
+      - name: Create & push manifest (latest)
         run: |
           docker buildx imagetools create \
             -t ${{ env.IMAGE_NAME }}:latest \
             ${{ env.IMAGE_NAME }}:latest-amd64 \
             ${{ env.IMAGE_NAME }}:latest-arm64
 
-      - name: Output manifest digest
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Sign manifests with cosign
+        run: |
+          cosign sign --yes ${{ env.IMAGE_NAME }}:${TAG}
+          cosign sign --yes ${{ env.IMAGE_NAME }}:latest
+
+      - name: Manifest summary
         run: |
           echo "### Multi-arch Manifest" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          echo "${{ env.IMAGE_NAME }}:${TAG}" >> $GITHUB_STEP_SUMMARY
-          echo "${{ env.IMAGE_NAME }}:latest" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           docker buildx imagetools inspect ${{ env.IMAGE_NAME }}:${TAG} >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

@@ -380,7 +380,6 @@ function CommonLogsCard<TData>({
         ) : (
           <SummaryField cell={cells.get('prompt_tokens')} />
         )}
-        <SummaryField cell={cells.get('cache_rate')} />
         <SummaryField
           label={t('Details')}
           cell={cells.get('content')}
@@ -411,22 +410,7 @@ function TaskLogsCard<TData>({
 
       <div className='grid grid-cols-2 gap-1.5'>
         <SummaryField label={t('Submit Time')} cell={submitTimeCell} />
-        <SummaryField
-          label={t('Channel')}
-          cell={cells.get('channel_id')}
-          primaryOnly
-        />
         <SummaryField label={t('User')} cell={cells.get('user')} primaryOnly />
-        <SummaryField
-          label={t('Duration')}
-          cell={cells.get('duration')}
-          primaryOnly
-        />
-        <SummaryField
-          label={t('Progress')}
-          cell={cells.get('progress')}
-          primaryOnly
-        />
         <SummaryField
           label={t('Result')}
           cell={cells.get('fail_reason')}
@@ -459,18 +443,13 @@ function DrawingLogsCard<TData>({
         <SummaryField label={t('Submit Time')} cell={submitTimeCell} />
         <SummaryField
           label={t('Channel')}
-          cell={cells.get('channel_id')}
+          cell={cells.get('channel')}
           primaryOnly
         />
         <SummaryField label={t('Task ID')} cell={cells.get('mj_id')} />
         <SummaryField
           label={t('Duration')}
           cell={cells.get('duration')}
-          primaryOnly
-        />
-        <SummaryField
-          label={t('Progress')}
-          cell={cells.get('progress')}
           primaryOnly
         />
         <SummaryField label={t('Image')} cell={cells.get('image_url')} />

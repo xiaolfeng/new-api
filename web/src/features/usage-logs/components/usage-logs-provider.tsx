@@ -17,16 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
+import { useQueryClient } from '@tanstack/react-query'
 import {
   createContext,
-  useContext,
-  useState,
-  useEffect,
   useCallback,
+  useContext,
+  useEffect,
   useRef,
+  useState,
   type ReactNode,
 } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 
 import { useIsAdmin } from '@/hooks/use-admin'
 
@@ -73,9 +73,9 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
   const [isDetailOpen, setIsDetailOpen] = useState(false)
   const [pageVisible, setPageVisible] = useState(true)
   const consecutiveFailuresRef = useRef(0)
-
   const queryClient = useQueryClient()
   const isPausedRef = useRef(false)
+  const [viewScope, setViewScope] = useState<LogsViewScope>('all')
 
   const setAutoRefresh = useCallback((enabled: boolean) => {
     setAutoRefreshState(enabled)
@@ -141,7 +141,6 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
       clearInterval(countdownIntervalId)
     }
   }, [autoRefresh, queryClient])
-  const [viewScope, setViewScope] = useState<LogsViewScope>('all')
 
   return (
     <UsageLogsContext.Provider

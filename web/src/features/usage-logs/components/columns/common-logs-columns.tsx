@@ -16,12 +16,11 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { type ColumnDef } from '@tanstack/react-table'
+import type { ColumnDef } from '@tanstack/react-table'
 import { GitBranch, Sparkles, KeyRound } from 'lucide-react'
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { DataTableColumnHeader } from '@/components/data-table/core/column-header'
 import { GroupBadge } from '@/components/group-badge'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -66,8 +65,9 @@ import {
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
+import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
-import { TimingMetricsCell } from '../timing-metrics-cell'
+import { TimingMetricsCell, StreamTpsCell } from '../timing-metrics-cell'
 import { useUsageLogsContext } from '../usage-logs-provider'
 
 interface DetailSegment {
@@ -99,12 +99,6 @@ function getGroupRatio(other: LogOtherData | null): number | null {
   }
 
   return null
-}
-
-function splitQuotaDisplay(value: string): { prefix: string; amount: string } {
-  const match = value.match(/^([^0-9+\-.,\s]+)(.+)$/)
-  if (!match) return { prefix: '', amount: value }
-  return { prefix: match[1], amount: match[2] }
 }
 
 function buildDetailSegments(
@@ -371,7 +365,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <div className='flex max-w-[130px] flex-col gap-0.5' />
+                    <div className='flex max-w-[160px] flex-col gap-0.5' />
                   }
                 >
                   <div className='relative inline-flex w-fit items-center gap-1'>
@@ -490,7 +484,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             </TooltipProvider>
           )
         },
-        size: 130,
       },
       {
         id: 'user',
@@ -545,7 +538,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             </button>
           )
         },
-        size: 120,
       }
     )
   }
@@ -632,13 +624,10 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         )
       },
       meta: { mobileTitle: true },
-      size: 160,
     },
     {
       id: 'source',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Source')} />
-      ),
+      header: t('Source'),
       cell: ({ row }) => {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
@@ -696,12 +685,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       meta: { label: t('Source'), mobileHidden: true },
       size: 100,
     },
-
     {
       id: 'session',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Session')} />
-      ),
+      header: t('Session'),
       cell: ({ row }) => {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
@@ -710,8 +696,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         // When parent_session_id exists, the parent is the main conversation
         // and the current session is the sub-agent/child session.
-        // When no parent, session_name is the main conversation and
-        // agent_name is the sub-agent.
         const hasParent =
           !!session.parentSessionName || !!session.parentSessionId
         const mainSessionName = hasParent
@@ -787,12 +771,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       meta: { label: t('Session'), mobileHidden: true },
       size: 120,
     },
-
     {
       id: 'interaction_type',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('Interaction')} />
-      ),
+      header: t('Interaction'),
       cell: ({ row }) => {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
@@ -831,130 +812,30 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       meta: { label: t('Interaction'), mobileHidden: true },
       size: 90,
     },
-
     {
-      id: 'tps',
-      header: ({ column }) => (
-        <DataTableColumnHeader column={column} title={t('TPS')} />
-      ),
+      accessorKey: 'is_stream',
+      header: t('Stream'),
       cell: ({ row }) => {
         const log = row.original
-        if (!isDisplayableLogType(log.type)) return null
+        if (!isTimingLogType(log.type)) return null
 
+        const useTime = row.getValue('use_time') as number
         const other = parseLogOther(log.other)
-        const tps = other?.tps
-        const hasValidTps = typeof tps === 'number' && tps > 0
-
-        const bt = other?.bamboo_timing
-        const thinkingTps =
-          typeof bt?.thinking_tps === 'number' && bt.thinking_tps !== 0
-            ? bt.thinking_tps
+        const tokensPerSecond =
+          useTime > 0 && log.completion_tokens > 0
+            ? log.completion_tokens / useTime
             : null
-        const outputTps =
-          typeof bt?.output_tps === 'number' && bt.output_tps !== 0
-            ? bt.output_tps
-            : null
-        const toolTps =
-          typeof bt?.tool_tps === 'number' && bt.tool_tps !== 0
-            ? bt.tool_tps
-            : null
-        const hasBambooRates =
-          thinkingTps != null || outputTps != null || toolTps != null
-
-        const useTime = log.use_time
-        const ttftSec = (() => {
-          const btTtft = bt?.ttft_ms
-          if (typeof btTtft === 'number' && btTtft > 0) return btTtft / 1000
-          const frtVal = other?.frt
-          if (typeof frtVal === 'number' && frtVal > 0) return frtVal / 1000
-          return 0
-        })()
-
-        const completionTokens =
-          log.completion_tokens > 0
-            ? log.completion_tokens
-            : typeof bt?.output_tokens === 'number' && bt.output_tokens > 0
-              ? bt.output_tokens
-              : 0
-
-        const genTime =
-          log.is_stream && ttftSec > 0 ? useTime - ttftSec : useTime
-        const avgTps =
-          genTime > 0 && completionTokens > 0
-            ? completionTokens / genTime
-            : null
-
-        if (!hasValidTps && avgTps == null && !hasBambooRates) return null
-
-        const displayTps = hasValidTps ? (tps as number) : avgTps
-
-        let colorClass = 'text-red-600 dark:text-red-400'
-        if (displayTps != null) {
-          if (displayTps >= 81)
-            colorClass = 'text-green-600 dark:text-green-400'
-          else if (displayTps >= 51)
-            colorClass = 'text-lime-600 dark:text-lime-400'
-          else if (displayTps >= 11)
-            colorClass = 'text-yellow-600 dark:text-yellow-400'
-        }
 
         return (
-          <div className='flex flex-col gap-0.5'>
-            {displayTps != null && (
-              <span
-                className={`font-mono text-sm font-medium tabular-nums ${colorClass}`}
-              >
-                {displayTps.toFixed(1)}
-              </span>
-            )}
-            {hasBambooRates ? (
-              <div className='flex items-center gap-2 text-[11px]'>
-                {thinkingTps != null && (
-                  <span className='flex items-center gap-0.5'>
-                    <span className='text-violet-500/80 dark:text-violet-400/70'>
-                      ◆
-                    </span>
-                    <span className='font-mono text-violet-600/80 tabular-nums dark:text-violet-400/70'>
-                      {thinkingTps < 0 ? '~' : ''}
-                      {Math.abs(thinkingTps).toFixed(1)}
-                    </span>
-                  </span>
-                )}
-                {outputTps != null && (
-                  <span className='flex items-center gap-0.5'>
-                    <span className='text-sky-500/80 dark:text-sky-400/70'>
-                      ◆
-                    </span>
-                    <span className='font-mono text-sky-600/80 tabular-nums dark:text-sky-400/70'>
-                      {outputTps < 0 ? '~' : ''}
-                      {Math.abs(outputTps).toFixed(1)}
-                    </span>
-                  </span>
-                )}
-                {toolTps != null && (
-                  <span className='flex items-center gap-0.5'>
-                    <span className='text-amber-500/80 dark:text-amber-400/70'>
-                      ◆
-                    </span>
-                    <span className='font-mono text-amber-600/80 tabular-nums dark:text-amber-400/70'>
-                      {toolTps < 0 ? '~' : ''}
-                      {Math.abs(toolTps).toFixed(1)}
-                    </span>
-                  </span>
-                )}
-              </div>
-            ) : avgTps != null ? (
-              <span className='text-muted-foreground/60 font-mono text-[11px] tabular-nums'>
-                {Math.round(avgTps)}
-              </span>
-            ) : null}
-          </div>
+          <StreamTpsCell
+            isStream={log.is_stream}
+            tokensPerSecond={tokensPerSecond}
+            streamStatus={other?.stream_status}
+          />
         )
       },
-      meta: { label: t('TPS'), mobileHidden: true },
-      size: 80,
+      meta: { label: t('Stream') },
     },
-
     {
       accessorKey: 'prompt_tokens',
       header: 'Tokens',
@@ -962,14 +843,19 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         const log = row.original
         if (!isDisplayableLogType(log.type)) return null
 
+        const other = parseLogOther(log.other)
+
         let promptTokens = log.prompt_tokens || 0
         let completionTokens = log.completion_tokens || 0
 
-        // Fallback to bamboo_timing token counts when log fields are 0
         if (promptTokens === 0 || completionTokens === 0) {
-          const other = parseLogOther(log.other)
           const bt = other?.bamboo_timing
           if (promptTokens === 0) {
+            const thinkingTokens =
+              typeof bt?.thinking_tokens === 'number' ? bt.thinking_tokens : 0
+            if (thinkingTokens > 0) promptTokens = thinkingTokens
+          }
+          if (completionTokens === 0) {
             const thinkingTokens =
               typeof bt?.thinking_tokens === 'number' ? bt.thinking_tokens : 0
             const outputTokens =
@@ -977,8 +863,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
             const toolTokens =
               typeof bt?.tool_tokens === 'number' ? bt.tool_tokens : 0
             const bambooTotal = thinkingTokens + outputTokens + toolTokens
-            if (bambooTotal > 0 && completionTokens === 0) {
-              completionTokens = outputTokens + toolTokens
+            if (bambooTotal > 0) {
+              completionTokens = bambooTotal
             }
           }
         }
@@ -986,27 +872,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (promptTokens === 0 && completionTokens === 0) {
           return <span className='text-muted-foreground text-xs'>-</span>
         }
-
-        return (
-          <div className='flex flex-col gap-0.5'>
-            <span className='font-mono text-xs font-medium tabular-nums'>
-              {promptTokens.toLocaleString()} /{' '}
-              {completionTokens.toLocaleString()}
-            </span>
-          </div>
-        )
-      },
-      size: 110,
-    },
-
-    {
-      id: 'cache_rate',
-      header: t('Cache Rate'),
-      cell: ({ row }) => {
-        const log = row.original
-        if (!isDisplayableLogType(log.type)) return null
-
-        const other = parseLogOther(log.other)
 
         const cacheReadTokens = other?.cache_tokens || 0
         const cacheWrite5m = other?.cache_creation_tokens_5m || 0
@@ -1016,99 +881,29 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           ? cacheWrite5m + cacheWrite1h
           : other?.cache_creation_tokens || 0
 
-        const promptTokens = log.prompt_tokens || 0
-
-        // prompt_tokens semantics differ by provider:
-        // - Claude (anthropic semantic): prompt_tokens is text-only, EXCLUDES cache tokens
-        // - OpenAI (openai semantic): prompt_tokens is the TOTAL, INCLUDES cache_read tokens
-        // input_tokens_total (written by backend) is the authoritative denominator;
-        // fallback must respect the claude flag to avoid double-counting cache tokens.
-        const isClaudeSemantic = other?.claude === true
-        const totalInput =
-          other?.input_tokens_total && other.input_tokens_total > 0
-            ? other.input_tokens_total
-            : isClaudeSemantic
-              ? promptTokens + cacheReadTokens + cacheWriteTokens
-              : promptTokens
-
-        const cacheRate =
-          totalInput > 0 && cacheReadTokens > 0
-            ? Math.min((cacheReadTokens / totalInput) * 100, 100)
-            : null
-
-        if (cacheRate === null || cacheRate === 0) {
-          return <span className='text-muted-foreground text-xs'>-</span>
-        }
-
-        const rateText = `${cacheRate.toFixed(1)}%`
-
         return (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <span className='font-mono text-xs font-medium text-emerald-600 tabular-nums dark:text-emerald-400'>
-                    {rateText}
+          <div className='flex flex-col gap-0.5'>
+            <span className='font-mono text-xs font-medium tabular-nums'>
+              {promptTokens.toLocaleString()} /{' '}
+              {completionTokens.toLocaleString()}
+            </span>
+            {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
+              <div className='flex items-center gap-1 text-[11px]'>
+                {cacheReadTokens > 0 && (
+                  <span className='text-muted-foreground/60'>
+                    {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
                   </span>
-                }
-              />
-              <TooltipContent side='top' className='max-w-[220px] p-2'>
-                <div className='flex flex-col gap-0.5 text-xs'>
-                  {cacheReadTokens > 0 && (
-                    <div className='flex items-center justify-between gap-3'>
-                      <span className='text-muted-foreground'>
-                        {t('Cache Read')}
-                      </span>
-                      <span className='font-mono font-medium tabular-nums'>
-                        ↓ {cacheReadTokens.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                  {cacheWriteTokens > 0 && (
-                    <div className='flex items-center justify-between gap-3'>
-                      <span className='text-muted-foreground'>
-                        {t('Cache Write')}
-                      </span>
-                      <span className='font-mono font-medium tabular-nums'>
-                        ↑ {cacheWriteTokens.toLocaleString()}
-                      </span>
-                    </div>
-                  )}
-                  {hasSplitCache && (
-                    <>
-                      {cacheWrite5m > 0 && (
-                        <div className='text-muted-foreground/70 flex items-center justify-between gap-3 text-[11px]'>
-                          <span>{t('Cache Creation (5m)')}</span>
-                          <span className='font-mono tabular-nums'>
-                            {cacheWrite5m.toLocaleString()}
-                          </span>
-                        </div>
-                      )}
-                      {cacheWrite1h > 0 && (
-                        <div className='text-muted-foreground/70 flex items-center justify-between gap-3 text-[11px]'>
-                          <span>{t('Cache Creation (1h)')}</span>
-                          <span className='font-mono tabular-nums'>
-                            {cacheWrite1h.toLocaleString()}
-                          </span>
-                        </div>
-                      )}
-                    </>
-                  )}
-                  <div className='mt-0.5 flex items-center justify-between gap-3 border-t pt-0.5'>
-                    <span className='text-muted-foreground'>
-                      {t('Total Input')}
-                    </span>
-                    <span className='font-mono tabular-nums'>
-                      {totalInput.toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
+                )}
+                {cacheWriteTokens > 0 && (
+                  <span className='text-muted-foreground/60'>
+                    ↑ {cacheWriteTokens.toLocaleString()}
+                  </span>
+                )}
+              </div>
+            )}
+          </div>
         )
       },
-      size: 90,
     },
     {
       accessorKey: 'quota',
@@ -1119,48 +914,8 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         const quota = row.getValue('quota') as number
         const other = parseLogOther(log.other)
-        const isSubscription = other?.billing_source === 'subscription'
-
-        if (isSubscription) {
-          return (
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <StatusBadge
-                      label={t('Subscription')}
-                      variant='success'
-                      size='sm'
-                      copyable={false}
-                      className='cursor-help'
-                    />
-                  }
-                />
-                <TooltipContent>
-                  <span>
-                    {t('Deducted by subscription')}: {formatLogQuota(quota)}
-                  </span>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          )
-        }
-
-        const quotaStr = formatLogQuota(quota)
-        const quotaDisplay = splitQuotaDisplay(quotaStr)
-
-        return (
-          <div className='flex flex-col gap-0.5'>
-            <span className='border-border/80 bg-muted/60 inline-flex h-6 w-fit items-center rounded-md border px-2 [font-family:var(--font-body)] text-sm leading-none font-semibold tabular-nums'>
-              {quotaDisplay.prefix && (
-                <span className='mr-1'>{quotaDisplay.prefix}</span>
-              )}
-              <span>{quotaDisplay.amount}</span>
-            </span>
-          </div>
-        )
+        return <LogCostDisplay quota={quota} other={other} />
       },
-      size: 90,
     },
 
     {
@@ -1201,7 +956,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           />
         )
       },
-      size: 110,
     },
 
     {
@@ -1209,7 +963,6 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       header: t('Details'),
       cell: function DetailsCell({ row }) {
         const [dialogOpen, setDialogOpen] = useState(false)
-        const { setIsDetailOpen } = useUsageLogsContext()
         const log = row.original
         const other = parseLogOther(log.other)
 
@@ -1247,20 +1000,12 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           )
         }
 
-        const handleOpenChange = useCallback(
-          (open: boolean) => {
-            setDialogOpen(open)
-            setIsDetailOpen(open)
-          },
-          [setIsDetailOpen]
-        )
-
         return (
           <>
             <button
               type='button'
               className='group flex max-w-[200px] items-center gap-1 text-left text-xs'
-              onClick={() => handleOpenChange(true)}
+              onClick={() => setDialogOpen(true)}
               title={t('Click to view full details')}
             >
               {detailPreview}
@@ -1269,7 +1014,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
               log={log}
               isAdmin={isAdmin}
               open={dialogOpen}
-              onOpenChange={handleOpenChange}
+              onOpenChange={setDialogOpen}
             />
           </>
         )

@@ -8,7 +8,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/types"
+	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
 func TestChatRelay_UnsupportedFormatFallsBack(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"testing"
 
 	bamboosdk "github.com/bamboo-services/bamboo-messages/bamboo"
-	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 )
 
 func TestExtractStreamUsage_MessageStart(t *testing.T) {

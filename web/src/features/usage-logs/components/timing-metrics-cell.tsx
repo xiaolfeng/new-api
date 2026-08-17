@@ -72,8 +72,7 @@ interface TimingMetricsCellProps {
   /**
    * Optional per-phase breakdown (thinking / output / tool) sourced from
    * `other.bamboo_timing`. When any segment is present the cell is wrapped in
-   * a tooltip revealing the phase durations, preserving the detail that the
-   * legacy inline Timing column used to show inline.
+   * a tooltip revealing the phase durations.
    */
   phaseTiming?: PhaseTiming
 }
@@ -106,10 +105,9 @@ export function TimingMetricsCell(props: TimingMetricsCellProps) {
       ? phase.contentMs
       : null
   const toolMs =
-    typeof phase?.toolMs === 'number' && phase.toolMs > 0
-      ? phase.toolMs
-      : null
-  const hasPhaseTiming = thinkingMs != null || contentMs != null || toolMs != null
+    typeof phase?.toolMs === 'number' && phase.toolMs > 0 ? phase.toolMs : null
+  const hasPhaseTiming =
+    thinkingMs != null || contentMs != null || toolMs != null
 
   const labels = (
     <div className='flex min-h-8 min-w-0 flex-col justify-center gap-0.5 text-xs leading-tight'>
@@ -203,12 +201,6 @@ export function TimingMetricsCell(props: TimingMetricsCellProps) {
   )
 }
 
-/**
- * Phase breakdown tooltip body. Mirrors the inline layout the legacy Timing
- * column used to render directly inside its cell — violet / sky / amber dots
- * keyed to thinking / output / tool — so the detail survives the move into
- * the shared `TimingMetricsCell` component.
- */
 function PhaseTimingTooltipContent({
   thinkingMs,
   contentMs,
