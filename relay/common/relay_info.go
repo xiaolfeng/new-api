@@ -227,6 +227,11 @@ type RelayInfo struct {
 	// 供日志记录从格式无关的统一中间表示构建结构化记录，
 	// 而非依赖可能被改写的 info.Request / FinalRequestRelayFormat。
 	BambooRelayData *BambooRelayExtract
+
+	// HostToolPlan 是 bamboo 端侧工具的检测/改写结果。类型在本包，避免循环依赖。
+	HostToolPlan *HostToolPlan
+	// HostToolExecuted 表示本请求已成功或失败地执行过至少一次 host 工具。
+	HostToolExecuted bool
 }
 
 // BambooRelayExtract 是 bamboo N2N 中间态请求的本地提取副本。

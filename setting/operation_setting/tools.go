@@ -42,6 +42,7 @@ const (
 func seedHardcodedToolPrices(prices map[string]float64) {
 	prices["web_search"] = defaultWebSearchToolPrice
 	prices["web_search_preview"] = defaultWebSearchPreviewToolPrice
+	prices["web_fetch"] = 0
 	prices["file_search"] = defaultFileSearchToolPrice
 	prices["google_search"] = defaultGoogleSearchToolPrice
 	prices["image_generation"] = defaultImageGenerationToolPrice

@@ -141,6 +141,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	AppendChannelAffinityAdminInfo(ctx, adminInfo)
 
 	other["admin_info"] = adminInfo
+	appendHostToolAdminInfo(relayInfo, adminInfo)
 	appendRequestPath(ctx, relayInfo, other)
 	appendRequestConversionChain(relayInfo, other)
 	appendFinalRequestFormat(relayInfo, other)
@@ -149,6 +150,22 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendStreamStatus(relayInfo, other)
 	appendBambooTiming(relayInfo, other)
 	return other
+}
+
+func appendHostToolAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[string]interface{}) {
+	if relayInfo == nil || admin == nil || relayInfo.HostToolPlan == nil {
+		return
+	}
+	plan := relayInfo.HostToolPlan
+	admin["host_tools"] = map[string]interface{}{
+		"mode":           plan.Mode,
+		"enabled":        plan.Enabled,
+		"executed":       relayInfo.HostToolExecuted,
+		"injected":       plan.Injected,
+		"stripped":       plan.Stripped,
+		"stopped_reason": plan.StoppedReason,
+		"execs":          plan.Execs,
+	}
 }
 
 func appendParamOverrideInfo(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {

@@ -32,6 +32,7 @@ import {
   FormItem,
   FormLabel,
 } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -54,6 +55,19 @@ const customizationSchema = z.object({
     enable_bamboo_relay: z.boolean(),
     enable_bamboo_debug_log: z.boolean(),
     degraded_reason: z.enum(['stop', 'tool_use']).optional(),
+    enable_host_tools: z.boolean(),
+    host_tool_mode: z.enum(['loop', 'return']),
+    search_backend: z.enum(['off', 'exa', 'parallel', 'searxng']),
+    allow_third_party_search_egress: z.boolean(),
+    search_fallback: z.string(),
+    searxng_base_url: z.string(),
+    exa_mcp_url: z.string(),
+    parallel_mcp_url: z.string(),
+    exa_api_key: z.string(),
+    parallel_api_key: z.string(),
+    max_search_results: z.coerce.number().int().min(1).max(20),
+    max_fetch_bytes: z.coerce.number().int().min(1),
+    host_tool_timeout_ms: z.coerce.number().int().min(1).max(30000),
   }),
   retry_setting: z.object({
     record_consume_log_detail_enabled: z.boolean(),
@@ -88,8 +102,13 @@ export function CustomizationSection({
           'retry_setting.full_log_consume_expires_at',
           'retry_setting.full_log_consume_remaining_seconds',
         ])
+        const secretKeys = new Set([
+          'bamboo.exa_api_key',
+          'bamboo.parallel_api_key',
+        ])
         for (const [key, value] of Object.entries(changedFields)) {
           if (readonlyKeys.has(key)) continue
+          if (secretKeys.has(key) && !String(value ?? '').trim()) continue
           await updateOption.mutateAsync({
             key,
             value:
@@ -269,6 +288,261 @@ export function CustomizationSection({
                   </FormItem>
                 )}
               />
+
+              <FormField
+                control={form.control}
+                name='bamboo.enable_host_tools'
+                render={({ field }) => (
+                  <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
+                    <div className='space-y-0.5'>
+                      <FormLabel className='text-base'>
+                        {t('Bamboo Host Tools')}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'Intercept WebSearch / WebFetch on the bamboo relay path, execute them on this gateway, and let the same upstream model synthesize the final answer. Native relay is unchanged.'
+                        )}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {form.watch('bamboo.enable_host_tools') && (
+                <div className='space-y-4 rounded-lg border p-4'>
+                  <FormField
+                    control={form.control}
+                    name='bamboo.host_tool_mode'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Host tool mode')}</FormLabel>
+                        <FormDescription>
+                          {t(
+                            'Loop (recommended) runs one extra upstream hop after executing tools. Return folds raw search/fetch text as the final assistant message (debug only).'
+                          )}
+                        </FormDescription>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <FormControl>
+                            <SelectTrigger className='w-56'>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectItem value='loop'>
+                              {t('Loop (A-thin)')}
+                            </SelectItem>
+                            <SelectItem value='return'>
+                              {t('Return (debug fold)')}
+                            </SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.search_backend'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Search backend')}</FormLabel>
+                        <FormDescription>
+                          {t(
+                            'Default is off. Exa and Parallel send queries to a third party and also require the egress toggle below. SearXNG is the self-hosted option.'
+                          )}
+                        </FormDescription>
+                        <Select
+                          value={field.value}
+                          onValueChange={field.onChange}
+                        >
+                          <FormControl>
+                            <SelectTrigger className='w-56'>
+                              <SelectValue />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent alignItemWithTrigger={false}>
+                            <SelectItem value='off'>{t('Off')}</SelectItem>
+                            <SelectItem value='exa'>Exa MCP</SelectItem>
+                            <SelectItem value='parallel'>
+                              Parallel MCP
+                            </SelectItem>
+                            <SelectItem value='searxng'>SearXNG</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.allow_third_party_search_egress'
+                    render={({ field }) => (
+                      <FormItem className='flex flex-row items-center justify-between gap-4'>
+                        <div className='space-y-0.5'>
+                          <FormLabel>
+                            {t('Allow third-party search egress')}
+                          </FormLabel>
+                          <FormDescription>
+                            {t(
+                              'Required before Exa or Parallel can run. Leave off unless you accept sending user queries to those hosts. HTTP_PROXY also weakens WebFetch DNS rebinding protection.'
+                            )}
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.search_fallback'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Search fallback')}</FormLabel>
+                        <FormDescription>
+                          {t(
+                            'JSON array of backends used after a transport/5xx failure, for example ["parallel"].'
+                          )}
+                        </FormDescription>
+                        <FormControl>
+                          <Input {...field} placeholder='["parallel"]' />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.searxng_base_url'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('SearXNG base URL')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            {...field}
+                            placeholder='https://searx.example.com'
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.exa_mcp_url'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Exa MCP URL')}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.exa_api_key'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Exa API key')}</FormLabel>
+                        <FormDescription>
+                          {t('Write-only. Leave empty to keep the stored key.')}
+                        </FormDescription>
+                        <FormControl>
+                          <Input
+                            type='password'
+                            autoComplete='new-password'
+                            {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.parallel_mcp_url'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Parallel MCP URL')}</FormLabel>
+                        <FormControl>
+                          <Input {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.parallel_api_key'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Parallel API key')}</FormLabel>
+                        <FormDescription>
+                          {t('Write-only. Leave empty to keep the stored key.')}
+                        </FormDescription>
+                        <FormControl>
+                          <Input
+                            type='password'
+                            autoComplete='new-password'
+                            {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <div className='grid gap-4 sm:grid-cols-3'>
+                    <FormField
+                      control={form.control}
+                      name='bamboo.max_search_results'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Max search results')}</FormLabel>
+                          <FormControl>
+                            <Input type='number' min={1} max={20} {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name='bamboo.max_fetch_bytes'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Max fetch bytes')}</FormLabel>
+                          <FormControl>
+                            <Input type='number' min={1} {...field} />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                    <FormField
+                      control={form.control}
+                      name='bamboo.host_tool_timeout_ms'
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>{t('Host tool timeout (ms)')}</FormLabel>
+                          <FormControl>
+                            <Input
+                              type='number'
+                              min={1}
+                              max={30000}
+                              {...field}
+                            />
+                          </FormControl>
+                        </FormItem>
+                      )}
+                    />
+                  </div>
+                </div>
+              )}
             </>
           )}
 

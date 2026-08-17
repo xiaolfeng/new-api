@@ -201,6 +201,36 @@ const MODELS_SECTIONS = [
             )
               ? settings['bamboo.degraded_reason']
               : 'stop') as 'stop' | 'tool_use',
+            enable_host_tools: settings['bamboo.enable_host_tools'] ?? false,
+            host_tool_mode: (['loop', 'return'].includes(
+              settings['bamboo.host_tool_mode']
+            )
+              ? settings['bamboo.host_tool_mode']
+              : 'loop') as 'loop' | 'return',
+            search_backend: (['off', 'exa', 'parallel', 'searxng'].includes(
+              settings['bamboo.search_backend']
+            )
+              ? settings['bamboo.search_backend']
+              : 'off') as 'off' | 'exa' | 'parallel' | 'searxng',
+            allow_third_party_search_egress:
+              settings['bamboo.allow_third_party_search_egress'] ?? false,
+            search_fallback: Array.isArray(
+              settings['bamboo.search_fallback'] as unknown
+            )
+              ? JSON.stringify(settings['bamboo.search_fallback'])
+              : (settings['bamboo.search_fallback'] ?? '[]'),
+            searxng_base_url: settings['bamboo.searxng_base_url'] ?? '',
+            exa_mcp_url:
+              settings['bamboo.exa_mcp_url'] ?? 'https://mcp.exa.ai/mcp',
+            parallel_mcp_url:
+              settings['bamboo.parallel_mcp_url'] ??
+              'https://search.parallel.ai/mcp',
+            exa_api_key: '',
+            parallel_api_key: '',
+            max_search_results: settings['bamboo.max_search_results'] ?? 8,
+            max_fetch_bytes: settings['bamboo.max_fetch_bytes'] ?? 1048576,
+            host_tool_timeout_ms:
+              settings['bamboo.host_tool_timeout_ms'] ?? 15000,
           },
           retry_setting: {
             record_consume_log_detail_enabled:

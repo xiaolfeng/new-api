@@ -24,11 +24,12 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/relaykit/dto"
-	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/relay/bamboo/hosttool"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 )
 
 // errStreamErrorNoDetail 用于 event.Error 为 nil 但事件类型为 EventError 的兜底。
@@ -101,6 +102,15 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 
 	info.BambooRelayData = extractBambooRelayData(relayReq)
 
+	bambooSettings := model_setting.GetBambooSettings()
+	if bambooSettings.EnableHostTools {
+		plan, herr := hosttool.InspectAndRewrite(entryFormat, requestBody, relayReq, bambooSettings)
+		if herr != nil {
+			return nil, types.NewError(herr, types.ErrorCodeInvalidRequest)
+		}
+		info.HostToolPlan = plan
+	}
+
 	if debugEnabled {
 		info.BambooDebug.RelayParsed = bamboorelay.FormatRelayParsed("ChatRelay", codecFmt, relayReq)
 	}
@@ -135,6 +145,12 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	client := bamboosdk.NewClient(p)
 
 	// ③ 出口侧：按入口 codec 序列化响应
+	if info.HostToolPlan != nil && info.HostToolPlan.Enabled {
+		if relayReq.IsStream {
+			return doHostStreamRelay(c, info, client, entryCodec, codecFmt, relayReq)
+		}
+		return doHostCompleteRelay(c, info, client, entryCodec, codecFmt, relayReq)
+	}
 	if relayReq.IsStream {
 		return doStreamRelay(c, info, client, entryCodec, codecFmt, relayReq)
 	}

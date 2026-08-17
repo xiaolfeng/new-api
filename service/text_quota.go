@@ -159,15 +159,24 @@ func calculateTextToolCallSurcharge(ctx *gin.Context, relayInfo *relaycommon.Rel
 			items = collectToolSurchargeItem(items, name, tool.CallCount, summary.ModelName)
 		}
 	}
-	if relayInfo.RelayMode != relayconstant.RelayModeResponses &&
+	if !relayInfo.HostToolExecuted &&
+		relayInfo.RelayMode != relayconstant.RelayModeResponses &&
 		strings.HasSuffix(summary.ModelName, "search-preview") {
 		items = collectToolSurchargeItem(items, dto.BuildInToolWebSearchPreview, 1, summary.ModelName)
 	}
 
+	claudeSearch := ctx.GetInt("claude_web_search_requests")
+	if relayInfo.HostToolExecuted {
+		if tool := relayInfo.ResponsesUsageInfo; tool != nil {
+			if built := tool.BuiltInTools[dto.BuildInToolWebSearch]; built != nil && built.CallCount > 0 {
+				claudeSearch = 0
+			}
+		}
+	}
 	items = collectToolSurchargeItem(
 		items,
 		dto.BuildInToolWebSearch,
-		ctx.GetInt("claude_web_search_requests"),
+		claudeSearch,
 		summary.ModelName,
 	)
 

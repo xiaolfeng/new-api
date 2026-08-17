@@ -233,6 +233,17 @@ export type ModelSettings = {
   'bamboo.enable_bamboo_relay': boolean
   'bamboo.enable_bamboo_debug_log': boolean
   'bamboo.degraded_reason': string
+  'bamboo.enable_host_tools': boolean
+  'bamboo.host_tool_mode': string
+  'bamboo.search_backend': string
+  'bamboo.allow_third_party_search_egress': boolean
+  'bamboo.search_fallback': string
+  'bamboo.searxng_base_url': string
+  'bamboo.exa_mcp_url': string
+  'bamboo.parallel_mcp_url': string
+  'bamboo.max_search_results': number
+  'bamboo.max_fetch_bytes': number
+  'bamboo.host_tool_timeout_ms': number
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
   'gemini.safety_settings': string

@@ -241,7 +241,7 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 
 		if newAPIError == nil {
 			// 检查空响应重试
-			if operation_setting.IsEmptyResponseRetryEnabled() {
+			if operation_setting.IsEmptyResponseRetryEnabled() && !relayInfo.HostToolExecuted {
 				if common.GetContextKeyBool(c, constant.ContextKeyEmptyResponse) {
 					newAPIError = types.NewError(
 						fmt.Errorf("empty response: completion tokens = 0"),

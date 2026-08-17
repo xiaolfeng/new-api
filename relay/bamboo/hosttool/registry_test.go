@@ -1,0 +1,23 @@
+package hosttool
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestCanonicalFromName(t *testing.T) {
+	assert.Equal(t, CanonicalWebSearch, CanonicalFromName("WebSearch"))
+	assert.Equal(t, CanonicalWebSearch, CanonicalFromName("websearch"))
+	assert.Equal(t, CanonicalWebSearch, CanonicalFromName("web_search_preview"))
+	assert.Equal(t, CanonicalWebFetch, CanonicalFromName("WebFetch"))
+	assert.Equal(t, CanonicalWebFetch, CanonicalFromName("webfetch"))
+	assert.Equal(t, "", CanonicalFromName("bash"))
+	assert.Equal(t, "", CanonicalFromName("apply_patch"))
+}
+
+func TestCanonicalFromType(t *testing.T) {
+	assert.Equal(t, CanonicalWebSearch, CanonicalFromType("web_search_20250305"))
+	assert.Equal(t, CanonicalWebSearch, CanonicalFromType("web_search_preview"))
+	assert.Equal(t, CanonicalWebFetch, CanonicalFromType("web_fetch_20250910"))
+}
