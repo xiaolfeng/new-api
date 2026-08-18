@@ -23,6 +23,7 @@ export const TOOL_KIND_FILTERS = [
   { value: TOOL_KIND_ALL, label: 'All Types' },
   { value: 'search', label: 'Search' },
   { value: 'fetch', label: 'Fetch' },
+  { value: 'recognize', label: 'Image recognition' },
 ] as const
 
 export const TOOL_STATUS_FILTERS = [

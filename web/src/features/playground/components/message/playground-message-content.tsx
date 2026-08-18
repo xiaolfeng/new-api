@@ -79,8 +79,7 @@ export function PlaygroundMessageContent({
   const { t } = useTranslation()
   const {
     displayContent,
-    recognitionContent,
-    isRecognitionStreaming,
+    isReasoningStreaming,
     hostTools,
     hasReasoning,
     hasSources,
@@ -122,26 +121,11 @@ export function PlaygroundMessageContent({
         <Reasoning
           defaultOpen
           duration={message.reasoning?.duration}
-          isStreaming={message.isReasoningStreaming}
+          isStreaming={isReasoningStreaming}
         >
           <ReasoningTrigger />
           <ReasoningContent>{reasoningContent}</ReasoningContent>
         </Reasoning>
-      )}
-
-      {isAssistant && recognitionContent && (
-        <Tool defaultOpen>
-          <ToolHeader
-            title={t('Image recognition')}
-            type='tool-image_recognition'
-            state={
-              isRecognitionStreaming ? 'input-available' : 'output-available'
-            }
-          />
-          <ToolContent>
-            <ToolOutput output={recognitionContent} errorText={undefined} />
-          </ToolContent>
-        </Tool>
       )}
 
       {isAssistant &&

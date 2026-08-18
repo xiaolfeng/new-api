@@ -27,4 +27,7 @@ const (
 	ImageRecognizeFenceStart  = "<<<image_recognition>>>"
 	ImageRecognizeFenceEnd    = "<<<end_image_recognition>>>"
 	ImageRecognizeHistoryMark = "[image]"
+	ImageRecognizeToolKind    = "recognize"
+	ImageRecognizeCanonical   = "host.image_recognize"
+	ImageRecognizeOriginal    = "image_recognize"
 )

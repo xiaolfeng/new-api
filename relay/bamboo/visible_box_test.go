@@ -21,9 +21,9 @@ func TestPrependVisibleBox(t *testing.T) {
 	}
 	prependVisibleBox(resp, info)
 	require.Len(t, resp.Content, 2)
-	first, ok := resp.Content[0].(*bamboosdk.TextBlock)
+	first, ok := resp.Content[0].(*bamboosdk.ThinkingBlock)
 	require.True(t, ok)
-	assert.Contains(t, first.Text, relaycommon.ImageRecognizeFenceStart)
+	assert.Contains(t, first.Thinking, relaycommon.ImageRecognizeFenceStart)
 	second, ok := resp.Content[1].(*bamboosdk.TextBlock)
 	require.True(t, ok)
 	assert.Equal(t, "hello", second.Text)

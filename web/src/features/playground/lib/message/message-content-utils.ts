@@ -25,8 +25,7 @@ import { parseThinkTags } from './message-reasoning-utils'
 
 type MessageContentStateBase = {
   displayContent: string
-  recognitionContent?: string
-  isRecognitionStreaming: boolean
+  isReasoningStreaming: boolean
   hostTools: HostToolSplitItem[]
   hasSources: boolean
   isAssistant: boolean
@@ -95,27 +94,48 @@ function getDisplayContent(message: Message, versionContent: string): string {
   ).rest
 }
 
+function foldRecognitionIntoReasoning(
+  reasoning: string | undefined,
+  recognitionFromContent: string | undefined
+): string | undefined {
+  const split = reasoning
+    ? splitImageRecognitionContent(reasoning)
+    : { rest: '', recognition: undefined, isStreaming: false }
+  const recognition = split.recognition || recognitionFromContent
+  const rest = split.recognition ? split.rest : (reasoning ?? '')
+  const parts = [recognition, rest].filter(
+    (part) => typeof part === 'string' && part.trim() !== ''
+  )
+  if (parts.length === 0) return undefined
+  return parts.join('\n\n')
+}
+
 export function getMessageContentState(
   message: Message,
   versionContent: string
 ): MessageContentState {
   const isAssistant = message.from === MESSAGE_ROLES.ASSISTANT
   const sources = message.sources ?? []
-  const reasoningContent = isAssistant ? message.reasoning?.content : undefined
+  const rawDisplay = getRawDisplayContent(message, versionContent)
+  const recognition = splitImageRecognitionContent(rawDisplay)
+  const foldedReasoning = isAssistant
+    ? foldRecognitionIntoReasoning(
+        message.reasoning?.content,
+        recognition.recognition
+      )
+    : undefined
   const showLoader = shouldShowMessageLoader(
     message,
     isAssistant,
     versionContent
   )
   const showMessageContent = shouldShowMessageContent(message, versionContent)
-  const rawDisplay = getRawDisplayContent(message, versionContent)
-  const recognition = splitImageRecognitionContent(rawDisplay)
   const hostTools = splitHostToolContent(recognition.rest)
 
   const baseState: MessageContentStateBase = {
     displayContent: getDisplayContent(message, versionContent),
-    recognitionContent: recognition.recognition,
-    isRecognitionStreaming: recognition.isStreaming,
+    isReasoningStreaming:
+      Boolean(message.isReasoningStreaming) || recognition.isStreaming,
     hostTools: hostTools.tools,
     hasSources: sources.length > 0,
     isAssistant,
@@ -124,11 +144,11 @@ export function getMessageContentState(
     sources,
   }
 
-  if (reasoningContent) {
+  if (foldedReasoning) {
     return {
       ...baseState,
       hasReasoning: true,
-      reasoningContent,
+      reasoningContent: foldedReasoning,
     }
   }
 

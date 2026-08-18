@@ -60,6 +60,7 @@ describe('tool log status cells', () => {
       Truncated: 'Truncated',
       Search: 'Search',
       Fetch: 'Fetch',
+      'Image recognition': 'Image recognition',
       'This host tool result was truncated and may be incomplete.':
         'This host tool result was truncated and may be incomplete.',
     })
@@ -81,10 +82,12 @@ describe('tool log status cells', () => {
     expect(screen.getByText('Truncated')).toBeInTheDocument()
   })
 
-  test('labels search and fetch kinds', () => {
+  test('labels search, fetch, and image recognition kinds', () => {
     const { rerender } = render(<ToolKindBadge kind='search' />)
     expect(screen.getByText('Search')).toBeInTheDocument()
     rerender(<ToolKindBadge kind='fetch' />)
     expect(screen.getByText('Fetch')).toBeInTheDocument()
+    rerender(<ToolKindBadge kind='recognize' />)
+    expect(screen.getByText('Image recognition')).toBeInTheDocument()
   })
 })

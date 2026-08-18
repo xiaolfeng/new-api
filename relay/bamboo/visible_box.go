@@ -18,5 +18,6 @@ func prependVisibleBox(resp *bamboosdk.Response, info *relaycommon.RelayInfo) {
 	if resp == nil || box == "" {
 		return
 	}
-	resp.Content = append([]bamboosdk.ContentBlock{bamboosdk.NewTextBlock(box)}, resp.Content...)
+	// 识图结果是思考链的一部分，不要再插成独立 text，避免 content-thinking-content。
+	resp.Content = append([]bamboosdk.ContentBlock{bamboosdk.NewThinkingBlock(box, "")}, resp.Content...)
 }

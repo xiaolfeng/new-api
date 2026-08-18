@@ -251,7 +251,7 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 		cs.ensureHeaders()
 	}
 	if box := visibleBoxText(info); box != "" {
-		cs.emitClosedText(box)
+		cs.emitClosedThinking(box)
 		if info.ImageRecognizePlan != nil {
 			info.ImageRecognizePlan.VisibleBox = ""
 		}

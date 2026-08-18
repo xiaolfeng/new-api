@@ -175,6 +175,10 @@ export function formatMessageForAPI(message: Message): ChatCompletionMessage {
   if (message.toolCalls) result.tool_calls = message.toolCalls
   if (message.toolCallId) result.tool_call_id = message.toolCallId
   if (message.toolName) result.name = message.toolName
+  const reasoning = message.reasoning?.content?.trim()
+  if (reasoning) {
+    result.reasoning_content = message.reasoning?.content
+  }
   return result
 }
 

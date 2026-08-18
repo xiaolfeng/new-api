@@ -82,7 +82,7 @@ describe('InteractionTypeCell', () => {
     expect(screen.queryByText('Web Search')).not.toBeInTheDocument()
   })
 
-  test('still shows host tool tags when the interaction type is missing', () => {
+  test('still shows a compact tool trigger when the interaction type is missing', () => {
     render(
       <InteractionTypeCell
         log={createLog({
@@ -96,21 +96,25 @@ describe('InteractionTypeCell', () => {
     )
 
     expect(screen.queryByText('Input')).not.toBeInTheDocument()
-    expect(
-      screen.getByText('Web Search').closest('[data-usage-activity-tag]')
-    ).toHaveAttribute('data-usage-activity-tag', 'web_search')
+    expect(screen.queryByText('Web Search')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Used host tool')).toHaveAttribute(
+      'data-usage-activity-tag',
+      'summary'
+    )
   })
 
-  test('describes the host tool in the activity tag tooltip', async () => {
+  test('keeps the interaction type and tool details on one row inside the tooltip', async () => {
     const user = userEvent.setup()
     render(
       <InteractionTypeCell
         log={createLog({
           other: JSON.stringify({
             interaction_type: 'callback',
-            usage_tags: ['web_fetch'],
+            usage_tags: ['web_fetch', 'image_recognize'],
             web_fetch: true,
             web_fetch_call_count: 1,
+            image_recognize: true,
+            image_recognize_image_count: 2,
             admin_info: {
               host_tools: {
                 execs: [
@@ -129,11 +133,18 @@ describe('InteractionTypeCell', () => {
     )
 
     expect(screen.getByText('Callback')).toBeInTheDocument()
-    await user.hover(screen.getByText('WebFetch'))
-    expect(await screen.findByText('Used host tool')).toBeInTheDocument()
+    expect(screen.queryByText('WebFetch')).not.toBeInTheDocument()
+    expect(screen.queryByText('Image recognition')).not.toBeInTheDocument()
+    const row = screen.getByText('Callback').parentElement
+    expect(row?.className).toContain('whitespace-nowrap')
+    expect(row?.className).toContain('inline-flex')
+
+    await user.hover(screen.getByLabelText('Used host tool'))
+    expect(await screen.findByText('WebFetch')).toBeInTheDocument()
     expect(screen.getByText('WebFetch → host.web_fetch')).toBeInTheDocument()
     expect(screen.getByText(/1 calls/)).toBeInTheDocument()
-    expect(screen.getByText(/http/)).toBeInTheDocument()
+    expect(screen.getByText('Image recognition')).toBeInTheDocument()
+    expect(screen.getByText(/2 images/)).toBeInTheDocument()
   })
 
   test('returns nothing when there is no type and no tool activity', () => {

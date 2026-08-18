@@ -549,7 +549,7 @@ func emitPendingVisibleBox(cs *clientStream, info *relaycommon.RelayInfo) {
 	if cs == nil || box == "" {
 		return
 	}
-	cs.emitClosedText(box)
+	cs.emitClosedThinking(box)
 	if info.ImageRecognizePlan != nil {
 		info.ImageRecognizePlan.VisibleBox = ""
 	}

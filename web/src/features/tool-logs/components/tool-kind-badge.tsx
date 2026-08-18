@@ -22,11 +22,30 @@ import { StatusBadge } from '@/components/status-badge'
 
 export function ToolKindBadge(props: { kind: string }) {
   const { t } = useTranslation()
-  const isFetch = props.kind === 'fetch'
+  if (props.kind === 'fetch') {
+    return (
+      <StatusBadge
+        label={t('Fetch')}
+        variant='orange'
+        size='sm'
+        copyable={false}
+      />
+    )
+  }
+  if (props.kind === 'recognize') {
+    return (
+      <StatusBadge
+        label={t('Image recognition')}
+        variant='purple'
+        size='sm'
+        copyable={false}
+      />
+    )
+  }
   return (
     <StatusBadge
-      label={isFetch ? t('Fetch') : t('Search')}
-      variant={isFetch ? 'orange' : 'blue'}
+      label={t('Search')}
+      variant='blue'
       size='sm'
       copyable={false}
     />

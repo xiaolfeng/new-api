@@ -59,8 +59,8 @@ export function InteractionTypeCell(props: InteractionTypeCellProps) {
   return (
     <div
       className={cn(
-        'flex flex-col gap-1',
-        align === 'center' ? 'items-center' : 'items-start',
+        'inline-flex max-w-full items-center gap-1 whitespace-nowrap',
+        align === 'center' ? 'justify-center' : 'justify-start',
         props.className
       )}
     >
@@ -71,7 +71,7 @@ export function InteractionTypeCell(props: InteractionTypeCellProps) {
           {t(INTERACTION_LABEL_KEYS[interactionType])}
         </span>
       ) : null}
-      <UsageActivityTags other={other} align={align} />
+      <UsageActivityTags other={other} />
     </div>
   )
 }

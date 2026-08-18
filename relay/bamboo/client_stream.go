@@ -161,6 +161,19 @@ func (s *clientStream) openText() int {
 	return idx
 }
 
+func (s *clientStream) openThinking() int {
+	s.ensureStart()
+	idx := s.prefixN
+	s.emit(bamboosdk.StreamEvent{
+		Type:         bamboosdk.EventContentBlockStart,
+		Index:        idx,
+		ContentBlock: bamboosdk.NewThinkingBlock("", ""),
+	})
+	s.hasOpen = true
+	s.openIdx = idx
+	return idx
+}
+
 func (s *clientStream) textDelta(idx int, text string) {
 	if text == "" {
 		return
@@ -170,6 +183,19 @@ func (s *clientStream) textDelta(idx int, text string) {
 			Type:  bamboosdk.EventContentBlockDelta,
 			Index: idx,
 			Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaTextDelta, Text: part},
+		})
+	}
+}
+
+func (s *clientStream) thinkingDelta(idx int, text string) {
+	if text == "" {
+		return
+	}
+	for _, part := range splitClientRunes(text, clientStreamDeltaRunes) {
+		s.emit(bamboosdk.StreamEvent{
+			Type:  bamboosdk.EventContentBlockDelta,
+			Index: idx,
+			Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaThinkingDelta, Thinking: part},
 		})
 	}
 }
@@ -250,12 +276,21 @@ func (s *clientStream) emitClosedText(text string) {
 	s.closeBlock(idx)
 }
 
+func (s *clientStream) emitClosedThinking(text string) {
+	if s == nil || text == "" {
+		return
+	}
+	idx := s.openThinking()
+	s.thinkingDelta(idx, text)
+	s.closeBlock(idx)
+}
+
 func (s *clientStream) Begin() bool {
 	if s == nil {
 		return false
 	}
-	s.openText()
-	s.textDelta(s.openIdx, relaycommon.ImageRecognizeFenceStart+"\n")
+	s.openThinking()
+	s.thinkingDelta(s.openIdx, relaycommon.ImageRecognizeFenceStart+"\n")
 	return s.ok
 }
 
@@ -263,14 +298,14 @@ func (s *clientStream) OnDelta(text string) {
 	if s == nil || !s.hasOpen || text == "" {
 		return
 	}
-	s.textDelta(s.openIdx, text)
+	s.thinkingDelta(s.openIdx, text)
 }
 
 func (s *clientStream) End() {
 	if s == nil || !s.hasOpen {
 		return
 	}
-	s.textDelta(s.openIdx, "\n"+relaycommon.ImageRecognizeFenceEnd+"\n")
+	s.thinkingDelta(s.openIdx, "\n"+relaycommon.ImageRecognizeFenceEnd+"\n")
 	s.closeBlock(s.openIdx)
 }
 

@@ -40,11 +40,10 @@ describe('log cost display', () => {
     i18next.addResourceBundle('en', 'translation', {
       Subscription: 'Subscription',
       'Deducted by subscription': 'Deducted by subscription',
-      'Includes tool-call surcharge': 'Includes tool-call surcharge',
     })
   })
 
-  test('keeps the regular cost visible and adds an accessible surcharge marker', () => {
+  test('keeps the regular cost visible without a surcharge marker', () => {
     const rendered = renderCost({
       quota: 12500,
       other: {
@@ -57,14 +56,12 @@ describe('log cost display', () => {
         normalizedText(formatLogQuota(12500))
       )
     ).toBe(true)
-    const marker = screen.getByRole('img', {
-      name: 'Includes tool-call surcharge',
-    })
-    expect(marker).toHaveAttribute('data-tool-surcharge-indicator', 'true')
-    expect(marker).toHaveAttribute('tabindex', '0')
+    expect(
+      screen.queryByRole('img', { name: 'Includes tool-call surcharge' })
+    ).not.toBeInTheDocument()
   })
 
-  test('preserves the subscription badge and adds the same legacy surcharge marker', () => {
+  test('preserves the subscription badge without a surcharge marker', () => {
     renderCost({
       quota: 5000,
       other: {
@@ -77,8 +74,8 @@ describe('log cost display', () => {
 
     expect(screen.getByText('Subscription')).toBeInTheDocument()
     expect(
-      screen.getByRole('img', { name: 'Includes tool-call surcharge' })
-    ).toHaveAttribute('data-tool-surcharge-indicator', 'true')
+      screen.queryByRole('img', { name: 'Includes tool-call surcharge' })
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('Web Search')).not.toBeInTheDocument()
   })
 

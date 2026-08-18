@@ -19,4 +19,22 @@ describe('formatMessageForAPI', () => {
       ],
     })
   })
+
+  it('sends assistant reasoning so the next turn can see the thinking chain', () => {
+    const message = {
+      key: 'a1',
+      from: MESSAGE_ROLES.ASSISTANT,
+      versions: [{ id: 'v1', content: 'It is a cat.' }],
+      reasoning: {
+        content: '<<<image_recognition>>>\n[Image 1]\nA cat\n<<<end_image_recognition>>>',
+        duration: 1,
+      },
+    }
+    expect(formatMessageForAPI(message)).toEqual({
+      role: MESSAGE_ROLES.ASSISTANT,
+      content: 'It is a cat.',
+      reasoning_content:
+        '<<<image_recognition>>>\n[Image 1]\nA cat\n<<<end_image_recognition>>>',
+    })
+  })
 })

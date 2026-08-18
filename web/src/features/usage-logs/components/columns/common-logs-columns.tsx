@@ -774,7 +774,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
       header: t("Interaction"),
       cell: ({ row }) => <InteractionTypeCell log={row.original} />,
       meta: { label: t("Interaction"), mobileHidden: true },
-      size: 150,
+      size: 110,
     },
     {
       id: "tps",

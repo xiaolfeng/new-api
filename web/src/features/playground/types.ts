@@ -72,6 +72,7 @@ export interface Message {
 export interface ChatCompletionMessage {
   role: MessageRole
   content: string | ContentPart[] | null
+  reasoning_content?: string
   tool_calls?: ToolCallDelta[]
   tool_call_id?: string
   name?: string

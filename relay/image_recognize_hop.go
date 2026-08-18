@@ -28,7 +28,11 @@ func init() {
 	imagerec.SetHopFunc(executeImageRecognizeHop)
 }
 
-func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live imagerec.CaptionLive) (string, *dto.Usage, *relaykittypes.NewAPIError) {
+func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live imagerec.CaptionLive) (caption string, usage *dto.Usage, hopErr *relaykittypes.NewAPIError) {
+	started := time.Now()
+	defer func() {
+		recordImageRecognizeToolLog(parent, request, started, caption, hopErr)
+	}()
 	if parent == nil || request == nil {
 		return "", nil, relaykittypes.NewError(fmt.Errorf("image recognition hop missing request"), relaykittypes.ErrorCodeInvalidRequest, relaykittypes.ErrOptionWithSkipRetry())
 	}
@@ -128,12 +132,13 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 	}
 	httpResp, _ := respAny.(*http.Response)
 	if stream {
-		caption, usage, scanErr := consumeVisionStream(httpResp, live)
+		var scanErr error
+		caption, usage, scanErr = consumeVisionStream(httpResp, live)
 		if scanErr != nil {
-			return "", usage, relaykittypes.NewError(scanErr, relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+			return caption, usage, relaykittypes.NewError(scanErr, relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
 		}
 		if strings.TrimSpace(caption) == "" {
-			return "", usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+			return caption, usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
 		}
 		service.PostTextConsumeQuota(inner, child, usage, []string{"image_recognize"})
 		return caption, usage, nil
@@ -143,10 +148,10 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 		return "", nil, respErr
 	}
 
-	usage, _ := usageAny.(*dto.Usage)
-	caption := extractCaptionFromRecorder(rec)
+	usage, _ = usageAny.(*dto.Usage)
+	caption = extractCaptionFromRecorder(rec)
 	if strings.TrimSpace(caption) == "" {
-		return "", usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+		return caption, usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
 	}
 
 	service.PostTextConsumeQuota(inner, child, usage, []string{"image_recognize"})
@@ -287,6 +292,136 @@ func extractCaptionFromRecorder(rec *httptest.ResponseRecorder) string {
 		return ""
 	}
 	return mediaContentToString(parsed.Choices[0].Message.Content)
+}
+
+func recordImageRecognizeToolLog(
+	parent *relaycommon.RelayInfo,
+	request *dto.GeneralOpenAIRequest,
+	started time.Time,
+	caption string,
+	hopErr *relaykittypes.NewAPIError,
+) {
+	log := buildImageRecognizeToolLog(parent, request, started, caption, hopErr)
+	if log == nil {
+		return
+	}
+	model.RecordToolLogs([]*model.ToolLog{log})
+}
+
+func buildImageRecognizeToolLog(
+	parent *relaycommon.RelayInfo,
+	request *dto.GeneralOpenAIRequest,
+	started time.Time,
+	caption string,
+	hopErr *relaykittypes.NewAPIError,
+) *model.ToolLog {
+	if parent == nil {
+		return nil
+	}
+	st := model_setting.GetBambooSettings()
+	channelID := 0
+	backend := ""
+	if st != nil {
+		channelID = st.ImageRecognizeChannelId
+		backend = strings.TrimSpace(st.ImageRecognizeModel)
+	}
+	username := ""
+	if parent.UserId > 0 {
+		username, _ = model.GetUsernameById(parent.UserId, false)
+	}
+	tokenName := ""
+	if parent.TokenId > 0 {
+		if token, err := model.GetTokenById(parent.TokenId); err == nil && token != nil {
+			tokenName = token.Name
+		}
+	}
+	imageCount := countVisionImages(request)
+	query := ""
+	if imageCount > 0 {
+		query = fmt.Sprintf("%d images", imageCount)
+	}
+	errorCode := ""
+	if hopErr != nil {
+		errorCode = string(hopErr.GetErrorCode())
+	}
+	result := strings.TrimSpace(caption)
+	if result == "" && hopErr != nil {
+		result = hopErr.Error()
+	}
+	maxRunes := 4096
+	if st != nil {
+		maxRunes = st.ClampImageRecognizeMaxOutputRunes()
+	}
+	truncated := false
+	result, truncated = truncateRunesWithMark(result, maxRunes)
+	durationMs := time.Since(started).Milliseconds()
+	if durationMs < 0 {
+		durationMs = 0
+	}
+	return &model.ToolLog{
+		UserId:       parent.UserId,
+		Username:     username,
+		TokenId:      parent.TokenId,
+		TokenName:    tokenName,
+		ChannelId:    channelID,
+		Group:        parent.UsingGroup,
+		ModelName:    parent.OriginModelName,
+		RequestId:    parent.RequestId,
+		Ip:           clientIPFromHeaders(parent.RequestHeaders),
+		OriginalName: relaycommon.ImageRecognizeOriginal,
+		Canonical:    relaycommon.ImageRecognizeCanonical,
+		Kind:         relaycommon.ImageRecognizeToolKind,
+		Mode:         "hop",
+		Backend:      backend,
+		Query:        query,
+		ErrorCode:    errorCode,
+		DurationMs:   durationMs,
+		Truncated:    truncated,
+		Result:       result,
+	}
+}
+
+func countVisionImages(req *dto.GeneralOpenAIRequest) int {
+	if req == nil {
+		return 0
+	}
+	n := 0
+	for i := range req.Messages {
+		for _, part := range req.Messages[i].ParseContent() {
+			if part.Type == dto.ContentTypeImageURL {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+func clientIPFromHeaders(headers map[string]string) string {
+	if headers == nil {
+		return ""
+	}
+	for _, key := range []string{"X-Real-Ip", "X-Real-IP", "X-Forwarded-For"} {
+		value := strings.TrimSpace(headers[key])
+		if value == "" {
+			continue
+		}
+		if i := strings.IndexByte(value, ','); i >= 0 {
+			value = value[:i]
+		}
+		return strings.TrimSpace(value)
+	}
+	return ""
+}
+
+func truncateRunesWithMark(s string, max int) (string, bool) {
+	if max <= 0 || s == "" {
+		return s, false
+	}
+	runes := []rune(s)
+	if len(runes) <= max {
+		return s, false
+	}
+	return string(runes[:max]) + "...[truncated]", true
 }
 
 func mediaContentToString(content any) string {

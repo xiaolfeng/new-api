@@ -24,6 +24,17 @@ func testClientStream(t *testing.T, format bamboocodec.FormatType) *clientStream
 	return cs
 }
 
+func TestClientStreamImageRecognizeUsesThinking(t *testing.T) {
+	cs := testClientStream(t, bamboocodec.FormatOpenAI)
+	require.True(t, cs.Begin())
+	cs.OnDelta("[Image 1]\nA cat")
+	cs.End()
+	joined := strings.Join(cs.Frames(), "")
+	assert.Contains(t, joined, "A cat")
+	assert.Contains(t, joined, "reasoning_content")
+	assert.NotContains(t, joined, `"content":"<<<image_recognition>>>`)
+}
+
 func TestClientStreamRemapsIndexAfterPrefix(t *testing.T) {
 	cs := testClientStream(t, bamboocodec.FormatAnthropic)
 	require.True(t, cs.Begin())

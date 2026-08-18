@@ -16,9 +16,10 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import { Wrench01Icon } from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 
-import { StatusBadge } from '@/components/status-badge'
 import {
   Tooltip,
   TooltipContent,
@@ -30,7 +31,6 @@ import { cn } from '@/lib/utils'
 import {
   collectUsageActivityTags,
   getUsageActivityTagDetails,
-  type UsageActivityTag,
   type UsageActivityTagDetails,
 } from '../lib/format'
 import type { LogOtherData } from '../types'
@@ -38,7 +38,6 @@ import type { LogOtherData } from '../types'
 interface UsageActivityTagsProps {
   other: LogOtherData | null
   className?: string
-  align?: 'start' | 'center'
 }
 
 function formatDurationMs(ms: number): string {
@@ -54,14 +53,14 @@ function hostToolNameLine(details: UsageActivityTagDetails, index: number): stri
   return name
 }
 
-function UsageActivityTagTooltip(props: { details: UsageActivityTagDetails }) {
+function ToolDetailBlock(props: { details: UsageActivityTagDetails }) {
   const { t } = useTranslation()
   const details = props.details
 
   if (details.kind === 'image_recognize') {
     return (
       <div className='space-y-0.5'>
-        <p>{t('Image recognition hop')}</p>
+        <p>{t('Image recognition')}</p>
         <p className='text-muted-foreground'>
           {t('{{count}} images', { count: details.count })}
         </p>
@@ -78,7 +77,7 @@ function UsageActivityTagTooltip(props: { details: UsageActivityTagDetails }) {
 
   return (
     <div className='space-y-0.5'>
-      <p>{t('Used host tool')}</p>
+      <p>{t(details.tag.labelKey)}</p>
       {details.names.map((name, index) => {
         const line = hostToolNameLine(details, index)
         return (
@@ -94,56 +93,38 @@ function UsageActivityTagTooltip(props: { details: UsageActivityTagDetails }) {
   )
 }
 
-function UsageActivityTagBadge(props: {
-  tag: UsageActivityTag
-  other: LogOtherData | null
-}) {
-  const { t } = useTranslation()
-  const label = t(props.tag.labelKey)
-  const details = getUsageActivityTagDetails(props.other, props.tag)
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <StatusBadge
-            label={label}
-            variant='info'
-            size='sm'
-            copyable={false}
-            className='h-5 cursor-help px-1.5'
-            data-usage-activity-tag={props.tag.id}
-          />
-        }
-      />
-      <TooltipContent>
-        <UsageActivityTagTooltip details={details} />
-      </TooltipContent>
-    </Tooltip>
-  )
-}
-
 export function UsageActivityTags(props: UsageActivityTagsProps) {
+  const { t } = useTranslation()
   const tags = collectUsageActivityTags(props.other)
   if (tags.length === 0) return null
 
   return (
     <TooltipProvider>
-      <div
-        className={cn(
-          'flex flex-wrap gap-1',
-          props.align === 'center' && 'justify-center',
-          props.className
-        )}
-      >
-        {tags.map((tag) => (
-          <UsageActivityTagBadge
-            key={tag.id}
-            tag={tag}
-            other={props.other}
-          />
-        ))}
-      </div>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <button
+              type='button'
+              className={cn(
+                'text-muted-foreground hover:text-foreground inline-flex size-5 shrink-0 items-center justify-center rounded-full',
+                props.className
+              )}
+              aria-label={t('Used host tool')}
+              data-usage-activity-tag='summary'
+            />
+          }
+        >
+          <HugeiconsIcon icon={Wrench01Icon} strokeWidth={2} aria-hidden='true' />
+        </TooltipTrigger>
+        <TooltipContent className='max-w-xs space-y-2'>
+          {tags.map((tag) => (
+            <ToolDetailBlock
+              key={tag.id}
+              details={getUsageActivityTagDetails(props.other, tag)}
+            />
+          ))}
+        </TooltipContent>
+      </Tooltip>
     </TooltipProvider>
   )
 }
