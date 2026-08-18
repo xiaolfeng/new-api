@@ -5,6 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	rootcommon "github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/relayconvert/convmeta"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -153,6 +154,56 @@ func TestGenRelayInfoCapturesRequestReasoningEffort(t *testing.T) {
 			info, err := GenRelayInfo(ctx, tt.relayFormat, tt.request, nil)
 			require.NoError(t, err)
 			assert.Equal(t, tt.expected, info.ReasoningEffort)
+		})
+	}
+}
+
+func TestGenRelayInfoAttachesClientProfile(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	tests := []struct {
+		name    string
+		ua      string
+		headers map[string]string
+		profile rootcommon.ClientProfile
+		source  string
+		hit     string
+	}{
+		{
+			name:    "claude-cli",
+			ua:      "claude-cli/2.1.88 (user, cli)",
+			profile: rootcommon.ClientProfileClaudeCode,
+			source:  rootcommon.ClientSourceClaudeCode,
+			hit:     "claude-cli",
+		},
+		{
+			name:    "chrome is generic",
+			ua:      "Mozilla/5.0 Chrome/120.0.0.0 Safari/537.36",
+			profile: rootcommon.ClientProfileGeneric,
+		},
+		{
+			name:    "grok identifier header",
+			ua:      "Mozilla/5.0 Chrome/120.0.0.0",
+			headers: map[string]string{"X-Grok-Client-Identifier": "grok-build"},
+			profile: rootcommon.ClientProfileGrokBuild,
+			source:  rootcommon.ClientSourceGrokBuild,
+			hit:     "x-grok-client-identifier",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+			ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+			if tt.ua != "" {
+				ctx.Request.Header.Set("User-Agent", tt.ua)
+			}
+			for k, v := range tt.headers {
+				ctx.Request.Header.Set(k, v)
+			}
+			info, err := GenRelayInfo(ctx, types.RelayFormatOpenAI, &dto.GeneralOpenAIRequest{Model: "gpt-4o"}, nil)
+			require.NoError(t, err)
+			assert.Equal(t, tt.profile, info.ClientProfile)
+			assert.Equal(t, tt.source, info.ClientSource)
+			assert.Equal(t, tt.hit, info.ClientProfileHit)
 		})
 	}
 }

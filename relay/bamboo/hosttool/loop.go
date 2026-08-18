@@ -13,6 +13,7 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 )
 
 type Action string
@@ -24,6 +25,13 @@ const (
 )
 
 func DecideAction(plan *relaycommon.HostToolPlan, uses []toolUseCall) Action {
+	return DecideActionForClient(plan, uses, nil)
+}
+
+func DecideActionForClient(plan *relaycommon.HostToolPlan, uses []toolUseCall, info *relaycommon.RelayInfo) Action {
+	if shouldPassthroughClaudeClientTools(info, uses) {
+		return ActionPassthrough
+	}
 	if len(uses) == 0 {
 		return ActionPassthrough
 	}
@@ -34,6 +42,24 @@ func DecideAction(plan *relaycommon.HostToolPlan, uses []toolUseCall) Action {
 		return ActionFoldB
 	}
 	return ActionHop2
+}
+
+func shouldPassthroughClaudeClientTools(info *relaycommon.RelayInfo, uses []toolUseCall) bool {
+	if info == nil || info.ClientProfile != common.ClientProfileClaudeCode {
+		return false
+	}
+	if !model_setting.GetBambooSettings().ClaudeStrictEgressEnabled() {
+		return false
+	}
+	if len(uses) == 0 {
+		return false
+	}
+	for _, use := range uses {
+		if use.Name != "WebSearch" && use.Name != "WebFetch" {
+			return false
+		}
+	}
+	return true
 }
 
 func BuildHop2Request(req *bamboocodec.RelayRequest, hop1 []bamboosdk.ContentBlock, results []ExecResult, uses []toolUseCall) *bamboocodec.RelayRequest {

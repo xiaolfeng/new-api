@@ -11,6 +11,7 @@
 | **文档类型** | 可评审 RFC（非实现）                                                                                                                         |
 | **最终路径** | [`docs/rfc/RFC-0001-bamboo-host-side-tools.md`](docs/rfc/RFC-0001-bamboo-host-side-tools.md)                                         |
 | **前置文档** | [`docs/superpowers/specs/2026-06-18-bamboo-relay-bridge-design.md`](docs/superpowers/specs/2026-06-18-bamboo-relay-bridge-design.md) |
+| **后续 RFC** | [`docs/rfc/RFC-0002-client-profile-web-search-return.md`](docs/rfc/RFC-0002-client-profile-web-search-return.md) — 按 User-Agent 隔离 web_search 返回信息；修订本 RFC Alt-6 / D3 逃生舱 / D16 Grok 回退 / §6.4 勘误 |
 | **影响范围** | 仅 `EnableBambooRelay=true` **且** `enable_host_tools=true` 的 bamboo 对话中继；原生三段式路径必须 no-op                                              |
 |          |                                                                                                                                      |
 

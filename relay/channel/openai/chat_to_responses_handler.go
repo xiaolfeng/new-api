@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relay/clientprofile"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -52,6 +53,7 @@ func ChatCompletionsToResponsesHandler(c *gin.Context, info *relaycommon.RelayIn
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 	}
+	responseBody = clientprofile.NormalizeResponsesPayload(info, responseBody)
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 

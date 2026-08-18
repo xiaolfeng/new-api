@@ -69,7 +69,7 @@ func ExtractLogDetailSummaries(record string) (string, string, string, string, s
 
 func IsDeveloperToolLogSource(source string) bool {
 	switch strings.TrimSpace(source) {
-	case "Claude Code", "Codex", "OpenCode", "ZCode":
+	case "Claude Code", "Codex", "OpenCode", "ZCode", "Grok Build":
 		return true
 	default:
 		return false
@@ -86,10 +86,14 @@ func parseClientSourceFromHeaders(headers map[string]string) string {
 	}
 
 	userAgent := getHeaderIgnoreCase(headers, "user-agent")
+	identity := common.MatchClientProfile(userAgent, headers)
+	if identity.Profile != common.ClientProfileGeneric && identity.Source != "" {
+		return identity.Source
+	}
+
 	if userAgent == "" {
 		userAgent = getHeaderIgnoreCase(headers, "originator")
 	}
-
 	return parseClientSource(userAgent)
 }
 
@@ -163,12 +167,6 @@ func parseClientSource(userAgent string) string {
 	ua := strings.ToLower(userAgent)
 
 	switch {
-	case strings.Contains(ua, "claude-cli"), strings.Contains(ua, "claudecode"):
-		return "Claude Code"
-	case strings.Contains(ua, "codex_cli_rs"), strings.Contains(ua, "codex-cli-rs"),
-		strings.Contains(ua, "codex_vscode"), strings.Contains(ua, "codex-tui"),
-		strings.Contains(ua, "codex-desktop"), strings.Contains(ua, "codex desktop"):
-		return "Codex"
 	case strings.Contains(ua, "cherrystudio/"):
 		return "Cherry Studio"
 	case strings.Contains(ua, "cursor/"):
@@ -183,10 +181,6 @@ func parseClientSource(userAgent string) string {
 		return "Cline"
 	case strings.Contains(ua, "roo-cline"), strings.Contains(ua, "roocode"), strings.Contains(ua, "roo code"):
 		return "Roo Code"
-	case strings.Contains(ua, "opencode/"), strings.Contains(ua, "crush/"):
-		return "OpenCode"
-	case strings.Contains(ua, "zcode/"):
-		return "ZCode"
 	case strings.Contains(ua, "aider/"), strings.Contains(ua, "litellm/"):
 		return "Aider"
 	case strings.Contains(ua, "amazon-q"), strings.Contains(ua, "amazonq"), strings.Contains(ua, "q-developer"):

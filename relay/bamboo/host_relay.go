@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/bamboo/hosttool"
+	"github.com/QuantumNous/new-api/relay/clientprofile"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -72,7 +73,7 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 	recordResponseBlocks(info, blocks)
 
 	uses := hosttool.CollectToolUses(blocks)
-	action := hosttool.DecideAction(info.HostToolPlan, uses)
+	action := hosttool.DecideActionForClient(info.HostToolPlan, uses, info)
 	if action == hosttool.ActionPassthrough {
 		return writeCompleteResponse(c, info, entryCodec, codecFmt, resp, usage, nil)
 	}
@@ -151,6 +152,7 @@ func writeCompleteResponse(c *gin.Context, info *relaycommon.RelayInfo, entryCod
 	if info.BambooDebug != nil {
 		info.BambooDebug.RelayResponse = bamboorelay.FormatRelayResponse("CompleteRelay", codecFmt, codecFmt, body)
 	}
+	body = clientprofile.NormalizeResponsesPayload(info, body)
 	c.Writer.Header().Set("Content-Type", "application/json")
 	_, _ = c.Writer.Write(body)
 	info.ResponseBody = truncateResponseBody(string(body))
@@ -218,7 +220,7 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 	}
 
 	uses := hosttool.CollectToolUses(hop1.blocks)
-	action := hosttool.DecideAction(info.HostToolPlan, uses)
+	action := hosttool.DecideActionForClient(info.HostToolPlan, uses, info)
 	if action == hosttool.ActionPassthrough {
 		cs.pausePing()
 		return replayOrForwardHop(c, info, cs, hop1)
@@ -630,6 +632,10 @@ func doHostBuiltinResponses(c *gin.Context, info *relaycommon.RelayInfo, req *ba
 		}
 		var items []string
 		for _, frame := range frames {
+			frame = clientprofile.NormalizeResponsesSSEFrame(info, frame)
+			if len(frame) == 0 {
+				continue
+			}
 			items = append(items, string(frame))
 			if _, werr := c.Writer.Write(frame); werr != nil {
 				break
@@ -644,6 +650,54 @@ func doHostBuiltinResponses(c *gin.Context, info *relaycommon.RelayInfo, req *ba
 	}
 
 	body, err := hosttool.MarshalBuiltinComplete(modelName, info.RequestId, createdAt, result)
+	if err != nil {
+		return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
+	}
+	body = clientprofile.NormalizeResponsesPayload(info, body)
+	c.Writer.Header().Set("Content-Type", "application/json")
+	_, _ = c.Writer.Write(body)
+	info.ResponseBody = truncateResponseBody(string(body))
+	return usage, nil
+}
+
+func doHostClaudeSearch(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
+	st := model_setting.GetBambooSettings()
+	result := hosttool.ExecuteBuiltinRequest(c.Request.Context(), info, st, req)
+
+	modelName := info.OriginModelName
+	if req != nil && req.Config != nil && req.Config.Model != "" {
+		modelName = req.Config.Model
+	}
+	usage := &dto.Usage{UsageSemantic: "anthropic"}
+	common.SetContextKey(c, constant.ContextKeyEmptyResponse, false)
+	info.SetFirstResponseTime()
+
+	if req != nil && req.IsStream {
+		writeStreamHeaders(c)
+		frames, err := hosttool.ClaudeServerSearchStreamFrames(modelName, info.RequestId, result)
+		if err != nil {
+			return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
+		var items []string
+		for _, frame := range frames {
+			frame = clientprofile.NormalizeClaudeSSEFrame(info, frame)
+			if len(frame) == 0 {
+				continue
+			}
+			items = append(items, string(frame))
+			if _, werr := c.Writer.Write(frame); werr != nil {
+				break
+			}
+			c.Writer.Flush()
+		}
+		if len(items) > 0 {
+			info.ResponseBody = truncateResponseBody(strings.Join(items, "\n"))
+		}
+		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
+		return usage, nil
+	}
+
+	body, err := hosttool.MarshalClaudeServerSearch(modelName, info.RequestId, result)
 	if err != nil {
 		return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/relay/clientprofile"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
@@ -50,6 +51,14 @@ func newClientStream(c *gin.Context, entryCodec bamboocodec.Codec, info *relayco
 	cs.writeSSE = func(data []byte) bool {
 		if c == nil || c.Writer == nil {
 			return false
+		}
+		data = clientprofile.NormalizeClaudeSSEFrame(info, data)
+		if len(data) == 0 {
+			return true
+		}
+		data = clientprofile.NormalizeResponsesSSEFrame(info, data)
+		if len(data) == 0 {
+			return true
 		}
 		if _, err := c.Writer.Write(data); err != nil {
 			return false

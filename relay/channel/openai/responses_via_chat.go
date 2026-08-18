@@ -7,6 +7,7 @@ import (
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/relay/clientprofile"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -57,6 +58,7 @@ func OaiChatToResponsesHandler(c *gin.Context, info *relaycommon.RelayInfo, resp
 	if err != nil {
 		return nil, types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 	}
+	responseBody = clientprofile.NormalizeResponsesPayload(info, responseBody)
 
 	service.IOCopyBytesGracefully(c, resp, responseBody)
 	return usage, nil
@@ -84,6 +86,7 @@ func OaiChatToResponsesStreamHandler(c *gin.Context, info *relaycommon.RelayInfo
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 			return false
 		}
+		data = clientprofile.NormalizeResponsesSSEData(info, data)
 		helper.ResponseChunkData(c, dto.ResponsesStreamResponse{Type: event.Type}, string(data))
 		return true
 	}

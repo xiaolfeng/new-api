@@ -139,6 +139,13 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 
 	if info.HostToolPlan != nil && info.HostToolPlan.Enabled &&
+		bambooSettings.ClaudeStrictEgressEnabled() &&
+		info.ClientProfile == common.ClientProfileClaudeCode &&
+		hosttool.IsClaudeWebSearchHelper(entryFormat, requestBody) {
+		return doHostClaudeSearch(c, info, relayReq)
+	}
+
+	if info.HostToolPlan != nil && info.HostToolPlan.Enabled &&
 		hosttool.IsResponsesBuiltinOnly(entryFormat, requestBody, info.HostToolPlan, relayReq) {
 		info.HostToolPlan.BuiltinResponses = true
 		return doHostBuiltinResponses(c, info, relayReq)

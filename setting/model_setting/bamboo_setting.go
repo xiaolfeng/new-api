@@ -72,6 +72,16 @@ type BambooSettings struct {
 	ImageRecognizeMaxImages      int    `json:"image_recognize_max_images"`
 	ImageRecognizeTimeoutMs      int    `json:"image_recognize_timeout_ms"`
 	ImageRecognizeMaxOutputRunes int    `json:"image_recognize_max_output_runes"`
+
+	// EnableGrokStrictEgress 仅门控 grok_build + Responses 写边界。缺键 / nil = true。
+	EnableGrokStrictEgress *bool `json:"enable_grok_strict_egress"`
+	// EnableClaudeStrictEgress 仅门控 claude_code + Messages 写边界与 helper 合成。缺键 / nil = true。
+	EnableClaudeStrictEgress *bool `json:"enable_claude_strict_egress"`
+	// EnableClientReturnProfiles 打开具名 profile 的 ReturnKind 矩阵。缺键 / nil = false。
+	// 关它不关任一侧 strict。PR1 只落地字段，不消费。
+	EnableClientReturnProfiles *bool `json:"enable_client_return_profiles"`
+	// HostToolClientProfiles 是 profile → ReturnKind 覆盖。PR1 不消费。
+	HostToolClientProfiles map[string]string `json:"host_tool_client_profiles"`
 }
 
 const (
@@ -100,10 +110,36 @@ var defaultBambooSettings = BambooSettings{
 	ImageRecognizeMaxImages:      4,
 	ImageRecognizeTimeoutMs:      20000,
 	ImageRecognizeMaxOutputRunes: 4096,
+	EnableGrokStrictEgress:       boolPtr(true),
+	EnableClaudeStrictEgress:     boolPtr(true),
+	EnableClientReturnProfiles:   boolPtr(false),
+	HostToolClientProfiles:       map[string]string{},
 }
 
-// 全局实例
-var bambooSettings = defaultBambooSettings
+func boolPtr(v bool) *bool { return &v }
+
+func cloneBambooBools(src BambooSettings) BambooSettings {
+	out := src
+	if src.EnableGrokStrictEgress != nil {
+		out.EnableGrokStrictEgress = boolPtr(*src.EnableGrokStrictEgress)
+	}
+	if src.EnableClaudeStrictEgress != nil {
+		out.EnableClaudeStrictEgress = boolPtr(*src.EnableClaudeStrictEgress)
+	}
+	if src.EnableClientReturnProfiles != nil {
+		out.EnableClientReturnProfiles = boolPtr(*src.EnableClientReturnProfiles)
+	}
+	if src.HostToolClientProfiles != nil {
+		out.HostToolClientProfiles = make(map[string]string, len(src.HostToolClientProfiles))
+		for k, v := range src.HostToolClientProfiles {
+			out.HostToolClientProfiles[k] = v
+		}
+	}
+	return out
+}
+
+// 全局实例。三个 *bool 必须与 default 各 new 一次，禁止共享指针。
+var bambooSettings = cloneBambooBools(defaultBambooSettings)
 
 func init() {
 	// 注册到全局配置管理器，对应 options 表 key 前缀 "bamboo."
@@ -113,6 +149,27 @@ func init() {
 // GetBambooSettings 返回 bamboo 中继设置的当前实例（指针，运行时可热更新）。
 func GetBambooSettings() *BambooSettings {
 	return &bambooSettings
+}
+
+func (s *BambooSettings) GrokStrictEgressEnabled() bool {
+	if s == nil || s.EnableGrokStrictEgress == nil {
+		return true
+	}
+	return *s.EnableGrokStrictEgress
+}
+
+func (s *BambooSettings) ClaudeStrictEgressEnabled() bool {
+	if s == nil || s.EnableClaudeStrictEgress == nil {
+		return true
+	}
+	return *s.EnableClaudeStrictEgress
+}
+
+func (s *BambooSettings) ClientReturnProfilesEnabled() bool {
+	if s == nil || s.EnableClientReturnProfiles == nil {
+		return false
+	}
+	return *s.EnableClientReturnProfiles
 }
 
 // ResolvedHostToolMode 返回规范化后的执行模式。非法值按 loop。

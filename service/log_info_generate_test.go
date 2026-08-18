@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
@@ -69,4 +70,21 @@ func TestAppendUsageActivityTagsSkipsFailedOrDisabled(t *testing.T) {
 	assert.NotContains(t, other, "usage_tags")
 	assert.NotContains(t, other, "web_fetch")
 	assert.NotContains(t, other, "image_recognize")
+}
+
+func TestAppendClientProfileAdminInfo(t *testing.T) {
+	admin := map[string]interface{}{}
+	appendClientProfileAdminInfo(&relaycommon.RelayInfo{
+		ClientProfile:    common.ClientProfileClaudeCode,
+		ClientProfileHit: "claude-cli",
+	}, admin)
+	assert.Equal(t, "claude_code", admin["client_profile"])
+	assert.Equal(t, "claude-cli", admin["client_profile_hit"])
+	assert.NotContains(t, admin, "return_profile")
+
+	empty := map[string]interface{}{}
+	appendClientProfileAdminInfo(&relaycommon.RelayInfo{ClientProfile: common.ClientProfileGeneric}, empty)
+	assert.Equal(t, "generic", empty["client_profile"])
+	assert.NotContains(t, empty, "client_profile_hit")
+	assert.NotContains(t, empty, "return_profile")
 }

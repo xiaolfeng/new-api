@@ -117,23 +117,32 @@ type RelayInfo struct {
 	OriginModelName        string
 	RequestURLPath         string
 	RequestHeaders         map[string]string
-	ShouldIncludeUsage     bool
-	DisablePing            bool // 是否禁止向下游发送自定义 Ping
-	ClientWs               *websocket.Conn
-	TargetWs               *websocket.Conn
-	InputAudioFormat       string
-	OutputAudioFormat      string
-	RealtimeTools          []dto.RealTimeTool
-	IsFirstRequest         bool
-	AudioUsage             bool
-	ReasoningEffort        string
-	UserSetting            dto.UserSetting
-	UserEmail              string
-	UserQuota              int
-	RelayFormat            types.RelayFormat
-	SendResponseCount      int
-	ReceivedResponseCount  int
-	FinalPreConsumedQuota  int // 最终预消耗的配额
+	ClientProfile          common.ClientProfile
+	ClientSource           string
+	ClientProfileHit       string
+	EgressFilledArgs       bool
+	EgressFilledCreated    bool
+	EgressMissedUAWarned   bool
+	EgressCreatedAt        int64
+	// ClaudeStreamGate 是 Claude-strict Messages 流式扫描状态，仅写边界使用。
+	ClaudeStreamGate      *ClaudeStreamGate
+	ShouldIncludeUsage    bool
+	DisablePing           bool // 是否禁止向下游发送自定义 Ping
+	ClientWs              *websocket.Conn
+	TargetWs              *websocket.Conn
+	InputAudioFormat      string
+	OutputAudioFormat     string
+	RealtimeTools         []dto.RealTimeTool
+	IsFirstRequest        bool
+	AudioUsage            bool
+	ReasoningEffort       string
+	UserSetting           dto.UserSetting
+	UserEmail             string
+	UserQuota             int
+	RelayFormat           types.RelayFormat
+	SendResponseCount     int
+	ReceivedResponseCount int
+	FinalPreConsumedQuota int // 最终预消耗的配额
 	// ForcePreConsume 为 true 时禁用 BillingSession 的信任额度旁路，
 	// 强制预扣全额。用于异步任务（视频/音乐生成等），因为请求返回后任务仍在运行，
 	// 必须在提交前锁定全额。
@@ -237,6 +246,18 @@ type RelayInfo struct {
 	ImageRecognizePlan *ImageRecognizePlan
 	// ImageRecognizeInner 标记这是识别子 hop，禁止再进预识别。
 	ImageRecognizeInner bool
+}
+
+// ClaudeStreamGate 跟踪 Anthropic SSE 的块类型，供 Claude-strict 丢弃会 throw 的 delta。
+type ClaudeStreamGate struct {
+	SawMessageStart bool
+	Blocks          map[int]ClaudeStreamBlock
+}
+
+// ClaudeStreamBlock 记录某个 content_block index 的 start 形态。
+type ClaudeStreamBlock struct {
+	Type          string
+	InputIsObject bool
 }
 
 // BambooRelayExtract 是 bamboo N2N 中间态请求的本地提取副本。
@@ -624,6 +645,7 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 			estimatePromptTokens: common.GetContextKeyInt(c, constant.ContextKeyEstimatedTokens),
 		},
 	}
+	applyClientProfile(info)
 
 	if info.RelayMode == relayconstant.RelayModeUnknown {
 		info.RelayMode = c.GetInt("relay_mode")
@@ -641,6 +663,19 @@ func genBaseRelayInfo(c *gin.Context, request dto.Request) *RelayInfo {
 	}
 
 	return info
+}
+
+func applyClientProfile(info *RelayInfo) {
+	if info == nil {
+		return
+	}
+	identity := common.MatchClientProfile("", info.RequestHeaders)
+	info.ClientProfile = identity.Profile
+	if info.ClientProfile == "" {
+		info.ClientProfile = common.ClientProfileGeneric
+	}
+	info.ClientSource = identity.Source
+	info.ClientProfileHit = identity.Hit
 }
 
 func cloneRequestHeaders(c *gin.Context) map[string]string {

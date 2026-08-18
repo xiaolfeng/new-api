@@ -8,12 +8,13 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/relay/clientprofile"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
-	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
 
 	"github.com/gin-gonic/gin"
 )
@@ -36,9 +37,9 @@ func ChatCompletionsStreamToResponsesHandler(
 	model := info.UpstreamModelName
 
 	var (
-		usage       = &dto.Usage{}
-		usageText   strings.Builder
-		streamErr   *types.NewAPIError
+		usage     = &dto.Usage{}
+		usageText strings.Builder
+		streamErr *types.NewAPIError
 
 		sentResponseCreated bool
 		hasOpenMessageItem  bool
@@ -64,6 +65,7 @@ func ChatCompletionsStreamToResponsesHandler(
 			streamErr = types.NewOpenAIError(err, types.ErrorCodeJsonMarshalFailed, http.StatusInternalServerError)
 			return false
 		}
+		data = clientprofile.NormalizeResponsesSSEData(info, data)
 		helper.ResponseChunkData(c, dto.ResponsesStreamResponse{Type: eventType}, string(data))
 		return true
 	}

@@ -139,6 +139,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	}
 
 	AppendChannelAffinityAdminInfo(ctx, adminInfo)
+	appendClientProfileAdminInfo(relayInfo, adminInfo)
 
 	other["admin_info"] = adminInfo
 	appendHostToolAdminInfo(relayInfo, adminInfo)
@@ -226,6 +227,18 @@ func countHostToolActivity(relayInfo *relaycommon.RelayInfo) (search, fetch int)
 		}
 	}
 	return search, fetch
+}
+
+func appendClientProfileAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[string]interface{}) {
+	if relayInfo == nil || admin == nil {
+		return
+	}
+	if relayInfo.ClientProfile != "" {
+		admin["client_profile"] = string(relayInfo.ClientProfile)
+	}
+	if relayInfo.ClientProfileHit != "" {
+		admin["client_profile_hit"] = relayInfo.ClientProfileHit
+	}
 }
 
 func appendHostToolAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[string]interface{}) {

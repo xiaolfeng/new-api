@@ -252,13 +252,157 @@ func TestExtractLogDetailSummariesWithGenericSessionPriority(t *testing.T) {
 	require.Equal(t, "parent-session", parentSessionId)
 }
 
+func TestParseClientSourceFromHeadersNamedAgents(t *testing.T) {
+	tests := []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{
+			name:    "claude-cli official",
+			headers: map[string]string{"User-Agent": "claude-cli/2.1.88 (user, cli)"},
+			want:    "Claude Code",
+		},
+		{
+			name:    "claude-code slash",
+			headers: map[string]string{"User-Agent": "claude-code/2.1.88"},
+			want:    "Claude Code",
+		},
+		{
+			name:    "claudecode",
+			headers: map[string]string{"user-agent": "claudecode/1.0.0"},
+			want:    "Claude Code",
+		},
+		{
+			name:    "codex",
+			headers: map[string]string{"User-Agent": "codex_cli_rs/0.20.0"},
+			want:    "Codex",
+		},
+		{
+			name:    "official codex cli ua",
+			headers: map[string]string{"User-Agent": common.OfficialCodexCLIUserAgent},
+			want:    "Codex",
+		},
+		{
+			name:    "codex-cli product",
+			headers: map[string]string{"User-Agent": "codex-cli/0.50.0"},
+			want:    "Codex",
+		},
+		{
+			name:    "codex originator",
+			headers: map[string]string{"User-Agent": "Mozilla/5.0 Chrome/120.0.0.0", "Originator": "codex_cli_rs"},
+			want:    "Codex",
+		},
+		{
+			name:    "opencode",
+			headers: map[string]string{"User-Agent": "opencode/0.1.0"},
+			want:    "OpenCode",
+		},
+		{
+			name:    "zcode",
+			headers: map[string]string{"User-Agent": "ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24"},
+			want:    "ZCode",
+		},
+		{
+			name:    "grok-cli",
+			headers: map[string]string{"User-Agent": "grok-cli/1.0.0"},
+			want:    "Grok Build",
+		},
+		{
+			name:    "Q1 production grok build ua",
+			headers: map[string]string{"User-Agent": common.ProductionGrokBuildUserAgent},
+			want:    "Grok Build",
+		},
+		{
+			name:    "grok identifier header",
+			headers: map[string]string{"User-Agent": "Mozilla/5.0 Chrome/120.0.0.0", "X-Grok-Client-Identifier": "grok-build"},
+			want:    "Grok Build",
+		},
+		{
+			name:    "chrome is not grok",
+			headers: map[string]string{"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+			want:    "Chrome",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, parseClientSourceFromHeaders(tt.headers))
+		})
+	}
+}
+
 func TestParseClientSourceZCode(t *testing.T) {
-	source := parseClientSource("ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24")
+	source := parseClientSourceFromHeaders(map[string]string{
+		"User-Agent": "ZCode/3.4.2 ai-sdk/provider-utils/4.0.39 runtime/node.js/24",
+	})
 	require.Equal(t, "ZCode", source)
 }
 
 func TestIsDeveloperToolLogSourceZCode(t *testing.T) {
 	require.True(t, IsDeveloperToolLogSource("ZCode"))
+}
+
+func TestIsDeveloperToolLogSourceGrokBuild(t *testing.T) {
+	require.True(t, IsDeveloperToolLogSource("Grok Build"))
+	require.False(t, IsDeveloperToolLogSource("Chrome"))
+}
+
+func TestFormatUserLogsKeepsGrokBuildForCodeUser(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent": "grok-cli/1.0.0",
+		},
+		ResponsesRequestBlocks: []ResponsesRequestBlock{
+			{
+				Type: "input_text",
+				Role: "user",
+				Text: "search something",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	logs := []*Log{
+		{
+			Record:  string(recordBytes),
+			FullLog: `{"request":{}}`,
+		},
+	}
+	formatUserLogs(logs, 0, &User{Role: common.RoleCodeUser})
+	require.NotEmpty(t, logs[0].Record)
+	require.NotEmpty(t, logs[0].FullLog)
+	otherMap, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Equal(t, "Grok Build", otherMap[LogOtherClientSourceKey])
+}
+
+func TestFormatUserLogsHidesGrokBuildForCommonUser(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent": "grok-cli/1.0.0",
+		},
+		ResponsesRequestBlocks: []ResponsesRequestBlock{
+			{
+				Type: "input_text",
+				Role: "user",
+				Text: "search something",
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	logs := []*Log{
+		{
+			Record:  string(recordBytes),
+			FullLog: `{"request":{}}`,
+		},
+	}
+	formatUserLogs(logs, 0, &User{Role: common.RoleCommonUser})
+	require.Empty(t, logs[0].Record)
+	require.Empty(t, logs[0].FullLog)
+	otherMap, err := common.StrToMap(logs[0].Other)
+	require.NoError(t, err)
+	require.Equal(t, "Grok Build", otherMap[LogOtherClientSourceKey])
 }
 
 func TestExtractLogDetailSummariesWithZCodeSubAgentSession(t *testing.T) {
