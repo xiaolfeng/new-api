@@ -92,6 +92,49 @@ func TestInspectResponsesPreview(t *testing.T) {
 	assert.Equal(t, "web_search_preview", plan.Decls[0].OriginalName)
 }
 
+func TestInspectResponsesFiltersAllowWins(t *testing.T) {
+	tools, err := common.Marshal([]map[string]any{{
+		"type": "web_search",
+		"filters": map[string]any{
+			"allowed_domains":  []string{"docs.x.ai"},
+			"excluded_domains": []string{"reddit.com"},
+		},
+	}})
+	require.NoError(t, err)
+	reqDTO := dto.OpenAIResponsesRequest{
+		Model: "grok-4.6",
+		Tools: tools,
+	}
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatOpenAIResponses, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.True(t, plan.Enabled)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, []string{"docs.x.ai"}, plan.Decls[0].AllowedDomains)
+	assert.Empty(t, plan.Decls[0].BlockedDomains)
+}
+
+func TestInspectResponsesFiltersExcluded(t *testing.T) {
+	tools, err := common.Marshal([]map[string]any{{
+		"type": "web_search_2025_08_26",
+		"filters": map[string]any{
+			"excluded_domains": []string{"pinterest.com"},
+		},
+	}})
+	require.NoError(t, err)
+	reqDTO := dto.OpenAIResponsesRequest{Model: "grok-4.6", Tools: tools}
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatOpenAIResponses, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.Len(t, plan.Decls, 1)
+	assert.Empty(t, plan.Decls[0].AllowedDomains)
+	assert.Equal(t, []string{"pinterest.com"}, plan.Decls[0].BlockedDomains)
+}
+
 func TestInspectDedupCanonical(t *testing.T) {
 	reqDTO := dto.ClaudeRequest{
 		Model: "claude",

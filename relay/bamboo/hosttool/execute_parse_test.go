@@ -3,6 +3,7 @@ package hosttool
 import (
 	"testing"
 
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -47,6 +48,38 @@ func TestParseSearchQuery(t *testing.T) {
 			require.Equal(t, tc.want, got)
 		})
 	}
+}
+
+func TestResolveSearchDomainsDeclOverridesCall(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		HostToolPlan: &relaycommon.HostToolPlan{
+			Decls: []relaycommon.HostToolDecl{{
+				OriginalName:   "web_search",
+				Canonical:      CanonicalWebSearch,
+				AllowedDomains: []string{"docs.x.ai"},
+			}},
+		},
+	}
+	allowed, blocked := resolveSearchDomains(info, "web_search", map[string]any{
+		"allowed_domains": []any{"example.com"},
+	})
+	assert.Equal(t, []string{"docs.x.ai"}, allowed)
+	assert.Empty(t, blocked)
+}
+
+func TestShouldBillHostResult(t *testing.T) {
+	assert.True(t, shouldBillHostResult(ExecResult{OK: true, Kind: "search"}))
+	assert.False(t, shouldBillHostResult(ExecResult{OK: false, Kind: "search"}))
+	assert.False(t, shouldBillHostResult(ExecResult{OK: true, Kind: "fetch"}))
+}
+
+func TestResolveSearchDomainsCallWhenDeclEmpty(t *testing.T) {
+	allowed, blocked := resolveSearchDomains(&relaycommon.RelayInfo{}, "web_search", map[string]any{
+		"allowed_domains": []any{"example.com"},
+		"blocked_domains": []any{"reddit.com"},
+	})
+	assert.Equal(t, []string{"example.com"}, allowed)
+	assert.Equal(t, []string{"reddit.com"}, blocked)
 }
 
 func TestClientIPFromHeaders(t *testing.T) {

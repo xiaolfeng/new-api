@@ -138,7 +138,7 @@ func ExecuteCalls(ctx context.Context, info *relaycommon.RelayInfo, st *model_se
 				ErrorCode:    r.ErrorCode,
 				Truncated:    r.Truncated,
 			})
-			if r.OK {
+			if shouldBillHostResult(results[i]) {
 				incrementHostToolBilling(info, uses[i].Name)
 			}
 		}
@@ -259,16 +259,34 @@ func executeOne(ctx context.Context, info *relaycommon.RelayInfo, st *model_sett
 	if v, ok := asFloat(raw["contextMaxCharacters"]); ok {
 		ctxChars = int(v)
 	}
+	allowed, blocked := resolveSearchDomains(info, call.Name, raw)
 	res, _ := runSearch(ctx, info, st, searchRequest{
 		Query:                query,
 		NumResults:           num,
 		Livecrawl:            asString(raw["livecrawl"]),
 		Type:                 asString(raw["type"]),
 		ContextMaxCharacters: ctxChars,
-		AllowedDomains:       asStringSlice(raw["allowed_domains"]),
-		BlockedDomains:       asStringSlice(raw["blocked_domains"]),
+		AllowedDomains:       allowed,
+		BlockedDomains:       blocked,
 	})
 	return res
+}
+
+func resolveSearchDomains(info *relaycommon.RelayInfo, originalName string, raw map[string]any) (allowed, blocked []string) {
+	if info != nil && info.HostToolPlan != nil {
+		d := info.HostToolPlan.DeclByOriginal(originalName)
+		if d == nil {
+			d = info.HostToolPlan.DeclByCanonical(CanonicalFromName(originalName))
+		}
+		if d != nil && (len(d.AllowedDomains) > 0 || len(d.BlockedDomains) > 0) {
+			return d.AllowedDomains, d.BlockedDomains
+		}
+	}
+	return asStringSlice(raw["allowed_domains"]), asStringSlice(raw["blocked_domains"])
+}
+
+func shouldBillHostResult(r ExecResult) bool {
+	return r.OK && r.Kind == "search"
 }
 
 func incrementHostToolBilling(info *relaycommon.RelayInfo, originalName string) {

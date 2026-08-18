@@ -177,13 +177,14 @@ func appendHostToolAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[string]
 	}
 	plan := relayInfo.HostToolPlan
 	admin["host_tools"] = map[string]interface{}{
-		"mode":           plan.Mode,
-		"enabled":        plan.Enabled,
-		"executed":       relayInfo.HostToolExecuted,
-		"injected":       plan.Injected,
-		"stripped":       plan.Stripped,
-		"stopped_reason": plan.StoppedReason,
-		"execs":          plan.Execs,
+		"mode":              plan.Mode,
+		"enabled":           plan.Enabled,
+		"executed":          relayInfo.HostToolExecuted,
+		"injected":          plan.Injected,
+		"stripped":          plan.Stripped,
+		"stopped_reason":    plan.StoppedReason,
+		"execs":             plan.Execs,
+		"builtin_responses": plan.BuiltinResponses,
 	}
 }
 

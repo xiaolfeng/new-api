@@ -30,7 +30,8 @@ func CanonicalFromName(name string) string {
 	switch normalizeName(name) {
 	case "websearch", "web_search", "web-search", "web_search_preview", "websearchpreview":
 		return CanonicalWebSearch
-	case "webfetch", "web_fetch", "web-fetch":
+	case "webfetch", "web_fetch", "web-fetch", "open_page", "openpage", "open-page",
+		"open_page_with_find", "openpagewithfind", "open-page-with-find":
 		return CanonicalWebFetch
 	default:
 		return ""

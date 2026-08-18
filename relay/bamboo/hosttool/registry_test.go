@@ -12,6 +12,8 @@ func TestCanonicalFromName(t *testing.T) {
 	assert.Equal(t, CanonicalWebSearch, CanonicalFromName("web_search_preview"))
 	assert.Equal(t, CanonicalWebFetch, CanonicalFromName("WebFetch"))
 	assert.Equal(t, CanonicalWebFetch, CanonicalFromName("webfetch"))
+	assert.Equal(t, CanonicalWebFetch, CanonicalFromName("open_page"))
+	assert.Equal(t, CanonicalWebFetch, CanonicalFromName("open_page_with_find"))
 	assert.Equal(t, "", CanonicalFromName("bash"))
 	assert.Equal(t, "", CanonicalFromName("apply_patch"))
 }

@@ -2,6 +2,7 @@ package imagerec
 
 import (
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	bamboosdk "github.com/bamboo-services/bamboo-messages/bamboo"
@@ -159,6 +160,50 @@ func TestBuildVisibleBox(t *testing.T) {
 	assert.Contains(t, box, "[Image 1]\ncat")
 	assert.Contains(t, box, "[Image 2]\ndog")
 	assert.Contains(t, box, relaycommon.ImageRecognizeFenceEnd)
+}
+
+func TestBuildVisionRequestIsParserOnly(t *testing.T) {
+	st := model_setting.GetBambooSettings()
+	prev := *st
+	t.Cleanup(func() { *st = prev })
+	st.EnableImageRecognize = true
+	st.ImageRecognizeChannelId = 9
+	st.ImageRecognizeModel = "vision-model"
+	st.ImageRecognizePrompt = ""
+
+	var got *dto.GeneralOpenAIRequest
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+		got = request
+		return "[Image 1]\nA sign", &dto.Usage{PromptTokens: 1, CompletionTokens: 1}, nil
+	}
+
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("这是什么？帮我写邮件"), pngBlock("img")),
+	})
+	err := MaybeRewrite(testGinContext(), info, req)
+	require.Nil(t, err)
+	require.NotNil(t, got)
+	require.GreaterOrEqual(t, len(got.Messages), 2)
+	assert.Equal(t, "system", got.Messages[0].Role)
+	sys, _ := got.Messages[0].Content.(string)
+	assert.Contains(t, sys, "你只是图片解析模块")
+	assert.Contains(t, sys, "禁止")
+	assert.Contains(t, sys, "回答用户问题")
+
+	parts := got.Messages[1].ParseContent()
+	var texts []string
+	for _, p := range parts {
+		if p.Type == dto.ContentTypeText {
+			texts = append(texts, p.Text)
+		}
+	}
+	joined := strings.Join(texts, "\n")
+	assert.Contains(t, joined, "仅作理解图片场景的参考")
+	assert.Contains(t, joined, "不要回答它")
+	assert.Contains(t, joined, "只解释图片本身")
 }
 
 func TestSplitCaptionsPrefersMarkers(t *testing.T) {

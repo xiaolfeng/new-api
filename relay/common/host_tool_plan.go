@@ -3,23 +3,26 @@ package common
 // HostToolPlan 是端侧工具检测/改写/执行的本地副本。
 // 放在 relay/common，避免 RelayInfo 导入 relay/bamboo/hosttool 造成循环依赖。
 type HostToolPlan struct {
-	Enabled       bool
-	Mode          string // "loop" | "return"
-	Decls         []HostToolDecl
-	Injected      []string
-	Stripped      []string
-	Execs         []HostToolExecRecord
-	StoppedReason string
+	Enabled          bool
+	Mode             string // "loop" | "return"
+	Decls            []HostToolDecl
+	Injected         []string
+	Stripped         []string
+	Execs            []HostToolExecRecord
+	StoppedReason    string
+	BuiltinResponses bool
 }
 
 // HostToolDecl 一条归一后的 host 工具声明。
 type HostToolDecl struct {
-	OriginalName string
-	Canonical    string // host.web_search | host.web_fetch
-	Source       string // function | server_type | web_search_options
-	HadSchema    bool
-	BillingName  string // web_search | web_search_preview | web_fetch
-	MaxUses      int    // 0 = 未声明
+	OriginalName   string
+	Canonical      string // host.web_search | host.web_fetch
+	Source         string // function | server_type | web_search_options
+	HadSchema      bool
+	BillingName    string // web_search | web_search_preview | web_fetch
+	MaxUses        int    // 0 = 未声明
+	AllowedDomains []string
+	BlockedDomains []string
 }
 
 // HostToolExecRecord 一次工具执行的可观测记录（admin_info）。

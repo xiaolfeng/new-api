@@ -515,3 +515,47 @@ func firstNonEmptyStr(vals ...string) string {
 	}
 	return ""
 }
+
+func doHostBuiltinResponses(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
+	st := model_setting.GetBambooSettings()
+	result := hosttool.ExecuteBuiltinRequest(c.Request.Context(), info, st, req)
+
+	modelName := info.OriginModelName
+	if req != nil && req.Config != nil && req.Config.Model != "" {
+		modelName = req.Config.Model
+	}
+	createdAt := time.Now().Unix()
+	usage := &dto.Usage{UsageSemantic: "anthropic"}
+	common.SetContextKey(c, constant.ContextKeyEmptyResponse, false)
+	info.SetFirstResponseTime()
+
+	if req != nil && req.IsStream {
+		writeStreamHeaders(c)
+		frames, err := hosttool.BuiltinStreamFrames(modelName, info.RequestId, createdAt, result)
+		if err != nil {
+			return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
+		}
+		var items []string
+		for _, frame := range frames {
+			items = append(items, string(frame))
+			if _, werr := c.Writer.Write(frame); werr != nil {
+				break
+			}
+			c.Writer.Flush()
+		}
+		if len(items) > 0 {
+			info.ResponseBody = truncateResponseBody(strings.Join(items, "\n"))
+		}
+		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
+		return usage, nil
+	}
+
+	body, err := hosttool.MarshalBuiltinComplete(modelName, info.RequestId, createdAt, result)
+	if err != nil {
+		return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
+	}
+	c.Writer.Header().Set("Content-Type", "application/json")
+	_, _ = c.Writer.Write(body)
+	info.ResponseBody = truncateResponseBody(string(body))
+	return usage, nil
+}

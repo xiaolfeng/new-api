@@ -120,6 +120,12 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		info.BambooDebug.RelayParsed = bamboorelay.FormatRelayParsed("ChatRelay", codecFmt, relayReq)
 	}
 
+	if info.HostToolPlan != nil && info.HostToolPlan.Enabled &&
+		hosttool.IsResponsesBuiltinOnly(entryFormat, requestBody, info.HostToolPlan, relayReq) {
+		info.HostToolPlan.BuiltinResponses = true
+		return doHostBuiltinResponses(c, info, relayReq)
+	}
+
 	// ② 上游侧：根据 ApiType 构造 bamboo provider
 	p, upstreamRelayFormat, provErr := newProvider(c, info)
 	if provErr != nil {

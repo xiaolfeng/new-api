@@ -55,6 +55,7 @@ func InspectAndRewrite(entryFormat types.RelayFormat, entryBytes []byte, req *ba
 			if d.MaxUses > 0 && decls[idx].MaxUses == 0 {
 				decls[idx].MaxUses = d.MaxUses
 			}
+			mergeDeclFilters(&decls[idx], d)
 			continue
 		}
 		seen[d.Canonical] = len(decls)
@@ -186,13 +187,16 @@ func scanToolObjects(objs []map[string]any, allowType bool) []relaycommon.HostTo
 				hadSchema = true
 			}
 		}
+		allowed, blocked := parseDomainFilters(obj)
 		out = append(out, relaycommon.HostToolDecl{
-			OriginalName: name,
-			Canonical:    can,
-			Source:       src,
-			HadSchema:    hadSchema,
-			BillingName:  billingNameFor(name, typ, can),
-			MaxUses:      parseMaxUses(obj["max_uses"]),
+			OriginalName:   name,
+			Canonical:      can,
+			Source:         src,
+			HadSchema:      hadSchema,
+			BillingName:    billingNameFor(name, typ, can),
+			MaxUses:        parseMaxUses(obj["max_uses"]),
+			AllowedDomains: allowed,
+			BlockedDomains: blocked,
 		})
 	}
 	return out
@@ -284,4 +288,55 @@ func asMapSlice(v any) []map[string]any {
 func asString(v any) string {
 	s, _ := v.(string)
 	return s
+}
+
+func parseDomainFilters(obj map[string]any) (allowed, blocked []string) {
+	if obj == nil {
+		return nil, nil
+	}
+	filters, _ := obj["filters"].(map[string]any)
+	allowed = firstStringSlice(
+		asStringSlice(obj["allowed_domains"]),
+		asStringSlice(nestedSlice(filters, "allowed_domains")),
+	)
+	blocked = firstStringSlice(
+		asStringSlice(obj["blocked_domains"]),
+		asStringSlice(obj["excluded_domains"]),
+		asStringSlice(nestedSlice(filters, "excluded_domains")),
+		asStringSlice(nestedSlice(filters, "blocked_domains")),
+	)
+	if len(allowed) > 0 {
+		return allowed, nil
+	}
+	return nil, blocked
+}
+
+func nestedSlice(m map[string]any, key string) any {
+	if m == nil {
+		return nil
+	}
+	return m[key]
+}
+
+func firstStringSlice(sets ...[]string) []string {
+	for _, set := range sets {
+		if len(set) > 0 {
+			return set
+		}
+	}
+	return nil
+}
+
+func mergeDeclFilters(dst *relaycommon.HostToolDecl, src relaycommon.HostToolDecl) {
+	if dst == nil {
+		return
+	}
+	if len(dst.AllowedDomains) == 0 && len(src.AllowedDomains) > 0 {
+		dst.AllowedDomains = src.AllowedDomains
+		dst.BlockedDomains = nil
+		return
+	}
+	if len(dst.AllowedDomains) == 0 && len(dst.BlockedDomains) == 0 && len(src.BlockedDomains) > 0 {
+		dst.BlockedDomains = src.BlockedDomains
+	}
 }

@@ -255,9 +255,20 @@ func (s *BambooSettings) ClampImageRecognizeMaxOutputRunes() int {
 	return n
 }
 
+// ImageRecognizeRolePrompt 是识图 hop 的固定角色约束。
+// 无论运营有没有自定义提示词，都必须带上：这里只解析图片，不回答用户问题。
+const ImageRecognizeRolePrompt = `你只是图片解析模块，不是对话助手。
+任务：把每张图片本身解释清楚，供后续主模型阅读。
+必须覆盖：画面主体、关键物体与关系、可见文字（OCR，原样抄录）、版式/场景、颜色与显著细节。
+禁止：回答用户问题、给建议、推断下一步、编造看不见的内容、寒暄。
+输出格式：按 [Image 1]、[Image 2]… 分段；每段只写该图的客观描述。`
+
+const defaultImageRecognizeExtraPrompt = `逐张完整描述图片。只做解析，不要答题。`
+
 func (s *BambooSettings) ResolvedImageRecognizePrompt() string {
+	extra := defaultImageRecognizeExtraPrompt
 	if s != nil && strings.TrimSpace(s.ImageRecognizePrompt) != "" {
-		return strings.TrimSpace(s.ImageRecognizePrompt)
+		extra = strings.TrimSpace(s.ImageRecognizePrompt)
 	}
-	return "Describe each attached image. List visible text (OCR) and key objects. Do not invent details. Reply as [Image N] then the description."
+	return ImageRecognizeRolePrompt + "\n\n" + extra
 }

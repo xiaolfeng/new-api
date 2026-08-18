@@ -338,11 +338,14 @@ func splitCaptions(raw string, n, maxRunes int) []string {
 func buildVisionRequest(c *gin.Context, st *model_setting.BambooSettings, userText string, images []extractedImage) (*dto.GeneralOpenAIRequest, error) {
 	parts := make([]dto.MediaContent, 0, len(images)+2)
 	if strings.TrimSpace(userText) != "" {
-		parts = append(parts, dto.MediaContent{Type: dto.ContentTypeText, Text: userText})
+		parts = append(parts, dto.MediaContent{
+			Type: dto.ContentTypeText,
+			Text: "以下文字仅作理解图片场景的参考，不要回答它，也不要据此给建议或下一步：\n" + strings.TrimSpace(userText),
+		})
 	}
 	parts = append(parts, dto.MediaContent{
 		Type: dto.ContentTypeText,
-		Text: fmt.Sprintf("Describe the %d attached image(s). Reply as [Image 1] ... [Image %d].", len(images), len(images)),
+		Text: fmt.Sprintf("请解析这 %d 张图片。只解释图片本身，按 [Image 1]…[Image %d] 分段输出客观描述。", len(images), len(images)),
 	})
 	for i, img := range images {
 		dataURL, mime, err := resolveImageDataURL(c, img.Source)
