@@ -119,7 +119,7 @@ func invokeSearchBackend(ctx context.Context, info *relaycommon.RelayInfo, st *m
 			}
 			return "", nil, err
 		}
-		return text, nil, nil
+		return text, limitHits(parseSearchHits(text), in.NumResults), nil
 	case "parallel":
 		sessionID := parallelSessionID(info)
 		modelName := info.OriginModelName
@@ -143,7 +143,7 @@ func invokeSearchBackend(ctx context.Context, info *relaycommon.RelayInfo, st *m
 			}
 			return "", nil, err
 		}
-		return text, nil, nil
+		return text, limitHits(parseSearchHits(text), in.NumResults), nil
 	case "searxng":
 		hits, err := searchSearXNG(ctx, st.SearxngBaseURL, in.Query, in.NumResults, timeout)
 		return "", hits, err

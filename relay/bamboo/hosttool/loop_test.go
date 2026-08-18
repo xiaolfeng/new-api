@@ -35,6 +35,7 @@ func TestDecideActionClaudeStrictPassthroughWebSearch(t *testing.T) {
 	assert.Equal(t, ActionPassthrough, DecideActionForClient(plan, []toolUseCall{{Name: "WebSearch"}}, info))
 	assert.Equal(t, ActionHop2, DecideActionForClient(plan, []toolUseCall{{Name: "WebSearch"}}, nil))
 	assert.Equal(t, ActionPassthrough, DecideActionForClient(plan, []toolUseCall{{Name: "WebSearch"}, {Name: "bash"}}, info))
+	assert.Equal(t, ActionHop2, DecideActionForClient(plan, []toolUseCall{{Name: "WebFetch"}}, info))
 
 	st := model_setting.GetBambooSettings()
 	prev := st.EnableClaudeStrictEgress

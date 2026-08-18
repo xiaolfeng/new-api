@@ -95,6 +95,9 @@ func TestClientStreamEmitsOpenAIToolCall(t *testing.T) {
 	assert.Contains(t, joined, `"arguments"`)
 	assert.Contains(t, joined, `"output"`)
 	assert.Contains(t, joined, "isError")
+	assert.Contains(t, joined, `"object":"chat.completion.chunk"`)
+	assert.Contains(t, joined, `"model":"test-model"`)
+	assert.Regexp(t, `"created":\d+`, joined)
 }
 
 func TestBlocksToStreamEventsKeepsToolUse(t *testing.T) {

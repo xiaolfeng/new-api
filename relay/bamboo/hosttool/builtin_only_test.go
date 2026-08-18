@@ -85,6 +85,33 @@ func TestClassifyBuiltinInputQuery(t *testing.T) {
 	assert.Equal(t, "xAI web_search Responses API", in.Query)
 }
 
+func TestClassifyBuiltinInputStripsClaudeSearchPrefix(t *testing.T) {
+	req := &bamboocodec.RelayRequest{
+		Messages: []bamboosdk.BambooMessage{
+			bamboosdk.NewUserMessage("Perform a web search for the query: 筱锋 Xiao Lfeng 程序员"),
+		},
+	}
+	in := classifyBuiltinInput(&relaycommon.HostToolPlan{
+		Decls: []relaycommon.HostToolDecl{{OriginalName: "web_search", Canonical: CanonicalWebSearch}},
+	}, req)
+	assert.Equal(t, "search", in.Kind)
+	assert.Equal(t, "筱锋 Xiao Lfeng 程序员", in.Query)
+}
+
+func TestClassifyBuiltinInputFetchOnlyExtractsURL(t *testing.T) {
+	req := &bamboocodec.RelayRequest{
+		Messages: []bamboosdk.BambooMessage{
+			bamboosdk.NewUserMessage("Please fetch https://blog.x-lf.com/1003.html now"),
+		},
+	}
+	in := classifyBuiltinInput(&relaycommon.HostToolPlan{
+		Decls: []relaycommon.HostToolDecl{{OriginalName: "web_fetch", Canonical: CanonicalWebFetch}},
+	}, req)
+	assert.Equal(t, "fetch", in.Kind)
+	assert.Equal(t, "https://blog.x-lf.com/1003.html", in.URL)
+	assert.Equal(t, "web_fetch", in.Name)
+}
+
 func TestLastUserTextSkipsAssistant(t *testing.T) {
 	req := &bamboocodec.RelayRequest{
 		Messages: []bamboosdk.BambooMessage{

@@ -76,8 +76,8 @@ func FormatToolResultWithLimit(r ExecResult, maxRunes int) (content string, isEr
 	default:
 		var b strings.Builder
 		fmt.Fprintf(&b, "[%s] query=%q\n", name, r.Query)
-		if len(r.Hits) > 0 {
-			for i, hit := range r.Hits {
+		if hits := resolvedHits(r); len(hits) > 0 {
+			for i, hit := range hits {
 				title := hit.Title
 				if title == "" {
 					title = "-"

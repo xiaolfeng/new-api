@@ -674,7 +674,13 @@ func doHostClaudeSearch(c *gin.Context, info *relaycommon.RelayInfo, req *bamboo
 
 	if req != nil && req.IsStream {
 		writeStreamHeaders(c)
-		frames, err := hosttool.ClaudeServerSearchStreamFrames(modelName, info.RequestId, result)
+		var frames [][]byte
+		var err error
+		if result.Kind == "fetch" {
+			frames, err = hosttool.ClaudeServerFetchStreamFrames(modelName, info.RequestId, result)
+		} else {
+			frames, err = hosttool.ClaudeServerSearchStreamFrames(modelName, info.RequestId, result)
+		}
 		if err != nil {
 			return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
@@ -697,7 +703,13 @@ func doHostClaudeSearch(c *gin.Context, info *relaycommon.RelayInfo, req *bamboo
 		return usage, nil
 	}
 
-	body, err := hosttool.MarshalClaudeServerSearch(modelName, info.RequestId, result)
+	var body []byte
+	var err error
+	if result.Kind == "fetch" {
+		body, err = hosttool.MarshalClaudeServerFetch(modelName, info.RequestId, result)
+	} else {
+		body, err = hosttool.MarshalClaudeServerSearch(modelName, info.RequestId, result)
+	}
 	if err != nil {
 		return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}

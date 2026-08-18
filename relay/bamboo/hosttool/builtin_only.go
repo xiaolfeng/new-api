@@ -90,19 +90,64 @@ func planOrEmpty(info *relaycommon.RelayInfo) *relaycommon.HostToolPlan {
 }
 
 func classifyBuiltinInput(plan *relaycommon.HostToolPlan, req *bamboocodec.RelayRequest) builtinInput {
-	text := lastUserText(req)
-	name := builtinToolName(plan, CanonicalWebSearch)
-	if isBareHTTPURL(text) {
-		fetchName := builtinToolName(plan, CanonicalWebFetch)
+	text := stripClaudeSearchHelperPrefix(lastUserText(req))
+	searchName := builtinToolName(plan, CanonicalWebSearch)
+	fetchName := builtinToolName(plan, CanonicalWebFetch)
+	onlyFetch := fetchName != "" && searchName == ""
+
+	if isBareHTTPURL(text) || onlyFetch {
 		if fetchName == "" {
 			fetchName = "open_page"
 		}
-		return builtinInput{Kind: "fetch", URL: text, Name: fetchName}
+		url := text
+		if !isBareHTTPURL(url) {
+			url = extractURLFromText(text)
+		}
+		return builtinInput{Kind: "fetch", URL: url, Name: fetchName}
 	}
-	if name == "" {
-		name = "web_search"
+	if searchName == "" {
+		searchName = "web_search"
 	}
-	return builtinInput{Kind: "search", Query: text, Name: name}
+	return builtinInput{Kind: "search", Query: text, Name: searchName}
+}
+
+const claudeSearchHelperPrefix = "perform a web search for the query:"
+
+func stripClaudeSearchHelperPrefix(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	if strings.HasPrefix(strings.ToLower(s), claudeSearchHelperPrefix) {
+		return strings.TrimSpace(s[len(claudeSearchHelperPrefix):])
+	}
+	return s
+}
+
+func extractURLFromText(s string) string {
+	s = strings.TrimSpace(s)
+	if isBareHTTPURL(s) {
+		return s
+	}
+	for _, prefix := range []string{"https://", "http://"} {
+		i := strings.Index(s, prefix)
+		if i < 0 {
+			continue
+		}
+		rest := s[i:]
+		end := len(rest)
+		for j, r := range rest {
+			if r == ' ' || r == '\t' || r == '\n' || r == '\r' || r == '"' || r == '\'' || r == '>' || r == ')' {
+				end = j
+				break
+			}
+		}
+		cand := strings.TrimRight(rest[:end], ".,;]")
+		if isBareHTTPURL(cand) {
+			return cand
+		}
+	}
+	return ""
 }
 
 func builtinToolName(plan *relaycommon.HostToolPlan, canonical string) string {

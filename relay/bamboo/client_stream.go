@@ -1,6 +1,8 @@
 package bamboo
 
 import (
+	"time"
+
 	bamboosdk "github.com/bamboo-services/bamboo-messages/bamboo"
 	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
 	bamboorelay "github.com/bamboo-services/bamboo-messages/bamboo/relay"
@@ -35,6 +37,7 @@ type clientStream struct {
 	sawDelta  bool
 	frames    []string
 	format    bamboocodec.FormatType
+	model     string
 }
 
 func newClientStream(c *gin.Context, entryCodec bamboocodec.Codec, info *relaycommon.RelayInfo, model string) *clientStream {
@@ -47,6 +50,7 @@ func newClientStream(c *gin.Context, entryCodec bamboocodec.Codec, info *relayco
 		ser:    entryCodec.NewSerializer(model),
 		ok:     true,
 		format: entryCodec.Format(),
+		model:  model,
 	}
 	cs.writeSSE = func(data []byte) bool {
 		if c == nil || c.Writer == nil {
@@ -243,9 +247,15 @@ func (s *clientStream) emitOpenAIToolOutput(index int, id, output string) {
 		return
 	}
 	s.ensureStart()
+	model := s.model
+	if model == "" && s.info != nil {
+		model = s.info.OriginModelName
+	}
 	payload := map[string]any{
-		"id":     "chatcmpl-host-tool",
-		"object": "chat.completion.chunk",
+		"id":      "chatcmpl-host-tool",
+		"object":  "chat.completion.chunk",
+		"created": time.Now().Unix(),
+		"model":   model,
 		"choices": []any{
 			map[string]any{
 				"index": 0,

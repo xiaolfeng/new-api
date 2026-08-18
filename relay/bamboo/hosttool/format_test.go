@@ -24,6 +24,20 @@ func TestFormatToolResultSearchHits(t *testing.T) {
 	assert.Contains(t, content, "https://example.com")
 }
 
+func TestFormatToolResultSearchOpaqueJSONHits(t *testing.T) {
+	content, isErr := FormatToolResultWithLimit(ExecResult{
+		OriginalName: "web_search",
+		Kind:         "search",
+		OK:           true,
+		Query:        "筱锋",
+		OpaqueText:   `{"results":[{"url":"https://github.com/XiaoLFeng","title":"GitHub"},{"url":"https://blog.x-lf.com","title":"Blog"}]}`,
+	}, 65536)
+	require.False(t, isErr)
+	assert.Contains(t, content, "1. GitHub")
+	assert.Contains(t, content, "2. Blog")
+	assert.Contains(t, content, "https://github.com/XiaoLFeng")
+}
+
 func TestFormatToolResultSearchOpaque(t *testing.T) {
 	content, isErr := FormatToolResultWithLimit(ExecResult{
 		OriginalName: "websearch",

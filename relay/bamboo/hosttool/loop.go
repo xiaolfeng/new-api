@@ -55,7 +55,9 @@ func shouldPassthroughClaudeClientTools(info *relaycommon.RelayInfo, uses []tool
 		return false
 	}
 	for _, use := range uses {
-		if use.Name != "WebSearch" && use.Name != "WebFetch" {
+		// WebSearch helper 会再打一枪 web_search_*；WebFetch 在 2.1.x 仍是本地 axios，
+		// 必须由网关 A-thin 代跑，否则永远走不到 NewAPI。
+		if use.Name != "WebSearch" {
 			return false
 		}
 	}

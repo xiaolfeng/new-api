@@ -71,11 +71,12 @@ func buildWebSearchCall(id string, result ExecResult) responsesWebSearchCall {
 }
 
 func sourcesFromResult(result ExecResult) []responsesWebSearchSource {
-	if len(result.Hits) == 0 {
+	hits := resolvedHits(result)
+	if len(hits) == 0 {
 		return nil
 	}
-	out := make([]responsesWebSearchSource, 0, len(result.Hits))
-	for _, hit := range result.Hits {
+	out := make([]responsesWebSearchSource, 0, len(hits))
+	for _, hit := range hits {
 		if strings.TrimSpace(hit.URL) == "" {
 			continue
 		}
