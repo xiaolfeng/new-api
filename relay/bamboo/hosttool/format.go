@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 )
 
@@ -91,6 +92,20 @@ func FormatToolResultWithLimit(r ExecResult, maxRunes int) (content string, isEr
 		content, r.Truncated = truncateRunes(b.String(), maxRunes)
 		return content, false
 	}
+}
+
+func VisibleFence(r ExecResult) string {
+	limit := relaycommon.HostToolVisibleSearchRunes
+	start, end := relaycommon.HostWebSearchFenceStart, relaycommon.HostWebSearchFenceEnd
+	if r.Kind == "fetch" {
+		limit = relaycommon.HostToolVisibleFetchRunes
+		start, end = relaycommon.HostWebFetchFenceStart, relaycommon.HostWebFetchFenceEnd
+	}
+	body, _ := FormatToolResultWithLimit(r, limit)
+	if strings.TrimSpace(body) == "" {
+		return ""
+	}
+	return start + "\n" + body + "\n" + end + "\n"
 }
 
 func JoinFormattedResults(results []ExecResult) string {

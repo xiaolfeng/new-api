@@ -2,6 +2,7 @@ package bamboo
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -109,7 +110,24 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 		folded := hosttool.FoldResponse(resp2.ID, resp2.Model, blocks2, results2, resp2.Usage)
 		return writeCompleteResponse(c, info, entryCodec, codecFmt, folded, usage)
 	}
+	prependHostFences(resp2, results)
 	return writeCompleteResponse(c, info, entryCodec, codecFmt, resp2, usage)
+}
+
+func prependHostFences(resp *bamboosdk.Response, results []hosttool.ExecResult) {
+	if resp == nil || len(results) == 0 {
+		return
+	}
+	fences := make([]bamboosdk.ContentBlock, 0, len(results))
+	for _, r := range results {
+		if fence := hosttool.VisibleFence(r); fence != "" {
+			fences = append(fences, bamboosdk.NewTextBlock(fence))
+		}
+	}
+	if len(fences) == 0 {
+		return
+	}
+	resp.Content = append(fences, resp.Content...)
 }
 
 func writeCompleteResponse(c *gin.Context, info *relaycommon.RelayInfo, entryCodec bamboocodec.Codec,
@@ -154,7 +172,7 @@ func usageFromBamboo(resp *bamboosdk.Response) *dto.Usage {
 }
 
 func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk.BambooClient,
-	entryCodec bamboocodec.Codec, outFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
+	entryCodec bamboocodec.Codec, outFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest, cs *clientStream) (*dto.Usage, *types.NewAPIError) {
 
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
@@ -163,44 +181,48 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 		cancel()
 	}()
 
-	writeStreamHeaders(c)
-	writeSSE := func(data []byte) bool {
-		if _, werr := c.Writer.Write(data); werr != nil {
-			return false
-		}
-		c.Writer.Flush()
-		return true
-	}
-
 	modelName := ""
 	if req.Config != nil {
 		modelName = req.Config.Model
 	}
-	pingSer := entryCodec.NewSerializer(modelName)
-	stopPing := startHostPing(ctx, writeSSE, pingSer)
+	if cs == nil {
+		cs = newClientStream(c, entryCodec, info, modelName)
+	}
+	if cs.startPing == nil {
+		cs.startPing = func() func() {
+			return startHostPing(ctx, cs.writeSSE, entryCodec.NewSerializer(modelName))
+		}
+	}
+	cs.ensureHeaders()
+	cs.resumePing()
 
-	hop1, hopErr := collectStreamHop(ctx, c, info, client, entryCodec, outFmt, req, false, writeSSE)
+	writeSSE := cs.writeSSE
+	hop1, hopErr := collectStreamHop(ctx, c, info, client, entryCodec, outFmt, req, false, writeSSE, nil)
 	if hopErr != nil {
-		stopPing()
+		cs.pausePing()
+		if cs.HasHeaders() {
+			cs.emitError(hopErr)
+		}
 		return hop1.usage, hopErr
 	}
 	if hop1.cancelled {
-		stopPing()
+		cs.pausePing()
+		cs.finish()
 		return hop1.usage, nil
 	}
 
 	uses := hosttool.CollectToolUses(hop1.blocks)
 	action := hosttool.DecideAction(info.HostToolPlan, uses)
 	if action == hosttool.ActionPassthrough {
-		stopPing()
-		return replayStreamHop(c, info, hop1, writeSSE)
+		cs.pausePing()
+		return replayOrForwardHop(c, info, cs, hop1)
 	}
 
 	st := model_setting.GetBambooSettings()
 	results := hosttool.ExecuteCalls(ctx, info, st, uses)
 	if action == hosttool.ActionFoldB {
-		stopPing()
-		return emitFoldedStream(c, info, entryCodec, modelName, hop1, results, writeSSE)
+		cs.pausePing()
+		return emitFoldedStream(c, info, cs, hop1, results)
 	}
 
 	hop2Req := hosttool.BuildHop2Request(req, hop1.blocks, results, uses)
@@ -208,20 +230,29 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 		if info.HostToolPlan != nil {
 			info.HostToolPlan.StoppedReason = reason
 		}
-		stopPing()
-		return emitFoldedStream(c, info, entryCodec, modelName, hop1, results, writeSSE)
+		cs.pausePing()
+		return emitFoldedStream(c, info, cs, hop1, results)
 	}
 
-	stopPing()
-	hop2, hop2Err := collectStreamHop(ctx, c, info, client, entryCodec, outFmt, hop2Req, true, writeSSE)
+	cs.pausePing()
+	emitPendingVisibleBox(cs, info)
+	emitHostToolFences(cs, results)
+	hop2, hop2Err := collectStreamHop(ctx, c, info, client, entryCodec, outFmt, hop2Req, true, writeSSE, cs)
 	if hop2Err != nil {
+		if cs.HasHeaders() {
+			cs.emitError(hop2Err)
+		}
 		return hosttool.AddUsage(hop1.usage, hop2.usage), hop2Err
 	}
 	usage := hosttool.AddUsage(hop1.usage, hop2.usage)
 	uses2 := hosttool.CollectToolUses(hop2.blocks)
 	if hosttool.AllHostToolUses(info.HostToolPlan, uses2) && len(uses2) > 0 {
 		results2 := hosttool.ExecuteCalls(ctx, info, st, uses2)
-		return emitFoldedStream(c, info, entryCodec, modelName, hop2, results2, writeSSE)
+		return emitFoldedStream(c, info, cs, hop2, results2)
+	}
+	cs.finish()
+	if frames := cs.Frames(); len(frames) > 0 {
+		info.ResponseBody = truncateResponseBody(strings.Join(frames, "\n"))
 	}
 	if c.Request.Context().Err() != nil {
 		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
@@ -244,7 +275,7 @@ type collectedHop struct {
 
 func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk.BambooClient,
 	entryCodec bamboocodec.Codec, outFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest,
-	writeLive bool, writeSSE func([]byte) bool) (collectedHop, *types.NewAPIError) {
+	writeLive bool, writeSSE func([]byte) bool, live *clientStream) (collectedHop, *types.NewAPIError) {
 
 	out := collectedHop{usage: &dto.Usage{UsageSemantic: "anthropic"}}
 	eventCh, err := client.Chat(ctx, req.Messages, req.System, req.Config)
@@ -353,6 +384,14 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 			extractStreamUsage(&usage, &event)
 		}
 
+		if writeLive && live != nil {
+			if !live.forward(event) {
+				out.cancelled = true
+				out.usage = &usage
+				return out, nil
+			}
+			continue
+		}
 		data, serr := serializer.Serialize(event)
 		if serr != nil {
 			return out, translateCodecError(serr)
@@ -382,12 +421,16 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 			}
 		}
 	}
-	tail, _ := serializer.Flush()
-	out.flush = tail
-	if writeLive && len(tail) > 0 {
-		for _, frame := range bamboorelay.SplitSSEFrames(tail) {
-			out.frames = append(out.frames, frame)
-			_ = writeSSE(frame)
+	if writeLive && live != nil {
+		// Flush is owned by the shared clientStream after hop2.
+	} else {
+		tail, _ := serializer.Flush()
+		out.flush = tail
+		if writeLive && len(tail) > 0 {
+			for _, frame := range bamboorelay.SplitSSEFrames(tail) {
+				out.frames = append(out.frames, frame)
+				_ = writeSSE(frame)
+			}
 		}
 	}
 
@@ -422,6 +465,37 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 	return out, nil
 }
 
+func replayOrForwardHop(c *gin.Context, info *relaycommon.RelayInfo, cs *clientStream, hop collectedHop) (*dto.Usage, *types.NewAPIError) {
+	if cs != nil && cs.Started() {
+		emitPendingVisibleBox(cs, info)
+		for _, ev := range blocksToStreamEvents(hop.blocks) {
+			if !cs.forward(ev) {
+				break
+			}
+		}
+		cs.finish()
+		if frames := cs.Frames(); len(frames) > 0 {
+			info.ResponseBody = truncateResponseBody(strings.Join(frames, "\n"))
+		}
+		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
+		return hop.usage, nil
+	}
+	if cs != nil && !cs.HasHeaders() {
+		cs.ensureHeaders()
+	}
+	writeSSE := func(data []byte) bool {
+		if cs != nil {
+			return cs.writeSSE(data)
+		}
+		if _, err := c.Writer.Write(data); err != nil {
+			return false
+		}
+		c.Writer.Flush()
+		return true
+	}
+	return replayStreamHop(c, info, hop, writeSSE)
+}
+
 func replayStreamHop(c *gin.Context, info *relaycommon.RelayInfo, hop collectedHop, writeSSE func([]byte) bool) (*dto.Usage, *types.NewAPIError) {
 	info.SetFirstResponseTime()
 	var items []string
@@ -444,40 +518,46 @@ func replayStreamHop(c *gin.Context, info *relaycommon.RelayInfo, hop collectedH
 	return hop.usage, nil
 }
 
-func emitFoldedStream(c *gin.Context, info *relaycommon.RelayInfo, entryCodec bamboocodec.Codec, model string,
-	hop collectedHop, results []hosttool.ExecResult, writeSSE func([]byte) bool) (*dto.Usage, *types.NewAPIError) {
-	info.SetFirstResponseTime()
-	folded := hosttool.FoldResponse(hop.id, firstNonEmptyStr(hop.model, model), hop.blocks, results, hop.bambooU)
+func emitFoldedStream(c *gin.Context, info *relaycommon.RelayInfo, cs *clientStream, hop collectedHop, results []hosttool.ExecResult) (*dto.Usage, *types.NewAPIError) {
+	if cs == nil {
+		return hop.usage, types.NewError(fmt.Errorf("missing client stream"), types.ErrorCodeBadResponseBody)
+	}
+	emitPendingVisibleBox(cs, info)
+	folded := hosttool.FoldResponse(hop.id, firstNonEmptyStr(hop.model, ""), hop.blocks, results, hop.bambooU)
 	prependVisibleBox(folded, info)
-	ser := entryCodec.NewSerializer(firstNonEmptyStr(hop.model, model))
-	var items []string
 	for _, ev := range hosttool.FoldToStreamEvents(folded) {
-		data, err := ser.Serialize(ev)
-		if err != nil {
-			return hop.usage, translateCodecError(err)
-		}
-		if data == nil {
-			continue
-		}
-		for _, frame := range bamboorelay.SplitSSEFrames(data) {
-			items = append(items, string(frame))
-			if !writeSSE(frame) {
-				break
-			}
+		if !cs.forward(ev) {
+			break
 		}
 	}
-	tail, _ := ser.Flush()
-	if len(tail) > 0 {
-		for _, frame := range bamboorelay.SplitSSEFrames(tail) {
-			items = append(items, string(frame))
-			_ = writeSSE(frame)
-		}
-	}
-	if len(items) > 0 {
-		info.ResponseBody = truncateResponseBody(strings.Join(items, "\n"))
+	cs.finish()
+	if frames := cs.Frames(); len(frames) > 0 {
+		info.ResponseBody = truncateResponseBody(strings.Join(frames, "\n"))
 	}
 	ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
 	return hop.usage, nil
+}
+
+func emitPendingVisibleBox(cs *clientStream, info *relaycommon.RelayInfo) {
+	box := visibleBoxText(info)
+	if cs == nil || box == "" {
+		return
+	}
+	cs.emitClosedText(box)
+	if info.ImageRecognizePlan != nil {
+		info.ImageRecognizePlan.VisibleBox = ""
+	}
+}
+
+func emitHostToolFences(cs *clientStream, results []hosttool.ExecResult) {
+	if cs == nil {
+		return
+	}
+	for _, r := range results {
+		if fence := hosttool.VisibleFence(r); fence != "" {
+			cs.emitClosedText(fence)
+		}
+	}
 }
 
 func recordResponseBlocks(info *relaycommon.RelayInfo, blocks []bamboosdk.ContentBlock) {

@@ -28,7 +28,7 @@ func init() {
 	imagerec.SetHopFunc(executeImageRecognizeHop)
 }
 
-func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *relaykittypes.NewAPIError) {
+func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live imagerec.CaptionLive) (string, *dto.Usage, *relaykittypes.NewAPIError) {
 	if parent == nil || request == nil {
 		return "", nil, relaykittypes.NewError(fmt.Errorf("image recognition hop missing request"), relaykittypes.ErrorCodeInvalidRequest, relaykittypes.ErrOptionWithSkipRetry())
 	}
@@ -63,14 +63,15 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 		return "", nil, keyErr
 	}
 
-	inner, rec := newImageRecognizeGinContext(parentCtx)
+	stream := live != nil && request.IsStream(nil)
+	inner, rec := newImageRecognizeGinContext(parentCtx, stream)
 	bindImageRecognizeChannel(inner, channel, modelName, key, keyIndex)
 	timeout := time.Duration(st.ClampImageRecognizeTimeout()) * time.Millisecond
 	ctx, cancel := context.WithTimeout(inner.Request.Context(), timeout)
 	defer cancel()
 	inner.Request = inner.Request.WithContext(ctx)
 
-	child := buildImageRecognizeRelayInfo(parent, request, modelName)
+	child := buildImageRecognizeRelayInfo(parent, request, modelName, stream)
 	child.InitChannelMeta(inner)
 	child.ImageRecognizeInner = true
 	child.OriginModelName = modelName
@@ -126,6 +127,17 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 		return "", nil, relaykittypes.NewError(doErr, relaykittypes.ErrorCodeDoRequestFailed, relaykittypes.ErrOptionWithSkipRetry())
 	}
 	httpResp, _ := respAny.(*http.Response)
+	if stream {
+		caption, usage, scanErr := consumeVisionStream(httpResp, live)
+		if scanErr != nil {
+			return "", usage, relaykittypes.NewError(scanErr, relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+		}
+		if strings.TrimSpace(caption) == "" {
+			return "", usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+		}
+		service.PostTextConsumeQuota(inner, child, usage, []string{"image_recognize"})
+		return caption, usage, nil
+	}
 	usageAny, respErr := adaptor.DoResponse(inner, httpResp, child)
 	if respErr != nil {
 		return "", nil, respErr
@@ -154,7 +166,7 @@ func channelAllowsModel(channel *model.Channel, name string) bool {
 	return false
 }
 
-func newImageRecognizeGinContext(parent *gin.Context) (*gin.Context, *httptest.ResponseRecorder) {
+func newImageRecognizeGinContext(parent *gin.Context, stream bool) (*gin.Context, *httptest.ResponseRecorder) {
 	rec := httptest.NewRecorder()
 	inner, _ := gin.CreateTestContext(rec)
 	if parent != nil && parent.Request != nil {
@@ -166,7 +178,11 @@ func newImageRecognizeGinContext(parent *gin.Context) (*gin.Context, *httptest.R
 		inner.Request.Header = make(http.Header)
 	}
 	inner.Request.Header.Set("Content-Type", "application/json")
-	inner.Request.Header.Set("Accept", "application/json")
+	if stream {
+		inner.Request.Header.Set("Accept", "text/event-stream")
+	} else {
+		inner.Request.Header.Set("Accept", "application/json")
+	}
 	if parent != nil {
 		copyGinKeysForImageRecognize(parent, inner)
 	}
@@ -221,7 +237,7 @@ func copyGinKeysForImageRecognize(parent, inner *gin.Context) {
 	}
 }
 
-func buildImageRecognizeRelayInfo(parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, modelName string) *relaycommon.RelayInfo {
+func buildImageRecognizeRelayInfo(parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, modelName string, stream bool) *relaycommon.RelayInfo {
 	info := &relaycommon.RelayInfo{
 		Request:             request,
 		UserId:              parent.UserId,
@@ -239,7 +255,7 @@ func buildImageRecognizeRelayInfo(parent *relaycommon.RelayInfo, request *dto.Ge
 		RelayMode:           relayconstant.RelayModeChatCompletions,
 		RelayFormat:         relaykittypes.RelayFormatOpenAI,
 		RequestURLPath:      "/v1/chat/completions",
-		IsStream:            false,
+		IsStream:            stream,
 		StartTime:           time.Now(),
 		ImageRecognizeInner: true,
 	}

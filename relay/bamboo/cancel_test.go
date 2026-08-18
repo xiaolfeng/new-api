@@ -66,7 +66,7 @@ func TestDoStreamRelay_SyncCancel(t *testing.T) {
 		},
 	}
 
-	usage, relayErr := doStreamRelay(c, info, client, entryCodec, bamboocodec.FormatOpenAI, req)
+	usage, relayErr := doStreamRelay(c, info, client, entryCodec, bamboocodec.FormatOpenAI, req, nil)
 	if relayErr != nil {
 		t.Fatalf("客户端取消不应返回错误，got=%v", relayErr)
 	}
@@ -97,7 +97,7 @@ func TestDoStreamRelay_StreamCancelEvent(t *testing.T) {
 		},
 	}
 
-	usage, relayErr := doStreamRelay(c, info, client, entryCodec, bamboocodec.FormatOpenAI, req)
+	usage, relayErr := doStreamRelay(c, info, client, entryCodec, bamboocodec.FormatOpenAI, req, nil)
 	if relayErr != nil {
 		t.Fatalf("流式取消不应返回错误，got=%v", relayErr)
 	}
@@ -125,7 +125,7 @@ func TestDoStreamRelay_NormalEndMarksDone(t *testing.T) {
 		},
 	}
 
-	usage, relayErr := doStreamRelay(c, info, client, entryCodec, bamboocodec.FormatOpenAI, req)
+	usage, relayErr := doStreamRelay(c, info, client, entryCodec, bamboocodec.FormatOpenAI, req, nil)
 	if relayErr != nil {
 		t.Fatalf("正常结束不应返回错误，got=%v", relayErr)
 	}

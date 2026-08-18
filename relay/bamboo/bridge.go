@@ -103,8 +103,26 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 
 	info.BambooRelayData = extractBambooRelayData(relayReq)
 
-	if recErr := imagerec.MaybeRewrite(c, info, relayReq, requestBody); recErr != nil {
+	var cs *clientStream
+	if relayReq.IsStream {
+		modelName := ""
+		if relayReq.Config != nil {
+			modelName = relayReq.Config.Model
+		}
+		cs = newClientStream(c, entryCodec, info, modelName)
+		cs.startPing = func() func() {
+			return startHostPing(c.Request.Context(), cs.writeSSE, entryCodec.NewSerializer(modelName))
+		}
+	}
+
+	if recErr := imagerec.MaybeRewrite(c, info, relayReq, requestBody, cs); recErr != nil {
+		if cs != nil && cs.HasHeaders() {
+			cs.emitError(recErr)
+		}
 		return nil, recErr
+	}
+	if cs != nil && cs.HasHeaders() {
+		cs.resumePing()
 	}
 
 	bambooSettings := model_setting.GetBambooSettings()
@@ -158,12 +176,12 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	// ③ 出口侧：按入口 codec 序列化响应
 	if info.HostToolPlan != nil && info.HostToolPlan.Enabled {
 		if relayReq.IsStream {
-			return doHostStreamRelay(c, info, client, entryCodec, codecFmt, relayReq)
+			return doHostStreamRelay(c, info, client, entryCodec, codecFmt, relayReq, cs)
 		}
 		return doHostCompleteRelay(c, info, client, entryCodec, codecFmt, relayReq)
 	}
 	if relayReq.IsStream {
-		return doStreamRelay(c, info, client, entryCodec, codecFmt, relayReq)
+		return doStreamRelay(c, info, client, entryCodec, codecFmt, relayReq, cs)
 	}
 	return doCompleteRelay(c, info, client, entryCodec, codecFmt, relayReq)
 }
@@ -197,7 +215,7 @@ func ensureStreamStatus(info *relaycommon.RelayInfo) *relaycommon.StreamStatus {
 // SDK v0.8.15 起移除 SmoothPacer 子系统，流式输出改为纯透传：
 // 序列化后的 SSE 帧直接写入 HTTP Response，不再做平滑缓冲。
 func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk.BambooClient,
-	entryCodec bamboocodec.Codec, outFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
+	entryCodec bamboocodec.Codec, outFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest, cs *clientStream) (*dto.Usage, *types.NewAPIError) {
 
 	ctx, cancel := context.WithCancel(c.Request.Context())
 	defer cancel()
@@ -216,28 +234,32 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonClientGone, err)
 			return nil, nil
 		}
+		if cs != nil && cs.HasHeaders() {
+			cs.emitError(err)
+		}
 		return nil, translateSDKError(err)
 	}
 
-	c.Writer.Header().Set("Content-Type", "text/event-stream")
-	c.Writer.Header().Set("Cache-Control", "no-cache")
-	c.Writer.Header().Set("X-Accel-Buffering", "no")
-	c.Writer.Flush()
+	if cs == nil {
+		modelName := ""
+		if req != nil && req.Config != nil {
+			modelName = req.Config.Model
+		}
+		cs = newClientStream(c, entryCodec, info, modelName)
+	}
+	if !cs.HasHeaders() {
+		cs.ensureHeaders()
+	}
+	if box := visibleBoxText(info); box != "" {
+		cs.emitClosedText(box)
+		if info.ImageRecognizePlan != nil {
+			info.ImageRecognizePlan.VisibleBox = ""
+		}
+	}
 
-	serializer := entryCodec.NewSerializer(req.Config.Model)
 	var usage dto.Usage
 
 	collector := newBambooTimingCollector()
-
-	var streamItems []string
-
-	writeSSE := func(data []byte) bool {
-		if _, werr := c.Writer.Write(data); werr != nil {
-			return false
-		}
-		c.Writer.Flush()
-		return true
-	}
 
 	// 流式内容块累加器：从 StreamEvent 直接累积 thinking / text / tool_use，
 	// 避免后续从格式化 SSE 字符串反向解析（可能丢失 thinking 块或被截断）。
@@ -251,7 +273,6 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	}
 	streamBlocks := make(map[int]*streamBlockAccum)
 	var orderedIndices []int
-	boxInjected := visibleBoxText(info) == ""
 
 	for event := range eventCh {
 		if event.Type == bamboosdk.EventError {
@@ -265,18 +286,13 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			cancelled := isClientCancel(c, cause)
 			if cancelled {
 				ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonClientGone, cause)
+				cs.finish()
 			} else {
 				ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonScannerErr, cause)
+				cs.emitError(cause)
 			}
-			tail, _ := serializer.Flush()
-			if len(tail) > 0 {
-				for _, frame := range bamboorelay.SplitSSEFrames(tail) {
-					streamItems = append(streamItems, string(frame))
-					writeSSE(frame)
-				}
-			}
-			if len(streamItems) > 0 {
-				info.ResponseBody = truncateResponseBody(strings.Join(streamItems, "\n"))
+			if frames := cs.Frames(); len(frames) > 0 {
+				info.ResponseBody = truncateResponseBody(strings.Join(frames, "\n"))
 			}
 			usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 			if cancelled {
@@ -332,32 +348,18 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			}
 		}
 
-		data, serr := serializer.Serialize(event)
-		if serr != nil {
-			return nil, translateCodecError(serr)
-		}
-
-		// TTFT：首个有效事件序列化成功后记录首次响应时间（幂等，仅首次生效）。
-		info.SetFirstResponseTime()
-
-		// 先提取 usage，再写 SSE — 即使客户端断开（writeSSE 返回 false）也能拿到 usage。
 		if event.Type == bamboosdk.EventMessageStart ||
 			event.Type == bamboosdk.EventMessageDelta ||
 			event.Type == bamboosdk.EventPing {
 			extractStreamUsage(&usage, &event)
 		}
 
-		// 过滤 nil 数据（EventContentBlockStop / EventMessageStop 等返回 nil）
-		// 并拆分合并帧（handleMessageDelta 的 marshalChunks 将 finish_reason + usage
-		// 合并为单个 []byte，需要 SplitSSEFrames 按 \n\n 边界拆分为独立 SSE 事件）
-		if data == nil {
-			continue
+		if !cs.forward(event) {
+			break
 		}
-		frames := bamboorelay.SplitSSEFrames(data)
-		for _, frame := range frames {
-			streamItems = append(streamItems, string(frame))
-
-			if info.BambooDebug != nil && len(info.BambooDebug.RelayResponse) < maxBambooDebugStreamLen {
+		if info.BambooDebug != nil && len(info.BambooDebug.RelayResponse) < maxBambooDebugStreamLen {
+			if frames := cs.Frames(); len(frames) > 0 {
+				frame := []byte(frames[len(frames)-1])
 				debugFrame := bamboorelay.FormatRelayResponseFrame("StreamRelay", outFmt, outFmt, frame)
 				if info.BambooDebug.RelayResponse == "" {
 					info.BambooDebug.RelayResponse = debugFrame
@@ -365,34 +367,12 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 					info.BambooDebug.RelayResponse += "\n" + debugFrame
 				}
 			}
-
-			if !writeSSE(frame) {
-				break
-			}
-		}
-		if !boxInjected && event.Type == bamboosdk.EventMessageStart {
-			if writeVisibleBoxFrames(serializer, visibleBoxText(info), func(frame []byte) bool {
-				streamItems = append(streamItems, string(frame))
-				return writeSSE(frame)
-			}) {
-				boxInjected = true
-			}
 		}
 	}
 
-	// flush 剩余缓冲（如 OpenAI codec 的 [DONE] 终止符）
-	tail, _ := serializer.Flush()
-	if len(tail) > 0 {
-		for _, frame := range bamboorelay.SplitSSEFrames(tail) {
-			streamItems = append(streamItems, string(frame))
-			if !writeSSE(frame) {
-				break
-			}
-		}
-	}
-
-	if len(streamItems) > 0 {
-		info.ResponseBody = truncateResponseBody(strings.Join(streamItems, "\n"))
+	cs.finish()
+	if frames := cs.Frames(); len(frames) > 0 {
+		info.ResponseBody = truncateResponseBody(strings.Join(frames, "\n"))
 	}
 
 	// 将累加的流式内容块转换为格式无关的中间表示，供日志记录消费。
@@ -461,7 +441,7 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	usage.UsageSemantic = "anthropic"
 
-	if !hasContent && usage.CompletionTokens == 0 {
+	if !hasContent && usage.CompletionTokens == 0 && cs.PrefixN() == 0 {
 		common.SetContextKey(c, constant.ContextKeyEmptyResponse, true)
 	}
 

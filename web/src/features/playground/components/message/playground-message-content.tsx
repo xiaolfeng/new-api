@@ -80,6 +80,7 @@ export function PlaygroundMessageContent({
     displayContent,
     recognitionContent,
     isRecognitionStreaming,
+    hostTools,
     hasReasoning,
     hasSources,
     isAssistant,
@@ -141,6 +142,24 @@ export function PlaygroundMessageContent({
           </ToolContent>
         </Tool>
       )}
+
+      {isAssistant &&
+        hostTools.map((tool, index) => (
+          <Tool defaultOpen key={`${tool.kind}-${index}`}>
+            <ToolHeader
+              title={tool.kind === 'fetch' ? t('Web fetch') : t('Web search')}
+              type={
+                tool.kind === 'fetch' ? 'tool-web_fetch' : 'tool-web_search'
+              }
+              state={
+                tool.isStreaming ? 'input-available' : 'output-available'
+              }
+            />
+            <ToolContent>
+              <ToolOutput output={tool.body} errorText={undefined} />
+            </ToolContent>
+          </Tool>
+        ))}
 
       {imageUrls.length > 0 && (
         <div className='mb-2 flex flex-wrap gap-2'>

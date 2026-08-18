@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { MESSAGE_ROLES, MESSAGE_STATUS } from '../../constants'
 import type { Message } from '../../types'
+import { splitHostToolContent, type HostToolSplitItem } from './host-tool-utils'
 import { splitImageRecognitionContent } from './image-recognize-utils'
 import { hasMessageImages } from './message-utils'
 import { parseThinkTags } from './message-reasoning-utils'
@@ -26,6 +27,7 @@ type MessageContentStateBase = {
   displayContent: string
   recognitionContent?: string
   isRecognitionStreaming: boolean
+  hostTools: HostToolSplitItem[]
   hasSources: boolean
   isAssistant: boolean
   showLoader: boolean
@@ -63,8 +65,10 @@ function shouldShowMessageContent(
   versionContent: string
 ): boolean {
   const hasVisibleText =
-    splitImageRecognitionContent(getRawDisplayContent(message, versionContent))
-      .rest.length > 0
+    splitHostToolContent(
+      splitImageRecognitionContent(getRawDisplayContent(message, versionContent))
+        .rest
+    ).rest.length > 0
   return (
     (message.from === MESSAGE_ROLES.USER || !message.isReasoningStreaming) &&
     (hasVisibleText || hasMessageImages(message))
@@ -84,8 +88,10 @@ function getRawDisplayContent(message: Message, versionContent: string): string 
 }
 
 function getDisplayContent(message: Message, versionContent: string): string {
-  return splitImageRecognitionContent(
-    getRawDisplayContent(message, versionContent)
+  return splitHostToolContent(
+    splitImageRecognitionContent(
+      getRawDisplayContent(message, versionContent)
+    ).rest
   ).rest
 }
 
@@ -102,14 +108,15 @@ export function getMessageContentState(
     versionContent
   )
   const showMessageContent = shouldShowMessageContent(message, versionContent)
-  const recognition = splitImageRecognitionContent(
-    getRawDisplayContent(message, versionContent)
-  )
+  const rawDisplay = getRawDisplayContent(message, versionContent)
+  const recognition = splitImageRecognitionContent(rawDisplay)
+  const hostTools = splitHostToolContent(recognition.rest)
 
   const baseState: MessageContentStateBase = {
     displayContent: getDisplayContent(message, versionContent),
     recognitionContent: recognition.recognition,
     isRecognitionStreaming: recognition.isStreaming,
+    hostTools: hostTools.tools,
     hasSources: sources.length > 0,
     isAssistant,
     showLoader,

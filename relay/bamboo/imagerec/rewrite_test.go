@@ -46,7 +46,7 @@ func TestMaybeRewrite_Disabled(t *testing.T) {
 	req := imageReq([]bamboosdk.BambooMessage{
 		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("hi"), pngBlock("aaa")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req, nil)
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
 	require.Nil(t, err)
 	require.NotNil(t, info.ImageRecognizePlan)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipDisabled, info.ImageRecognizePlan.SkippedReason)
@@ -59,7 +59,7 @@ func TestMaybeRewrite_InnerHopSkipped(t *testing.T) {
 	req := imageReq([]bamboosdk.BambooMessage{
 		bamboosdk.NewUserMessageBlocks(pngBlock("aaa")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req, nil)
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
 	require.Nil(t, err)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipInnerHop, info.ImageRecognizePlan.SkippedReason)
 }
@@ -74,7 +74,7 @@ func TestMaybeRewrite_LatestUserImageRecognizedAndHistoryStripped(t *testing.T) 
 
 	origHop := hopFunc
 	t.Cleanup(func() { hopFunc = origHop })
-	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
 		require.Equal(t, "vision-model", request.Model)
 		require.False(t, parent.ImageRecognizeInner)
 		return "[Image 1]\nA red cat", &dto.Usage{PromptTokens: 10, CompletionTokens: 4}, nil
@@ -86,7 +86,7 @@ func TestMaybeRewrite_LatestUserImageRecognizedAndHistoryStripped(t *testing.T) 
 		bamboosdk.NewAssistantMessage("previous answer"),
 		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("what is this"), pngBlock("newimg")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req, nil)
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
 	require.Nil(t, err)
 	require.NotNil(t, info.ImageRecognizePlan)
 	assert.True(t, info.ImageRecognizePlan.Enabled)
@@ -117,7 +117,7 @@ func TestMaybeRewrite_HistoryOnlyDoesNotHop(t *testing.T) {
 	called := false
 	origHop := hopFunc
 	t.Cleanup(func() { hopFunc = origHop })
-	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
 		called = true
 		return "should not run", nil, nil
 	}
@@ -128,7 +128,7 @@ func TestMaybeRewrite_HistoryOnlyDoesNotHop(t *testing.T) {
 		bamboosdk.NewAssistantMessage("<<<image_recognition>>>\nold\n<<<end_image_recognition>>>"),
 		bamboosdk.NewUserMessage("just text now"),
 	})
-	err := MaybeRewrite(testGinContext(), info, req, nil)
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
 	require.Nil(t, err)
 	assert.False(t, called)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipNoLatestUserImage, info.ImageRecognizePlan.SkippedReason)
@@ -149,7 +149,7 @@ func TestMaybeRewrite_NotConfigured(t *testing.T) {
 	req := imageReq([]bamboosdk.BambooMessage{
 		bamboosdk.NewUserMessageBlocks(pngBlock("newimg")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req, nil)
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
 	require.NotNil(t, err)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipNotConfigured, info.ImageRecognizePlan.SkippedReason)
 }
@@ -174,7 +174,7 @@ func TestBuildVisionRequestIsParserOnly(t *testing.T) {
 	var got *dto.GeneralOpenAIRequest
 	origHop := hopFunc
 	t.Cleanup(func() { hopFunc = origHop })
-	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
 		got = request
 		return "[Image 1]\nA sign", &dto.Usage{PromptTokens: 1, CompletionTokens: 1}, nil
 	}
@@ -183,7 +183,7 @@ func TestBuildVisionRequestIsParserOnly(t *testing.T) {
 	req := imageReq([]bamboosdk.BambooMessage{
 		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("这是什么？帮我写邮件"), pngBlock("img")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req, nil)
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
 	require.Nil(t, err)
 	require.NotNil(t, got)
 	require.GreaterOrEqual(t, len(got.Messages), 2)
@@ -229,7 +229,7 @@ func TestMaybeRewrite_TotalTokensTrailerDoesNotStripBeforeHop(t *testing.T) {
 	hopped := false
 	origHop := hopFunc
 	t.Cleanup(func() { hopFunc = origHop })
-	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
 		hopped = true
 		parts := request.Messages[1].ParseContent()
 		hasImage := false
@@ -247,7 +247,7 @@ func TestMaybeRewrite_TotalTokensTrailerDoesNotStripBeforeHop(t *testing.T) {
 		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("这是啥"), pngBlock("pasted")),
 		bamboosdk.NewUserMessage("<total_tokens>15000000 tokens left</total_tokens>"),
 	})
-	err := MaybeRewrite(testGinContext(), info, req, nil)
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
 	require.Nil(t, err)
 	require.True(t, hopped)
 	require.NotNil(t, info.ImageRecognizePlan)
@@ -276,7 +276,7 @@ func TestMaybeRewrite_TotalTokensTrailerDoesNotPromoteHistory(t *testing.T) {
 	called := false
 	origHop := hopFunc
 	t.Cleanup(func() { hopFunc = origHop })
-	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
 		called = true
 		return "should not run", nil, nil
 	}
@@ -288,7 +288,7 @@ func TestMaybeRewrite_TotalTokensTrailerDoesNotPromoteHistory(t *testing.T) {
 		bamboosdk.NewUserMessage("just text now"),
 		bamboosdk.NewUserMessage("<total_tokens>15000000 tokens left</total_tokens>"),
 	})
-	err := MaybeRewrite(testGinContext(), info, req, nil)
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
 	require.Nil(t, err)
 	assert.False(t, called)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipNoLatestUserImage, info.ImageRecognizePlan.SkippedReason)
@@ -302,7 +302,7 @@ func TestMaybeRewrite_LiftsToolResultImageThenRecognizes(t *testing.T) {
 	hopped := false
 	origHop := hopFunc
 	t.Cleanup(func() { hopFunc = origHop })
-	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
 		hopped = true
 		parts := request.Messages[1].ParseContent()
 		hasImage := false
@@ -329,7 +329,7 @@ func TestMaybeRewrite_LiftsToolResultImageThenRecognizes(t *testing.T) {
 		{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"abc123"}}]}]},
 		{"role":"user","content":"<total_tokens>14999596 tokens left</total_tokens>"}
 	]}`)
-	err := MaybeRewrite(testGinContext(), info, req, entry)
+	err := MaybeRewrite(testGinContext(), info, req, entry, nil)
 	require.Nil(t, err)
 	require.True(t, hopped)
 	require.NotNil(t, info.ImageRecognizePlan)

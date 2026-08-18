@@ -21,7 +21,14 @@ import (
 	"github.com/QuantumNous/new-api/setting/model_setting"
 )
 
-type HopFunc func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (caption string, usage *dto.Usage, err *kittypes.NewAPIError)
+// CaptionLive 把识图 token 推给父客户端。nil 表示不直播（非流父请求）。
+type CaptionLive interface {
+	Begin() bool
+	OnDelta(text string)
+	End()
+}
+
+type HopFunc func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (caption string, usage *dto.Usage, err *kittypes.NewAPIError)
 
 var hopFunc HopFunc
 
@@ -253,7 +260,7 @@ func truncateRunes(s string, max int) string {
 // MaybeRewrite inspects the parsed bamboo request and, when needed, runs
 // image recognition then strips every ImageBlock from the IR.
 // entryBytes 是入口协议原文，用来把 codec 丢掉的 tool_result 图片捞回 IR。
-func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest, entryBytes []byte) *kittypes.NewAPIError {
+func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest, entryBytes []byte, live CaptionLive) *kittypes.NewAPIError {
 	if info == nil || req == nil {
 		return nil
 	}
@@ -329,13 +336,19 @@ func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.
 		)
 	}
 
-	visionReq, err := buildVisionRequest(c, st, latestText, latestImages)
+	visionReq, err := buildVisionRequest(c, st, latestText, latestImages, live != nil)
 	if err != nil {
 		return kittypes.NewError(err, kittypes.ErrorCodeInvalidRequest, kittypes.ErrOptionWithSkipRetry())
 	}
 
+	if live != nil {
+		live.Begin()
+	}
 	started := time.Now()
-	rawCaption, usage, hopErr := hopFunc(c, info, visionReq)
+	rawCaption, usage, hopErr := hopFunc(c, info, visionReq, live)
+	if live != nil {
+		live.End()
+	}
 	duration := time.Since(started).Milliseconds()
 	if hopErr != nil {
 		info.ImageRecognizePlan = &relaycommon.ImageRecognizePlan{
@@ -368,8 +381,10 @@ func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.
 		ChannelId:  st.ImageRecognizeChannelId,
 		Model:      strings.TrimSpace(st.ImageRecognizeModel),
 		ImageCount: len(latestImages),
-		VisibleBox: BuildVisibleBox(captions),
 		DurationMs: duration,
+	}
+	if live == nil {
+		plan.VisibleBox = BuildVisibleBox(captions)
 	}
 	if usage != nil {
 		plan.PromptTokens = usage.PromptTokens
@@ -429,7 +444,7 @@ func splitCaptions(raw string, n, maxRunes int) []string {
 	return out
 }
 
-func buildVisionRequest(c *gin.Context, st *model_setting.BambooSettings, userText string, images []extractedImage) (*dto.GeneralOpenAIRequest, error) {
+func buildVisionRequest(c *gin.Context, st *model_setting.BambooSettings, userText string, images []extractedImage, stream bool) (*dto.GeneralOpenAIRequest, error) {
 	parts := make([]dto.MediaContent, 0, len(images)+2)
 	if strings.TrimSpace(userText) != "" {
 		parts = append(parts, dto.MediaContent{
@@ -467,7 +482,7 @@ func buildVisionRequest(c *gin.Context, st *model_setting.BambooSettings, userTe
 	return &dto.GeneralOpenAIRequest{
 		Model:    modelName,
 		Messages: messages,
-		Stream:   commonBoolPtr(false),
+		Stream:   commonBoolPtr(stream),
 	}, nil
 }
 

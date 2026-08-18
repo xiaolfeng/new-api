@@ -5307,6 +5307,7 @@
     "We could not load the setup status.": "セットアップステータスを読み込めませんでした。",
     "We will prompt your device to confirm using biometrics or your hardware key.": "生体認証またはハードウェアキーを使用して確認するよう、デバイスにプロンプトが表示されます。",
     "We'll be back online shortly.": "まもなくオンラインに戻ります。",
+    "Web fetch": "Web取得",
     "Web search": "ウェブ検索",
     "Web Search": "Web 検索",
     "WebFetch": "Web取得",
