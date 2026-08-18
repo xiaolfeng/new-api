@@ -54,6 +54,46 @@ data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta"
 	assert.Equal(t, raw, got)
 }
 
+func TestNormalizeClaudeKeepsQueryDeltaAfterEmptyObjectStart(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		ClientProfile: common.ClientProfileClaudeCode,
+		RelayFormat:   types.RelayFormatClaude,
+		RequestId:     "req-websearch",
+	}
+	require.NotEmpty(t, NormalizeClaudeSSEFrame(info, []byte(`event: message_start
+data: {"type":"message_start","message":{"id":"msg_1","type":"message","role":"assistant","content":[]}}
+
+`)))
+	require.NotEmpty(t, NormalizeClaudeSSEFrame(info, []byte(`event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"WebSearch","input":{}}}
+
+`)))
+	delta := []byte(`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"筱锋\"}"}}
+
+`)
+	got := NormalizeClaudeSSEFrame(info, delta)
+	require.Equal(t, delta, got)
+	assert.Contains(t, string(got), `筱锋`)
+}
+
+func TestNormalizeClaudeDropsDeltaAfterNonEmptyObjectStart(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		ClientProfile: common.ClientProfileClaudeCode,
+		RelayFormat:   types.RelayFormatClaude,
+		RequestId:     "req-oneshot",
+	}
+	require.NotEmpty(t, NormalizeClaudeSSEFrame(info, []byte(`event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"tool_use","id":"toolu_1","name":"WebSearch","input":{"query":"already"}}}
+
+`)))
+	delta := []byte(`event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"input_json_delta","partial_json":"{\"query\":\"later\"}"}}
+
+`)
+	assert.Nil(t, NormalizeClaudeSSEFrame(info, delta))
+}
+
 func TestNormalizeClaudeKeepsHelperStreamingShape(t *testing.T) {
 	info := &relaycommon.RelayInfo{
 		ClientProfile: common.ClientProfileClaudeCode,

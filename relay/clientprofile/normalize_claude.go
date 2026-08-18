@@ -116,10 +116,7 @@ func keepClaudeEvent(info *relaycommon.RelayInfo, payload map[string]any) bool {
 		if block != nil {
 			btype, _ = block["type"].(string)
 			if input, exists := block["input"]; exists {
-				switch input.(type) {
-				case map[string]any, []any:
-					inputIsObject = true
-				}
+				inputIsObject = isNonEmptyJSONValue(input)
 			}
 		}
 		gate.Blocks[idx] = relaycommon.ClaudeStreamBlock{Type: btype, InputIsObject: inputIsObject}
@@ -178,6 +175,20 @@ func keepClaudeEvent(info *relaycommon.RelayInfo, payload map[string]any) bool {
 		return true
 	default:
 		return true
+	}
+}
+
+// isNonEmptyJSONValue 判断 start.input 是否已经是「一次给齐」的非空 object/array。
+// 官方流式 start 几乎总是 input:{}，软件会改成空串再拼 input_json_delta。
+// 空 {} / [] 必须当流式前奏，不能丢掉后面的 query / questions。
+func isNonEmptyJSONValue(v any) bool {
+	switch typed := v.(type) {
+	case map[string]any:
+		return len(typed) > 0
+	case []any:
+		return len(typed) > 0
+	default:
+		return false
 	}
 }
 
