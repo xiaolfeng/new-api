@@ -130,6 +130,9 @@ func walkResponsesObject(node map[string]any, st *responsesWalkState) {
 	if typ, _ := node["type"].(string); typ == "function_call" {
 		fillFunctionCall(node, st)
 	}
+	if typ, _ := node["type"].(string); typ == "message" {
+		fillMessageContent(node, st)
+	}
 	savedEvent := st.eventType
 	for _, child := range node {
 		walkResponsesValue(child, st)
@@ -241,6 +244,18 @@ func shouldBackfillCreatedAt(node map[string]any) bool {
 	_, hasModel := node["model"].(string)
 	_, hasOutput := node["output"]
 	return hasID && hasModel && hasOutput
+}
+
+// fillMessageContent 给 Grok 补齐 message 项的 content。
+// bamboo Responses 在 output_item.added 里只发 type/id/role/status，
+// omitempty 会丢掉空 content；Grok 把 content 当必填，thinking 结束后
+// 第一帧正文就会报 missing field content。
+func fillMessageContent(node map[string]any, st *responsesWalkState) {
+	if v, ok := node["content"]; ok && v != nil {
+		return
+	}
+	node["content"] = []any{}
+	st.mutated = true
 }
 
 func fillFunctionCall(node map[string]any, st *responsesWalkState) {

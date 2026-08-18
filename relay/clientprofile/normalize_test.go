@@ -125,6 +125,43 @@ func TestNormalizeResponseCreatedEventRootGetsCreated(t *testing.T) {
 	assert.False(t, itemCreated)
 }
 
+func TestNormalizeMessageItemGetsEmptyContent(t *testing.T) {
+	info := grokResponsesInfo()
+	frame := []byte("event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"output_index\":1,\"item\":{\"type\":\"message\",\"id\":\"msg_1\",\"role\":\"assistant\",\"status\":\"in_progress\"}}\n\n")
+	framed := NormalizeResponsesSSEFrame(info, frame)
+	assert.Contains(t, string(framed), `"content":[]`)
+
+	info = grokResponsesInfo()
+	raw := []byte(`{"type":"response.output_item.added","output_index":1,"item":{"type":"message","id":"msg_1","role":"assistant","status":"in_progress"}}`)
+	out := NormalizeResponsesSSEData(info, raw)
+	var root map[string]any
+	require.NoError(t, common.Unmarshal(out, &root))
+	item := root["item"].(map[string]any)
+	content, ok := item["content"].([]any)
+	require.True(t, ok)
+	assert.Empty(t, content)
+	_, hasCreated := item["created"]
+	assert.False(t, hasCreated)
+
+	info = grokResponsesInfo()
+	raw = []byte(`{"type":"response.output_item.added","output_index":1,"item":{"type":"message","id":"msg_1","role":"assistant","status":"in_progress","content":[{"type":"output_text","text":"hi"}]}}`)
+	out = NormalizeResponsesSSEData(info, raw)
+	require.NoError(t, common.Unmarshal(out, &root))
+	item = root["item"].(map[string]any)
+	content = item["content"].([]any)
+	require.Len(t, content, 1)
+
+	codex := &relaycommon.RelayInfo{
+		ClientProfile: common.ClientProfileCodex,
+		RelayFormat:   types.RelayFormatOpenAIResponses,
+		RequestId:     "req1",
+	}
+	raw = []byte(`{"type":"response.output_item.added","item":{"type":"message","id":"msg_1","role":"assistant","status":"in_progress"}}`)
+	got := NormalizeResponsesSSEData(codex, raw)
+	assert.Equal(t, raw, got)
+	assert.NotContains(t, string(got), `"content"`)
+}
+
 func TestNormalizeOutputItemEventDoesNotGetCreated(t *testing.T) {
 	info := grokResponsesInfo()
 	raw := []byte(`{"type":"response.output_item.added","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"in_progress","action":{"type":"search","query":"q"}}}`)
