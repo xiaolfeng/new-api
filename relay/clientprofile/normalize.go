@@ -124,7 +124,7 @@ func walkResponsesObject(node map[string]any, st *responsesWalkState) {
 	if typ, _ := node["type"].(string); typ != "" && strings.HasPrefix(typ, "response.") {
 		st.eventType = typ
 	}
-	if obj, _ := node["object"].(string); obj == "response" {
+	if shouldFillCreated(node) {
 		fillResponseEnvelope(node, st)
 	}
 	if typ, _ := node["type"].(string); typ == "function_call" {
@@ -137,6 +137,53 @@ func walkResponsesObject(node map[string]any, st *responsesWalkState) {
 	}
 }
 
+func isResponsesEnvelopeEvent(typ string) bool {
+	switch typ {
+	case "response.created", "response.in_progress", "response.completed",
+		"response.failed", "response.incomplete":
+		return true
+	default:
+		return false
+	}
+}
+
+func isResponsesOutputItemType(typ string) bool {
+	switch typ {
+	case "function_call", "web_search_call", "file_search_call", "reasoning",
+		"message", "image_generation_call", "computer_call", "mcp_call",
+		"custom_tool_call", "item_reference", "web_search_result":
+		return true
+	default:
+		return false
+	}
+}
+
+// shouldFillCreated 仅 Grok-strict walker 使用。
+// 官方字段是 created_at；Grok 会把第一段 JSON 当成必须带 created 的信封。
+// 流式第一帧通常是 response.created 事件根，没有 object=response。
+func shouldFillCreated(node map[string]any) bool {
+	typ, _ := node["type"].(string)
+	if isResponsesOutputItemType(typ) {
+		return false
+	}
+	if strings.HasPrefix(typ, "response.") && !isResponsesEnvelopeEvent(typ) {
+		return false
+	}
+	if obj, _ := node["object"].(string); obj == "response" {
+		return true
+	}
+	if isResponsesEnvelopeEvent(typ) {
+		return true
+	}
+	if _, ok := node["created_at"]; ok {
+		return true
+	}
+	_, hasID := node["id"].(string)
+	_, hasModel := node["model"].(string)
+	_, hasOutput := node["output"]
+	return hasID && hasModel && hasOutput
+}
+
 func fillResponseEnvelope(node map[string]any, st *responsesWalkState) {
 	ts := egressTimestamp(st.info)
 	_, hasCreated := node["created"]
@@ -147,6 +194,8 @@ func fillResponseEnvelope(node map[string]any, st *responsesWalkState) {
 	if createdNil {
 		if !createdAtNil {
 			node["created"] = node["created_at"]
+		} else if nested := createdFromNestedResponse(node); nested != nil {
+			node["created"] = nested
 		} else {
 			node["created"] = ts
 		}
@@ -156,7 +205,8 @@ func fillResponseEnvelope(node map[string]any, st *responsesWalkState) {
 			logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s grok-strict filled created", st.info.RequestId))
 		}
 	}
-	if createdAtNil {
+	// 只给真正的 response 信封回填 created_at。事件根只要 created，避免多一个未知字段。
+	if createdAtNil && shouldBackfillCreatedAt(node) {
 		if v, ok := node["created"]; ok && v != nil {
 			node["created_at"] = v
 		} else {
@@ -164,6 +214,33 @@ func fillResponseEnvelope(node map[string]any, st *responsesWalkState) {
 		}
 		st.mutated = true
 	}
+}
+
+func createdFromNestedResponse(node map[string]any) any {
+	resp, _ := node["response"].(map[string]any)
+	if resp == nil {
+		return nil
+	}
+	if v, ok := resp["created"]; ok && v != nil {
+		return v
+	}
+	if v, ok := resp["created_at"]; ok && v != nil {
+		return v
+	}
+	return nil
+}
+
+func shouldBackfillCreatedAt(node map[string]any) bool {
+	if obj, _ := node["object"].(string); obj == "response" {
+		return true
+	}
+	if _, ok := node["created_at"]; ok {
+		return true
+	}
+	_, hasID := node["id"].(string)
+	_, hasModel := node["model"].(string)
+	_, hasOutput := node["output"]
+	return hasID && hasModel && hasOutput
 }
 
 func fillFunctionCall(node map[string]any, st *responsesWalkState) {
@@ -287,6 +364,11 @@ func responsesLooksIncomplete(node map[string]any, parentEvent string) bool {
 }
 
 func looksIncompleteEnvelope(node map[string]any) bool {
+	typ, _ := node["type"].(string)
+	if isResponsesEnvelopeEvent(typ) {
+		_, hasCreated := node["created"]
+		return !hasCreated || node["created"] == nil
+	}
 	obj, _ := node["object"].(string)
 	if obj != "response" {
 		return false

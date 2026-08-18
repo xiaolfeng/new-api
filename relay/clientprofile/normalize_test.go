@@ -109,6 +109,35 @@ func TestNormalizeAlreadyLegalGrokDoesNotRemarshal(t *testing.T) {
 	assert.Equal(t, raw, got)
 }
 
+func TestNormalizeResponseCreatedEventRootGetsCreated(t *testing.T) {
+	info := grokResponsesInfo()
+	raw := []byte(`{"type":"response.created","sequence_number":1,"response_id":"resp_1","response":{"id":"resp_1","object":"response","created_at":1700000000,"status":"in_progress","model":"grok-4.6","output":[],"usage":{"input_tokens":0,"output_tokens":0,"total_tokens":0}}}`)
+	out := NormalizeResponsesSSEData(info, raw)
+	var root map[string]any
+	require.NoError(t, common.Unmarshal(out, &root))
+	assert.Contains(t, root, "created")
+	_, rootCreatedAt := root["created_at"]
+	assert.False(t, rootCreatedAt)
+	resp := root["response"].(map[string]any)
+	assert.Contains(t, resp, "created")
+	assert.Contains(t, resp, "created_at")
+	_, itemCreated := root["item"]
+	assert.False(t, itemCreated)
+}
+
+func TestNormalizeOutputItemEventDoesNotGetCreated(t *testing.T) {
+	info := grokResponsesInfo()
+	raw := []byte(`{"type":"response.output_item.added","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"in_progress","action":{"type":"search","query":"q"}}}`)
+	out := NormalizeResponsesSSEData(info, raw)
+	var root map[string]any
+	require.NoError(t, common.Unmarshal(out, &root))
+	_, hasCreated := root["created"]
+	assert.False(t, hasCreated)
+	item := root["item"].(map[string]any)
+	_, itemCreated := item["created"]
+	assert.False(t, itemCreated)
+}
+
 func TestNormalizeWebSearchCallDoesNotGainArguments(t *testing.T) {
 	info := grokResponsesInfo()
 	raw := []byte(`{"object":"response","created_at":9,"output":[{"type":"web_search_call","id":"ws_1","status":"completed","action":{"type":"search","query":"q"}}]}`)
@@ -164,6 +193,16 @@ func TestNormalizeBuiltinStreamFramesHelper3(t *testing.T) {
 		if bytes.Contains(frame, []byte("response.created")) || bytes.Contains(frame, []byte("response.completed")) {
 			assert.Contains(t, string(out), `"created":`)
 			assert.Contains(t, string(out), `"created_at":`)
+			var ev map[string]any
+			for _, line := range bytes.Split(out, []byte("\n")) {
+				trim := bytes.TrimSpace(line)
+				if bytes.HasPrefix(trim, []byte("data:")) {
+					require.NoError(t, common.Unmarshal(bytes.TrimSpace(trim[5:]), &ev))
+					break
+				}
+			}
+			require.NotEmpty(t, ev)
+			assert.Contains(t, ev, "created")
 		}
 	}
 	assert.Contains(t, joined.String(), `"type":"web_search_call"`)
