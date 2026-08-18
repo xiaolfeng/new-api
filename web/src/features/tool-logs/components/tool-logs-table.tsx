@@ -93,6 +93,7 @@ export function ToolLogsTable() {
           username: isAdmin ? searchParams.username : undefined,
           channel: isAdmin ? searchParams.channel : undefined,
           request_id: searchParams.requestId,
+          group: searchParams.group,
           q: searchParams.q,
         },
         isAdmin
@@ -114,6 +115,12 @@ export function ToolLogsTable() {
     columns: columns as ColumnDef<Record<string, unknown>>[],
     columnFilters,
     columnVisibilityStorageKey: `tool-logs:${isAdmin ? 'admin' : 'user'}:column-visibility`,
+    initialColumnVisibility: {
+      backend: false,
+      mode: false,
+      canonical: false,
+      ip: false,
+    },
     pagination,
     enableRowSelection: false,
     onPaginationChange,

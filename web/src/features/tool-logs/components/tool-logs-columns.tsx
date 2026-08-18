@@ -17,18 +17,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
-import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ModelBadge } from '@/features/usage-logs/components/model-badge'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatTimestampToDate } from '@/lib/format'
-import { cn } from '@/lib/utils'
 
 import type { ToolLog } from '../types'
-import { formatDurationMs, toolTarget } from '../lib/utils'
-import { ToolResultDialog } from './tool-result-dialog'
+import { formatDurationMs } from '../lib/utils'
+import {
+  ToolIdentityCell,
+  ToolRequestIdCell,
+  ToolResultCell,
+  ToolStatusStack,
+  ToolTargetCell,
+  ToolTokenCell,
+} from './tool-log-cells'
 import { useToolLogsContext } from './tool-logs-provider'
 
 export function useToolLogsColumns(isAdmin: boolean): ColumnDef<ToolLog>[] {
@@ -39,24 +45,17 @@ export function useToolLogsColumns(isAdmin: boolean): ColumnDef<ToolLog>[] {
       header: t('Time'),
       cell: ({ row }) => {
         const log = row.original
-        const ok = !log.error_code
         return (
           <div className='flex min-w-0 flex-col gap-0.5'>
             <span className='truncate font-mono text-xs tabular-nums'>
               {formatTimestampToDate(log.created_at)}
             </span>
-            <StatusBadge
-              label={ok ? t('Success') : log.error_code}
-              variant={ok ? 'green' : 'red'}
-              size='sm'
-              copyable={false}
-              className='-ml-1.5 !text-xs [&_span]:!text-xs'
-            />
+            <ToolStatusStack log={log} />
           </div>
         )
       },
       enableHiding: false,
-      size: 170,
+      size: 180,
     },
   ]
 
@@ -70,9 +69,12 @@ export function useToolLogsColumns(isAdmin: boolean): ColumnDef<ToolLog>[] {
           if (!log.channel) {
             return <span className='text-muted-foreground text-xs'>-</span>
           }
+          const label = log.channel_name
+            ? `${log.channel_name} #${log.channel}`
+            : `#${log.channel}`
           return (
             <StatusBadge
-              label={`#${log.channel}`}
+              label={label}
               autoColor={String(log.channel)}
               copyText={String(log.channel)}
               size='sm'
@@ -81,7 +83,7 @@ export function useToolLogsColumns(isAdmin: boolean): ColumnDef<ToolLog>[] {
             />
           )
         },
-        size: 90,
+        size: 140,
       },
       {
         id: 'user',
@@ -123,68 +125,31 @@ export function useToolLogsColumns(isAdmin: boolean): ColumnDef<ToolLog>[] {
     {
       accessorKey: 'token_name',
       header: t('Token'),
-      cell: ({ row }) => (
-        <span className='truncate text-xs'>{row.original.token_name || '-'}</span>
-      ),
-      size: 110,
+      cell: ({ row }) => <ToolTokenCell log={row.original} />,
+      size: 130,
     },
     {
       accessorKey: 'model_name',
       header: t('Model'),
-      cell: ({ row }) => (
-        <span className='truncate font-mono text-xs'>
-          {row.original.model_name || '-'}
-        </span>
-      ),
-      size: 150,
+      cell: ({ row }) =>
+        row.original.model_name ? (
+          <ModelBadge modelName={row.original.model_name} />
+        ) : (
+          <span className='text-muted-foreground text-xs'>-</span>
+        ),
+      size: 160,
     },
     {
       id: 'tool',
       header: t('Tool'),
-      cell: ({ row }) => {
-        const log = row.original
-        const isFetch = log.kind === 'fetch'
-        return (
-          <div className='flex min-w-0 flex-col gap-0.5'>
-            <StatusBadge
-              label={isFetch ? t('Fetch') : t('Search')}
-              variant={isFetch ? 'orange' : 'blue'}
-              size='sm'
-              copyable={false}
-            />
-            <span className='text-muted-foreground truncate font-mono text-[11px]'>
-              {log.original_name || log.canonical || '-'}
-            </span>
-          </div>
-        )
-      },
-      size: 120,
+      cell: ({ row }) => <ToolIdentityCell log={row.original} />,
+      size: 130,
     },
     {
       id: 'target',
       header: t('Query'),
-      cell: ({ row }) => {
-        const target = toolTarget(row.original.query, row.original.url)
-        if (!target) {
-          return <span className='text-muted-foreground text-xs'>-</span>
-        }
-        return (
-          <span className='line-clamp-2 text-xs break-all' title={target}>
-            {target}
-          </span>
-        )
-      },
+      cell: ({ row }) => <ToolTargetCell log={row.original} />,
       size: 220,
-    },
-    {
-      accessorKey: 'backend',
-      header: t('Backend'),
-      cell: ({ row }) => (
-        <span className='text-muted-foreground font-mono text-xs'>
-          {row.original.backend || '-'}
-        </span>
-      ),
-      size: 90,
     },
     {
       accessorKey: 'duration_ms',
@@ -197,35 +162,58 @@ export function useToolLogsColumns(isAdmin: boolean): ColumnDef<ToolLog>[] {
       size: 80,
     },
     {
+      accessorKey: 'request_id',
+      header: t('Request ID'),
+      cell: ({ row }) => <ToolRequestIdCell log={row.original} />,
+      size: 150,
+    },
+    {
       id: 'details',
       header: t('Details'),
-      cell: function DetailsCell({ row }) {
-        const [open, setOpen] = useState(false)
-        const log = row.original
-        const preview = log.result?.trim()
-        return (
-          <>
-            <button
-              type='button'
-              className={cn(
-                'max-w-[180px] truncate text-left text-xs hover:underline',
-                preview
-                  ? 'text-foreground'
-                  : 'text-muted-foreground/50 cursor-default hover:no-underline'
-              )}
-              onClick={() => preview && setOpen(true)}
-            >
-              {preview || '—'}
-            </button>
-            <ToolResultDialog
-              result={log.result || ''}
-              open={open}
-              onOpenChange={setOpen}
-            />
-          </>
-        )
-      },
+      cell: ({ row }) => (
+        <ToolResultCell log={row.original} isAdmin={isAdmin} />
+      ),
       size: 180,
+    },
+    {
+      accessorKey: 'backend',
+      header: t('Backend'),
+      cell: ({ row }) => (
+        <span className='text-muted-foreground font-mono text-xs'>
+          {row.original.backend || '-'}
+        </span>
+      ),
+      size: 90,
+    },
+    {
+      accessorKey: 'mode',
+      header: t('Mode'),
+      cell: ({ row }) => (
+        <span className='text-muted-foreground font-mono text-xs'>
+          {row.original.mode || '-'}
+        </span>
+      ),
+      size: 80,
+    },
+    {
+      accessorKey: 'canonical',
+      header: t('Canonical'),
+      cell: ({ row }) => (
+        <span className='text-muted-foreground font-mono text-xs'>
+          {row.original.canonical || '-'}
+        </span>
+      ),
+      size: 140,
+    },
+    {
+      accessorKey: 'ip',
+      header: t('IP'),
+      cell: ({ row }) => (
+        <span className='text-muted-foreground font-mono text-xs'>
+          {row.original.ip || '-'}
+        </span>
+      ),
+      size: 110,
     }
   )
 

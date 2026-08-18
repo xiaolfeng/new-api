@@ -1,5 +1,38 @@
 export type InteractionType = "input" | "output" | "callback";
 
+export function resolveInteractionTypeFromLog(log: {
+  other: unknown
+  content: string
+}): InteractionType | undefined {
+  const other =
+    log.other && typeof log.other === "object" && !Array.isArray(log.other)
+      ? (log.other as { interaction_type?: unknown })
+      : null
+  const fromOther = normalizeInteractionType(other?.interaction_type)
+  if (fromOther) return fromOther
+
+  if (typeof log.other === "string" && log.other.trim() !== "") {
+    try {
+      const parsed = JSON.parse(log.other) as { interaction_type?: unknown }
+      const fromParsed = normalizeInteractionType(parsed?.interaction_type)
+      if (fromParsed) return fromParsed
+    } catch {
+      // Content-based inference below still applies.
+    }
+  }
+
+  return parseInteractionType(log.content) || undefined
+}
+
+export function normalizeInteractionType(
+  value: unknown,
+): InteractionType | undefined {
+  if (value === "input" || value === "输入") return "input";
+  if (value === "output" || value === "输出") return "output";
+  if (value === "callback" || value === "回调") return "callback";
+  return undefined;
+}
+
 export interface FlattenedItem {
   type: string;
   role?: string;

@@ -113,6 +113,26 @@ export interface ToolSurchargeItem {
   price: number
 }
 
+export interface HostToolExecInfo {
+  original_name?: string
+  canonical?: string
+  backend?: string
+  duration_ms?: number
+  error_code?: string
+  truncated?: boolean
+}
+
+export interface HostToolsAdminInfo {
+  mode?: string
+  enabled?: boolean
+  executed?: boolean
+  injected?: string[]
+  stripped?: string[]
+  stopped_reason?: string
+  execs?: HostToolExecInfo[]
+  builtin_responses?: boolean
+}
+
 export interface LogOtherData {
   admin_info?: {
     is_multi_key?: boolean
@@ -142,6 +162,7 @@ export interface LogOtherData {
       original: number
       clamped: number
     }
+    host_tools?: HostToolsAdminInfo
   }
   // Language-independent operation descriptor (audit/login logs).
   // Frontend renders localized content from action + params via i18n templates.

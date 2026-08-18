@@ -52,6 +52,7 @@ export interface ToolLogFilters {
   username?: string
   channel?: string
   requestId?: string
+  group?: string
   q?: string
 }
 

@@ -1,6 +1,50 @@
 import { describe, it, expect } from "vitest";
 
-import { parseInteractionType } from "./interaction-parser";
+import {
+  normalizeInteractionType,
+  parseInteractionType,
+  resolveInteractionTypeFromLog,
+} from "./interaction-parser";
+
+describe("resolveInteractionTypeFromLog", () => {
+  it("prefers precomputed other.interaction_type", () => {
+    expect(
+      resolveInteractionTypeFromLog({
+        other: JSON.stringify({ interaction_type: "callback" }),
+        content: "",
+      }),
+    ).toBe("callback");
+  });
+
+  it("falls back to content parsing", () => {
+    expect(
+      resolveInteractionTypeFromLog({
+        other: "",
+        content: JSON.stringify({
+          claudeRequestBlocks: [{ type: "text", text: "Hello" }],
+          claudeToolResponses: [],
+          claudeResponseBlocks: [],
+        }),
+      }),
+    ).toBe("input");
+  });
+});
+
+describe("normalizeInteractionType", () => {
+  it("accepts english and chinese precomputed values", () => {
+    expect(normalizeInteractionType("input")).toBe("input");
+    expect(normalizeInteractionType("输入")).toBe("input");
+    expect(normalizeInteractionType("output")).toBe("output");
+    expect(normalizeInteractionType("输出")).toBe("output");
+    expect(normalizeInteractionType("callback")).toBe("callback");
+    expect(normalizeInteractionType("回调")).toBe("callback");
+  });
+
+  it("ignores unknown values", () => {
+    expect(normalizeInteractionType("other")).toBeUndefined();
+    expect(normalizeInteractionType(null)).toBeUndefined();
+  });
+});
 
 describe("parseInteractionType", () => {
   it("returns null for null input", () => {

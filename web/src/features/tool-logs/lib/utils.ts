@@ -34,8 +34,48 @@ export function formatDurationMs(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`
 }
 
-export function toolTarget(query: string, url: string): string {
+export function toolTarget(
+  query: string,
+  url: string,
+  kind?: string
+): string {
   const q = query.trim()
+  const u = url.trim()
+  if (kind === 'fetch') return u || q
+  if (kind === 'search') return q || u
   if (q) return q
-  return url.trim()
+  return u
+}
+
+export function previewToolResult(result: string, maxLength = 80): string {
+  const text = result.trim().replaceAll(/\s+/g, ' ')
+  if (text === '') return ''
+  if (text.length <= maxLength) return text
+  return `${text.slice(0, maxLength)}…`
+}
+
+export function prettyToolResult(result: string): string {
+  const trimmed = result.trim()
+  if (trimmed === '') return ''
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2)
+  } catch {
+    return result
+  }
+}
+
+export function usageLogsSearchForRequest(params: {
+  requestId: string
+  startTime?: number
+  endTime?: number
+}): {
+  requestId: string
+  startTime?: number
+  endTime?: number
+} {
+  return {
+    requestId: params.requestId,
+    startTime: params.startTime,
+    endTime: params.endTime,
+  }
 }

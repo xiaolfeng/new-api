@@ -41,9 +41,6 @@ describe('log cost display', () => {
       Subscription: 'Subscription',
       'Deducted by subscription': 'Deducted by subscription',
       'Includes tool-call surcharge': 'Includes tool-call surcharge',
-      'Web Search': 'Web Search',
-      WebFetch: 'WebFetch',
-      'Image recognition': 'Image recognition',
     })
   })
 
@@ -82,11 +79,11 @@ describe('log cost display', () => {
     expect(
       screen.getByRole('img', { name: 'Includes tool-call surcharge' })
     ).toHaveAttribute('data-tool-surcharge-indicator', 'true')
-    expect(screen.getByText('Web Search')).toBeInTheDocument()
+    expect(screen.queryByText('Web Search')).not.toBeInTheDocument()
   })
 
-  test('adds named tags for WebFetch and image recognition next to cost', () => {
-    renderCost({
+  test('does not put activity tags next to the cost', () => {
+    const rendered = renderCost({
       quota: 800,
       other: {
         usage_tags: ['web_fetch', 'image_recognize'],
@@ -97,14 +94,15 @@ describe('log cost display', () => {
       },
     })
 
-    expect(
-      screen.getByText('WebFetch').closest('[data-usage-activity-tag]')
-    ).toHaveAttribute('data-usage-activity-tag', 'web_fetch')
-    expect(
-      screen.getByText('Image recognition').closest('[data-usage-activity-tag]')
-    ).toHaveAttribute('data-usage-activity-tag', 'image_recognize')
+    expect(screen.queryByText('WebFetch')).not.toBeInTheDocument()
+    expect(screen.queryByText('Image recognition')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('img', { name: 'Includes tool-call surcharge' })
     ).not.toBeInTheDocument()
+    expect(
+      normalizedText(rendered.container.textContent).includes(
+        normalizedText(formatLogQuota(800))
+      )
+    ).toBe(true)
   })
 })

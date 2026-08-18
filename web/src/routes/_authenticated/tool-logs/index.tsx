@@ -33,6 +33,7 @@ const toolLogsSearchSchema = z.object({
   username: z.string().optional().catch(''),
   channel: z.string().optional().catch(''),
   requestId: z.string().optional().catch(''),
+  group: z.string().optional().catch(''),
   q: z.string().optional().catch(''),
 })
 

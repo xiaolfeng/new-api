@@ -25,7 +25,7 @@ import {
 } from '@/features/pricing/lib/billing-expr'
 
 import type { UsageLog } from '../data/schema'
-import type { LogOtherData } from '../types'
+import type { HostToolExecInfo, LogOtherData } from '../types'
 
 export { normalizeTierLabel }
 
@@ -163,11 +163,26 @@ export interface UsageActivityTag {
   labelKey: string
 }
 
+export const HOST_TOOL_CANONICAL_SEARCH = 'host.web_search'
+export const HOST_TOOL_CANONICAL_FETCH = 'host.web_fetch'
+
 const usageActivityTagOrder: UsageActivityTag[] = [
   { id: 'web_search', labelKey: 'Web Search' },
   { id: 'web_fetch', labelKey: 'WebFetch' },
   { id: 'image_recognize', labelKey: 'Image recognition' },
 ]
+
+export type UsageActivityTagKind = 'host_tool' | 'image_recognize'
+
+export interface UsageActivityTagDetails {
+  tag: UsageActivityTag
+  kind: UsageActivityTagKind
+  count: number
+  names: string[]
+  canonicals: string[]
+  backends: string[]
+  durationMs: number[]
+}
 
 function surchargeNameLooksLike(
   name: string,
@@ -177,7 +192,7 @@ function surchargeNameLooksLike(
 }
 
 /**
- * Named activity chips shown next to the cost. These are not surcharge
+ * Named activity chips shown in the interaction list. These are not surcharge
  * markers: WebFetch is usually $0, and image recognition bills on its own hop.
  */
 export function collectUsageActivityTags(
@@ -226,6 +241,128 @@ export function collectUsageActivityTags(
   }
 
   return usageActivityTagOrder.filter((tag) => present.has(tag.id))
+}
+
+function uniqueNonEmpty(values: Array<string | undefined>): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const value of values) {
+    const trimmed = typeof value === 'string' ? value.trim() : ''
+    if (trimmed === '' || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    result.push(trimmed)
+  }
+  return result
+}
+
+function normalizeHostToolName(name: string): string {
+  return name.trim().toLowerCase().replaceAll(/[_-]/g, '')
+}
+
+function listHostToolExecs(other: LogOtherData | null): HostToolExecInfo[] {
+  const execs = other?.admin_info?.host_tools?.execs
+  if (!Array.isArray(execs)) return []
+  return execs.filter((item) => item != null && typeof item === 'object')
+}
+
+function execMatchesHostToolTag(
+  exec: HostToolExecInfo,
+  tagId: 'web_search' | 'web_fetch'
+): boolean {
+  const canonical = exec.canonical?.trim() ?? ''
+  if (tagId === 'web_search' && canonical === HOST_TOOL_CANONICAL_SEARCH) {
+    return true
+  }
+  if (tagId === 'web_fetch' && canonical === HOST_TOOL_CANONICAL_FETCH) {
+    return true
+  }
+
+  const original = exec.original_name?.trim() ?? ''
+  if (original === '') return false
+  if (tagId === 'web_search') {
+    return (
+      surchargeNameLooksLike(original, 'web_search') ||
+      normalizeHostToolName(original) === 'websearch'
+    )
+  }
+  return (
+    surchargeNameLooksLike(original, 'web_fetch') ||
+    normalizeHostToolName(original) === 'webfetch'
+  )
+}
+
+/**
+ * Tooltip payload for an activity tag: which host tool ran, how many times,
+ * and admin-only original/canonical/backend details when present.
+ */
+export function getUsageActivityTagDetails(
+  other: LogOtherData | null,
+  tag: UsageActivityTag
+): UsageActivityTagDetails {
+  if (tag.id === 'image_recognize') {
+    const imageCount = other?.image_recognize_image_count
+    const count = isPositiveFiniteNumber(imageCount) ? imageCount : 1
+    return {
+      tag,
+      kind: 'image_recognize',
+      count,
+      names: [],
+      canonicals: [],
+      backends: [],
+      durationMs: [],
+    }
+  }
+
+  const hostTagId: 'web_search' | 'web_fetch' =
+    tag.id === 'web_fetch' ? 'web_fetch' : 'web_search'
+  const execs = listHostToolExecs(other).filter((exec) =>
+    execMatchesHostToolTag(exec, hostTagId)
+  )
+  const successful = execs.filter(
+    (exec) => typeof exec?.error_code !== 'string' || exec.error_code.trim() === ''
+  )
+  const namedExecs = successful.length > 0 ? successful : execs
+
+  let count = 0
+  const searchCount = other?.web_search_call_count
+  const fetchCount = other?.web_fetch_call_count
+  if (tag.id === 'web_search' && isPositiveFiniteNumber(searchCount)) {
+    count = searchCount
+  } else if (tag.id === 'web_fetch' && isPositiveFiniteNumber(fetchCount)) {
+    count = fetchCount
+  } else if (successful.length > 0) {
+    count = successful.length
+  } else {
+    count = 1
+  }
+
+  const names = uniqueNonEmpty(namedExecs.map((exec) => exec?.original_name))
+  const canonicals = uniqueNonEmpty(namedExecs.map((exec) => exec?.canonical))
+  const backends = uniqueNonEmpty(namedExecs.map((exec) => exec?.backend))
+  const durationMs = namedExecs
+    .map((exec) => exec?.duration_ms)
+    .filter((value): value is number => isPositiveFiniteNumber(value))
+
+  if (names.length === 0) {
+    names.push(tag.id)
+  }
+  if (canonicals.length === 0) {
+    canonicals.push(
+      tag.id === 'web_search'
+        ? HOST_TOOL_CANONICAL_SEARCH
+        : HOST_TOOL_CANONICAL_FETCH
+    )
+  }
+
+  return {
+    tag,
+    kind: 'host_tool',
+    count,
+    names,
+    canonicals,
+    backends,
+    durationMs,
+  }
 }
 
 /**

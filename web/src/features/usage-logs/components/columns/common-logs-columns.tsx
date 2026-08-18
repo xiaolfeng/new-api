@@ -52,10 +52,6 @@ import {
   isViolationFeeLog,
   renderAuditContent,
 } from "../../lib/format";
-import {
-  parseInteractionType,
-  type InteractionType,
-} from "../../lib/interaction-parser";
 import { parseLogSession } from "../../lib/session-parser";
 import { parseClientSource } from "../../lib/source-parser";
 import {
@@ -66,6 +62,7 @@ import {
 } from "../../lib/utils";
 import type { LogOtherData } from "../../types";
 import { DetailsDialog } from "../dialogs/details-dialog";
+import { InteractionTypeCell } from "../interaction-type-cell";
 import { LogCostDisplay } from "../log-cost-display";
 import { ModelBadge } from "../model-badge";
 import { TimingMetricsCell } from "../timing-metrics-cell";
@@ -775,44 +772,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
     {
       id: "interaction_type",
       header: t("Interaction"),
-      cell: ({ row }) => {
-        const log = row.original;
-        if (!isDisplayableLogType(log.type)) return null;
-
-        const other = parseLogOther(log.other);
-        const normalizeInteractionType = (
-          value: unknown,
-        ): InteractionType | undefined => {
-          if (value === "input" || value === "输入") return "input";
-          if (value === "output" || value === "输出") return "output";
-          if (value === "callback" || value === "回调") return "callback";
-          return undefined;
-        };
-        const precomputed = normalizeInteractionType(other?.interaction_type);
-        const interactionType =
-          precomputed || parseInteractionType(log.content);
-        if (!interactionType) return null;
-
-        const labelMap: Record<string, string> = {
-          input: t("Input"),
-          output: t("Output"),
-          callback: t("Callback"),
-        };
-
-        const badge = getBadgeStyle(`interaction-type-${interactionType}`);
-
-        return (
-          <div className="flex justify-center">
-            <span
-              className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-center text-xs font-medium ${badge.bg} ${badge.text}`}
-            >
-              {labelMap[interactionType] || interactionType}
-            </span>
-          </div>
-        );
-      },
+      cell: ({ row }) => <InteractionTypeCell log={row.original} />,
       meta: { label: t("Interaction"), mobileHidden: true },
-      size: 90,
+      size: 150,
     },
     {
       id: "tps",

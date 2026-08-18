@@ -40,13 +40,15 @@ import { cn } from "@/lib/utils";
 
 import { LOG_TYPE_ENUM } from "../constants";
 import type { UsageLog } from "../data/schema";
-import { parseLogOther } from "../lib/format";
+import { collectUsageActivityTags, parseLogOther } from "../lib/format";
+import { resolveInteractionTypeFromLog } from "../lib/interaction-parser";
 import {
   getLogTypeConfig,
   isDisplayableLogType,
   isTimingLogType,
 } from "../lib/utils";
 import type { LogCategory } from "../types";
+import { InteractionTypeCell } from "./interaction-type-cell";
 import { TimingMetricsCell } from "./timing-metrics-cell";
 import { useUsageLogsContext } from "./usage-logs-provider";
 
@@ -300,6 +302,25 @@ function MobileStreamTimingField<TData>({
   );
 }
 
+function MobileInteractionField({ log }: { log: UsageLog }) {
+  const { t } = useTranslation();
+  if (!isDisplayableLogType(log.type)) return null;
+
+  const other = parseLogOther(log.other);
+  const hasType = Boolean(resolveInteractionTypeFromLog(log));
+  const hasTags = collectUsageActivityTags(other).length > 0;
+  if (!hasType && !hasTags) return null;
+
+  return (
+    <div className="bg-muted/20 col-span-2 min-w-0 rounded-md px-2 py-1.5">
+      <div className="text-muted-foreground mb-1 text-[11px] leading-none font-medium select-none">
+        {t("Interaction")}
+      </div>
+      <InteractionTypeCell log={log} align="start" />
+    </div>
+  );
+}
+
 function CommonLogsCard<TData>({
   cells,
 }: {
@@ -352,6 +373,7 @@ function CommonLogsCard<TData>({
           <SummaryField cell={cells.get("prompt_tokens")} />
         )}
         <SummaryField cell={cells.get("cache_rate")} />
+        {rowData ? <MobileInteractionField log={rowData} /> : null}
         <SummaryField
           label={t("Details")}
           cell={cells.get("content")}

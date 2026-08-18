@@ -72,6 +72,7 @@ export function ToolLogsFilterBar<TData>(props: ToolLogsFilterBarProps<TData>) {
     username: search.username || '',
     channel: search.channel || '',
     requestId: search.requestId || '',
+    group: search.group || '',
     q: search.q || '',
   }))
 
@@ -102,6 +103,7 @@ export function ToolLogsFilterBar<TData>(props: ToolLogsFilterBarProps<TData>) {
         username: isAdmin ? filters.username || undefined : undefined,
         channel: isAdmin ? filters.channel || undefined : undefined,
         requestId: filters.requestId || undefined,
+        group: filters.group || undefined,
         q: filters.q || undefined,
       },
     })
@@ -135,6 +137,7 @@ export function ToolLogsFilterBar<TData>(props: ToolLogsFilterBarProps<TData>) {
       filters.username ||
       filters.channel ||
       filters.requestId ||
+      filters.group ||
       filters.q
   )
 
@@ -231,6 +234,16 @@ export function ToolLogsFilterBar<TData>(props: ToolLogsFilterBarProps<TData>) {
               placeholder={t('Request ID')}
               value={filters.requestId || ''}
               onChange={(e) => update('requestId', e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleApply()
+              }}
+            />
+          </LogsFilterField>
+          <LogsFilterField>
+            <LogsFilterInput
+              placeholder={t('Group')}
+              value={filters.group || ''}
+              onChange={(e) => update('group', e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') handleApply()
               }}
