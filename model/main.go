@@ -214,7 +214,12 @@ func InitLogDB() (err error) {
 		LOG_DB = DB
 		common.SetLogDatabaseType(common.MainDatabaseType())
 		initCol()
-		return
+		if !common.IsMasterNode {
+			return nil
+		}
+		// Logs share the main DB. Still migrate log tables here so new
+		// ones (tool_logs) are created even if migrateDB missed them.
+		return migrateLOGDB()
 	}
 	db, dbType, err := chooseDB("LOG_SQL_DSN", true)
 	if err == nil {
@@ -271,6 +276,7 @@ func migrateDB() error {
 		&Ability{},
 		&Log{},
 		&TokenRecord{},
+		&ToolLog{},
 		&Midjourney{},
 		&TopUp{},
 		&QuotaData{},
@@ -335,6 +341,7 @@ func migrateDBFast() error {
 		{&Ability{}, "Ability"},
 		{&Log{}, "Log"},
 		{&TokenRecord{}, "TokenRecord"},
+		{&ToolLog{}, "ToolLog"},
 		{&Midjourney{}, "Midjourney"},
 		{&TopUp{}, "TopUp"},
 		{&QuotaData{}, "QuotaData"},
