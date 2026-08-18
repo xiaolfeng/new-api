@@ -45,6 +45,7 @@ import { LOG_TYPE_ALL_VALUE } from "../../constants";
 import type { UsageLog } from "../../data/schema";
 import {
   formatModelName,
+  getCacheRateSummary,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   parseLogOther,
@@ -980,37 +981,99 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
           return <span className="text-muted-foreground text-xs">-</span>;
         }
 
-        const cacheReadTokens = other?.cache_tokens || 0;
-        const cacheWrite5m = other?.cache_creation_tokens_5m || 0;
-        const cacheWrite1h = other?.cache_creation_tokens_1h || 0;
-        const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0;
-        const cacheWriteTokens = hasSplitCache
-          ? cacheWrite5m + cacheWrite1h
-          : other?.cache_creation_tokens || 0;
-
         return (
           <div className="flex flex-col gap-0.5">
             <span className="font-mono text-xs font-medium tabular-nums">
               {promptTokens.toLocaleString()} /{" "}
               {completionTokens.toLocaleString()}
             </span>
-            {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-              <div className="flex items-center gap-1 text-[11px]">
-                {cacheReadTokens > 0 && (
-                  <span className="text-muted-foreground/60">
-                    {t("Cache")}↓ {cacheReadTokens.toLocaleString()}
-                  </span>
-                )}
-                {cacheWriteTokens > 0 && (
-                  <span className="text-muted-foreground/60">
-                    ↑ {cacheWriteTokens.toLocaleString()}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
         );
       },
+      meta: { label: "Tokens" },
+      size: 110,
+    },
+    {
+      id: "cache_rate",
+      header: t("Cache Rate"),
+      cell: ({ row }) => {
+        const log = row.original;
+        if (!isDisplayableLogType(log.type)) return null;
+
+        const other = parseLogOther(log.other);
+        const summary = getCacheRateSummary(log.prompt_tokens || 0, other);
+        if (summary.rate === null || summary.rate === 0) {
+          return <span className="text-muted-foreground text-xs">-</span>;
+        }
+
+        return (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span className="font-mono text-xs font-medium text-emerald-600 tabular-nums dark:text-emerald-400">
+                    {summary.rate.toFixed(1)}%
+                  </span>
+                }
+              />
+              <TooltipContent side="top" className="max-w-[220px] p-2">
+                <div className="flex flex-col gap-0.5 text-xs">
+                  {summary.cacheReadTokens > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">
+                        {t("Cache Read")}
+                      </span>
+                      <span className="font-mono font-medium tabular-nums">
+                        ↓ {summary.cacheReadTokens.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  {summary.cacheWriteTokens > 0 && (
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-muted-foreground">
+                        {t("Cache Write")}
+                      </span>
+                      <span className="font-mono font-medium tabular-nums">
+                        ↑ {summary.cacheWriteTokens.toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                  {summary.hasSplitCache && (
+                    <>
+                      {summary.cacheWrite5m > 0 && (
+                        <div className="text-muted-foreground/70 flex items-center justify-between gap-3 text-[11px]">
+                          <span>{t("Cache Creation (5m)")}</span>
+                          <span className="font-mono tabular-nums">
+                            {summary.cacheWrite5m.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {summary.cacheWrite1h > 0 && (
+                        <div className="text-muted-foreground/70 flex items-center justify-between gap-3 text-[11px]">
+                          <span>{t("Cache Creation (1h)")}</span>
+                          <span className="font-mono tabular-nums">
+                            {summary.cacheWrite1h.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                    </>
+                  )}
+                  <div className="mt-0.5 flex items-center justify-between gap-3 border-t pt-0.5">
+                    <span className="text-muted-foreground">
+                      {t("Total Input")}
+                    </span>
+                    <span className="font-mono tabular-nums">
+                      {summary.totalInput.toLocaleString()}
+                    </span>
+                  </div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        );
+      },
+      meta: { label: t("Cache Rate") },
+      size: 90,
     },
     {
       accessorKey: "quota",

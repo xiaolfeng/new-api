@@ -849,7 +849,11 @@ func CountOldLog(ctx context.Context, targetTimestamp int64) (int64, error) {
 	if err := LOG_DB.WithContext(ctx).Model(&Log{}).Where("created_at < ?", targetTimestamp).Count(&total).Error; err != nil {
 		return 0, err
 	}
-	return total, nil
+	tools, err := CountOldToolLog(ctx, targetTimestamp)
+	if err != nil {
+		return 0, err
+	}
+	return total + tools, nil
 }
 
 func DeleteOldLogBatch(ctx context.Context, targetTimestamp int64, limit int) (int64, error) {
@@ -878,6 +882,9 @@ func DeleteOldLogBatch(ctx context.Context, targetTimestamp int64, limit int) (i
 		).Error; err != nil {
 			return 0, err
 		}
+		if _, err := deleteOldToolLogBatch(ctx, targetTimestamp, limit); err != nil {
+			return 0, err
+		}
 		return total, nil
 	}
 
@@ -885,5 +892,10 @@ func DeleteOldLogBatch(ctx context.Context, targetTimestamp int64, limit int) (i
 	if nil != result.Error {
 		return 0, result.Error
 	}
-	return result.RowsAffected, nil
+	deleted := result.RowsAffected
+	toolDeleted, err := deleteOldToolLogBatch(ctx, targetTimestamp, limit)
+	if err != nil {
+		return deleted, err
+	}
+	return deleted + toolDeleted, nil
 }

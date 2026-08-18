@@ -402,12 +402,15 @@ func migrateLOGDB() error {
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		return migrateClickHouseLogDB()
 	}
-	return LOG_DB.AutoMigrate(&Log{}, &TokenRecord{})
+	return LOG_DB.AutoMigrate(&Log{}, &TokenRecord{}, &ToolLog{})
 }
 
 func migrateClickHouseLogDB() error {
 	ttlDays := clickHouseLogTTLDays()
 	if err := LOG_DB.Exec(clickHouseLogCreateTableSQL(ttlDays)).Error; err != nil {
+		return err
+	}
+	if err := LOG_DB.Exec(clickHouseToolLogCreateTableSQL(ttlDays)).Error; err != nil {
 		return err
 	}
 	return syncClickHouseLogTTL(ttlDays)
@@ -459,6 +462,37 @@ CREATE TABLE IF NOT EXISTS logs (
 	request_id String DEFAULT '',
 	upstream_request_id String DEFAULT '',
 	other String DEFAULT ''
+)
+ENGINE = MergeTree()
+PARTITION BY toYYYYMM(toDateTime(created_at))
+ORDER BY (created_at, request_id)%s`, clickHouseLogTTLClause(ttlDays))
+}
+
+func clickHouseToolLogCreateTableSQL(ttlDays int) string {
+	return fmt.Sprintf(`
+CREATE TABLE IF NOT EXISTS tool_logs (
+	id Int64 DEFAULT 0,
+	created_at Int64 DEFAULT 0,
+	user_id Int32 DEFAULT 0,
+	username String DEFAULT '',
+	token_id Int32 DEFAULT 0,
+	token_name String DEFAULT '',
+	channel_id Int32 DEFAULT 0,
+	`+"`group`"+` String DEFAULT '',
+	model_name String DEFAULT '',
+	request_id String DEFAULT '',
+	ip String DEFAULT '',
+	original_name String DEFAULT '',
+	canonical String DEFAULT '',
+	kind String DEFAULT '',
+	mode String DEFAULT '',
+	backend String DEFAULT '',
+	query String DEFAULT '',
+	url String DEFAULT '',
+	error_code String DEFAULT '',
+	duration_ms Int64 DEFAULT 0,
+	truncated UInt8 DEFAULT 0,
+	result String DEFAULT ''
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(toDateTime(created_at))

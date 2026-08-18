@@ -278,6 +278,10 @@ func SetApiRouter(router *gin.Engine) {
 		logRoute.GET("/self", middleware.UserAuth(), controller.GetUserLogs)
 		logRoute.GET("/self/search", middleware.UserAuth(), middleware.SearchRateLimit(), controller.SearchUserLogs)
 
+		toolLogRoute := apiRouter.Group("/tool_log")
+		toolLogRoute.GET("/", middleware.AdminAuth(), controller.GetAllToolLogs)
+		toolLogRoute.GET("/self", middleware.UserAuth(), controller.GetUserToolLogs)
+
 		tokenRecordRoute := apiRouter.Group("/token_record")
 		tokenRecordRoute.GET("/recent", middleware.UserAuth(), controller.GetRecentTokenRecords)
 		tokenRecordRoute.GET("/daily", middleware.UserAuth(), controller.GetDailyTokenRecords)

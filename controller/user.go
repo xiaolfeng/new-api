@@ -583,6 +583,7 @@ func generateDefaultSidebarConfig(userRole int) string {
 		"detail":     true,
 		"token":      true,
 		"log":        true,
+		"tool_log":   true,
 		"model_log":  true,
 		"midjourney": true,
 		"task":       true,

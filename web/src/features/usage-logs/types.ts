@@ -173,6 +173,8 @@ export interface LogOtherData {
   cache_creation_tokens?: number
   cache_creation_tokens_5m?: number
   cache_creation_tokens_1h?: number
+  // Authoritative total input tokens for cache-hit rate (written by backend).
+  input_tokens_total?: number
   claude?: boolean
   model_ratio?: number
   completion_ratio?: number

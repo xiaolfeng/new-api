@@ -29,6 +29,8 @@ export {
   getParamOverrideActionLabel,
   parseAuditLine,
   isViolationFeeLog,
+  getCacheRateSummary,
+  hasAnyCacheTokens,
 } from './format'
 
 // Filter utilities

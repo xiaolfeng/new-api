@@ -341,6 +341,57 @@ export function hasAnyCacheTokens(
   )
 }
 
+/**
+ * Cache-hit rate for a consume log. Denominator prefers backend
+ * `input_tokens_total`; fallback respects Claude (text-only prompt) vs
+ * OpenAI (prompt already includes cache read) semantics.
+ */
+export interface CacheRateSummary {
+  cacheReadTokens: number
+  cacheWriteTokens: number
+  cacheWrite5m: number
+  cacheWrite1h: number
+  hasSplitCache: boolean
+  totalInput: number
+  rate: number | null
+}
+
+export function getCacheRateSummary(
+  promptTokens: number,
+  other: LogOtherData | null | undefined
+): CacheRateSummary {
+  const cacheReadTokens = other?.cache_tokens || 0
+  const cacheWrite5m = other?.cache_creation_tokens_5m || 0
+  const cacheWrite1h = other?.cache_creation_tokens_1h || 0
+  const hasSplitCache = cacheWrite5m > 0 || cacheWrite1h > 0
+  const cacheWriteTokens = hasSplitCache
+    ? cacheWrite5m + cacheWrite1h
+    : other?.cache_creation_tokens || 0
+
+  const isClaudeSemantic = other?.claude === true
+  const totalInput =
+    other?.input_tokens_total && other.input_tokens_total > 0
+      ? other.input_tokens_total
+      : isClaudeSemantic
+        ? promptTokens + cacheReadTokens + cacheWriteTokens
+        : promptTokens
+
+  const rate =
+    totalInput > 0 && cacheReadTokens > 0
+      ? Math.min((cacheReadTokens / totalInput) * 100, 100)
+      : null
+
+  return {
+    cacheReadTokens,
+    cacheWriteTokens,
+    cacheWrite5m,
+    cacheWrite1h,
+    hasSplitCache,
+    totalInput,
+    rate,
+  }
+}
+
 export function getTieredBillingSummary(
   other: LogOtherData | null
 ): TieredBillingSummary | null {

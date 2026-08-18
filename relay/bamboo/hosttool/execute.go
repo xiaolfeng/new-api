@@ -2,13 +2,14 @@ package hosttool
 
 import (
 	"context"
+	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
 	bamboosdk "github.com/bamboo-services/bamboo-messages/bamboo"
 
-	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 )
@@ -141,23 +142,83 @@ func ExecuteCalls(ctx context.Context, info *relaycommon.RelayInfo, st *model_se
 				incrementHostToolBilling(info, uses[i].Name)
 			}
 		}
+		recordHostToolLogs(info, results)
 	}
 	return results
+}
+
+func recordHostToolLogs(info *relaycommon.RelayInfo, results []ExecResult) {
+	if info == nil || len(results) == 0 {
+		return
+	}
+	username := ""
+	if info.UserId > 0 {
+		username, _ = model.GetUsernameById(info.UserId, false)
+	}
+	tokenName := ""
+	if info.TokenId > 0 {
+		if token, err := model.GetTokenById(info.TokenId); err == nil && token != nil {
+			tokenName = token.Name
+		}
+	}
+	mode := ""
+	if info.HostToolPlan != nil {
+		mode = info.HostToolPlan.Mode
+	}
+	logs := make([]*model.ToolLog, 0, len(results))
+	for _, result := range results {
+		content, _ := FormatToolResult(result)
+		truncated := result.Truncated || strings.Contains(content, "...[truncated]")
+		logs = append(logs, &model.ToolLog{
+			UserId:       info.UserId,
+			Username:     username,
+			TokenId:      info.TokenId,
+			TokenName:    tokenName,
+			ChannelId:    info.ChannelId,
+			Group:        info.UsingGroup,
+			ModelName:    info.OriginModelName,
+			RequestId:    info.RequestId,
+			Ip:           clientIPFromHeaders(info.RequestHeaders),
+			OriginalName: result.OriginalName,
+			Canonical:    CanonicalFromName(result.OriginalName),
+			Kind:         result.Kind,
+			Mode:         mode,
+			Backend:      result.Backend,
+			Query:        result.Query,
+			URL:          result.URL,
+			ErrorCode:    result.ErrorCode,
+			DurationMs:   result.DurationMs,
+			Truncated:    truncated,
+			Result:       content,
+		})
+	}
+	model.RecordToolLogs(logs)
+}
+
+func clientIPFromHeaders(headers map[string]string) string {
+	if headers == nil {
+		return ""
+	}
+	for _, key := range []string{"X-Real-Ip", "X-Real-IP", "X-Forwarded-For"} {
+		value := strings.TrimSpace(headers[key])
+		if value == "" {
+			continue
+		}
+		if i := strings.IndexByte(value, ','); i >= 0 {
+			return strings.TrimSpace(value[:i])
+		}
+		return value
+	}
+	return ""
 }
 
 func executeOne(ctx context.Context, info *relaycommon.RelayInfo, st *model_setting.BambooSettings, call toolUseCall, can string) ExecResult {
 	if ctx.Err() != nil {
 		return ExecResult{Kind: kindOf(can), ErrorCode: ErrCanceled}
 	}
-	var raw map[string]any
-	if len(call.Input) > 0 {
-		_ = common.Unmarshal(call.Input, &raw)
-	}
-	if raw == nil {
-		raw = map[string]any{}
-	}
+	raw, scalar := parseToolInput(call.Input)
 	if can == CanonicalWebFetch {
-		urlStr := firstNonEmpty(asString(raw["url"]), asString(raw["uri"]))
+		urlStr := extractFetchURL(raw, scalar)
 		if urlStr == "" {
 			return ExecResult{Kind: "fetch", ErrorCode: ErrInvalidInput}
 		}
@@ -181,7 +242,7 @@ func executeOne(ctx context.Context, info *relaycommon.RelayInfo, st *model_sett
 		})
 	}
 
-	query := firstNonEmpty(asString(raw["query"]), asString(raw["objective"]), asString(raw["q"]), asString(raw["search_query"]))
+	query := extractSearchQuery(raw, scalar)
 	if query == "" {
 		return ExecResult{Kind: "search", ErrorCode: ErrInvalidInput}
 	}

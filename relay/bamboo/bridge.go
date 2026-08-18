@@ -289,8 +289,8 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 				case *bamboosdk.ToolUseBlock:
 					accum.toolID = b.ID
 					accum.toolName = b.Name
-					if len(b.Input) > 0 {
-						accum.toolInputBuf.Write(b.Input)
+					if seed := hosttool.SeedToolInput(b.Input); len(seed) > 0 {
+						accum.toolInputBuf.Write(seed)
 					}
 				}
 				streamBlocks[event.Index] = accum
