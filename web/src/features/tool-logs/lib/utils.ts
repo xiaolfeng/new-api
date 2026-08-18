@@ -64,18 +64,21 @@ export function prettyToolResult(result: string): string {
   }
 }
 
+export type UsageLogsRequestSearch = {
+  requestId: string
+  startTime: number
+  endTime: number
+}
+
 export function usageLogsSearchForRequest(params: {
   requestId: string
   startTime?: number
   endTime?: number
-}): {
-  requestId: string
-  startTime?: number
-  endTime?: number
-} {
+}): UsageLogsRequestSearch {
+  const defaults = getDefaultTimeRange()
   return {
     requestId: params.requestId,
-    startTime: params.startTime,
-    endTime: params.endTime,
+    startTime: params.startTime ?? defaults.start.getTime(),
+    endTime: params.endTime ?? defaults.end.getTime(),
   }
 }

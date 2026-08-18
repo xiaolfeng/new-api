@@ -78,4 +78,10 @@ describe('tool log helpers', () => {
       endTime: 20,
     })
   })
+
+  it('fills the default time range when none is provided', () => {
+    const search = usageLogsSearchForRequest({ requestId: 'req_1' })
+    expect(search.requestId).toBe('req_1')
+    expect(search.endTime).toBeGreaterThan(search.startTime)
+  })
 })

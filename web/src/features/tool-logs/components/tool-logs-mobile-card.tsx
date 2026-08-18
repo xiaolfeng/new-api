@@ -40,7 +40,6 @@ import {
   ToolResultCell,
   ToolStatusStack,
 } from './tool-log-cells'
-import { useToolLogsViewScope } from './tool-logs-provider'
 
 interface ToolLogsMobileListProps {
   table: Table<ToolLog>
@@ -49,7 +48,6 @@ interface ToolLogsMobileListProps {
 
 export function ToolLogsMobileList(props: ToolLogsMobileListProps) {
   const { t } = useTranslation()
-  const { isAdminView: isAdmin } = useToolLogsViewScope()
   const rows = props.table.getRowModel().rows
 
   if (props.isLoading) {
@@ -138,7 +136,7 @@ export function ToolLogsMobileList(props: ToolLogsMobileListProps) {
             </div>
 
             {log.request_id ? <ToolRequestIdCell log={log} /> : null}
-            <ToolResultCell log={log} isAdmin={isAdmin} />
+            <ToolResultCell log={log} />
           </div>
         )
       })}

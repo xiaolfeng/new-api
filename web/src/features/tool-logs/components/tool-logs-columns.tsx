@@ -170,9 +170,7 @@ export function useToolLogsColumns(isAdmin: boolean): ColumnDef<ToolLog>[] {
     {
       id: 'details',
       header: t('Details'),
-      cell: ({ row }) => (
-        <ToolResultCell log={row.original} isAdmin={isAdmin} />
-      ),
+      cell: ({ row }) => <ToolResultCell log={row.original} />,
       size: 180,
     },
     {

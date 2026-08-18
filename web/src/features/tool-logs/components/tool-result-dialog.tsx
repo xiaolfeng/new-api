@@ -18,7 +18,6 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { Copy01Icon, Tick02Icon } from '@hugeicons/core-free-icons'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Link } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -32,16 +31,14 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatDurationMs, prettyToolResult } from '../lib/utils'
 import type { ToolLog } from '../types'
 import { ToolKindBadge } from './tool-kind-badge'
+import { ToolRequestIdLink } from './tool-log-cells'
 
 interface ToolResultDialogProps {
   log: ToolLog | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onOpenChangeComplete?: (open: boolean) => void
   isAdmin?: boolean
-  usageLogsSearch?: {
-    startTime?: number
-    endTime?: number
-  }
 }
 
 function MetaRow(props: { label: string; children: ReactNode }) {
@@ -65,6 +62,7 @@ export function ToolResultDialog(props: ToolResultDialogProps) {
     <Dialog
       open={props.open}
       onOpenChange={props.onOpenChange}
+      onOpenChangeComplete={props.onOpenChangeComplete}
       title={t('Tool Result')}
       description={t('View the complete host tool result')}
       contentClassName='sm:max-w-2xl'
@@ -132,18 +130,10 @@ export function ToolResultDialog(props: ToolResultDialogProps) {
             ) : null}
             {log.request_id ? (
               <MetaRow label={t('Request ID')}>
-                <Link
-                  to='/usage-logs/$section'
-                  params={{ section: 'common' }}
-                  search={{
-                    requestId: log.request_id,
-                    startTime: props.usageLogsSearch?.startTime,
-                    endTime: props.usageLogsSearch?.endTime,
-                  }}
+                <ToolRequestIdLink
+                  requestId={log.request_id}
                   className='text-primary hover:underline'
-                >
-                  {log.request_id}
-                </Link>
+                />
               </MetaRow>
             ) : null}
             {props.isAdmin && log.channel ? (

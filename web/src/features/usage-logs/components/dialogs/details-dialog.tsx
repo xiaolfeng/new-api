@@ -1261,11 +1261,36 @@ export function DetailsDialog(props: DetailsDialogProps) {
   }
 
   return (
-    <>
-      <Dialog
-        open={props.open}
-        onOpenChange={props.onOpenChange}
-        title={
+    <Dialog
+      open={props.open}
+      onOpenChange={(open) => {
+        if (!open) setDetailSheet(null);
+        props.onOpenChange(open);
+      }}
+      nested={
+        <>
+          <LogDetailSheet
+            open={detailSheet === "record" || detailSheet === "full_log"}
+            onOpenChange={(open) => {
+              if (!open) setDetailSheet(null);
+            }}
+            title={activeSheetTitle}
+            description={activeSheetDescription}
+            content={activeSheetContent}
+            structured={detailSheet === "record"}
+          />
+          {bambooDebugData && (
+            <BambooDebugSheet
+              open={detailSheet === "bamboo_debug"}
+              onOpenChange={(open) => {
+                if (!open) setDetailSheet(null);
+              }}
+              data={bambooDebugData}
+            />
+          )}
+        </>
+      }
+      title={
           <>
             {t("Log Details")}
             <StatusBadge
@@ -2182,26 +2207,6 @@ export function DetailsDialog(props: DetailsDialogProps) {
           )}
         </div>
       </Dialog>
-      <LogDetailSheet
-        open={detailSheet === "record" || detailSheet === "full_log"}
-        onOpenChange={(open) => {
-          if (!open) setDetailSheet(null);
-        }}
-        title={activeSheetTitle}
-        description={activeSheetDescription}
-        content={activeSheetContent}
-        structured={detailSheet === "record"}
-      />
-      {bambooDebugData && (
-        <BambooDebugSheet
-          open={detailSheet === "bamboo_debug"}
-          onOpenChange={(open) => {
-            if (!open) setDetailSheet(null);
-          }}
-          data={bambooDebugData}
-        />
-      )}
-    </>
   );
 }
 

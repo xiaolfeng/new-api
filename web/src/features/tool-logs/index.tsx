@@ -16,7 +16,8 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useCallback } from 'react'
+import { useNavigate } from '@tanstack/react-router'
+import { useCallback, useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
@@ -24,6 +25,7 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { UserInfoDialog } from '@/features/usage-logs/components/dialogs/user-info-dialog'
 
 import { ToolLogsTable } from './components/tool-logs-table'
+import { ToolResultDialog } from './components/tool-result-dialog'
 import {
   ToolLogsProvider,
   useToolLogsContext,
@@ -33,9 +35,44 @@ import {
 
 function ToolLogsContent() {
   const { t } = useTranslation()
-  const { canManageScope, viewScope, setViewScope } = useToolLogsViewScope()
-  const { selectedUserId, userInfoDialogOpen, setUserInfoDialogOpen } =
-    useToolLogsContext()
+  const navigate = useNavigate()
+  const { canManageScope, viewScope, setViewScope, isAdminView } =
+    useToolLogsViewScope()
+  const {
+    selectedUserId,
+    userInfoDialogOpen,
+    setUserInfoDialogOpen,
+    selectedLog,
+    resultDialogOpen,
+    setResultDialogOpen,
+    takePendingUsageLogsSearch,
+  } = useToolLogsContext()
+
+  const flushPendingUsageLogsNavigation = useCallback(
+    (open: boolean) => {
+      if (open) return
+      const search = takePendingUsageLogsSearch()
+      if (!search) return
+      void navigate({
+        to: '/usage-logs/$section',
+        params: { section: 'common' },
+        search,
+      })
+    },
+    [navigate, takePendingUsageLogsSearch]
+  )
+
+  useEffect(() => {
+    if (resultDialogOpen || userInfoDialogOpen) return
+    const timer = window.setTimeout(() => {
+      flushPendingUsageLogsNavigation(false)
+    }, 300)
+    return () => window.clearTimeout(timer)
+  }, [
+    flushPendingUsageLogsNavigation,
+    resultDialogOpen,
+    userInfoDialogOpen,
+  ])
 
   const handleViewScopeChange = useCallback(
     (scope: string) => {
@@ -72,6 +109,14 @@ function ToolLogsContent() {
         userId={selectedUserId}
         open={userInfoDialogOpen}
         onOpenChange={setUserInfoDialogOpen}
+        onOpenChangeComplete={flushPendingUsageLogsNavigation}
+      />
+      <ToolResultDialog
+        log={selectedLog}
+        open={resultDialogOpen}
+        onOpenChange={setResultDialogOpen}
+        onOpenChangeComplete={flushPendingUsageLogsNavigation}
+        isAdmin={isAdminView}
       />
     </>
   )

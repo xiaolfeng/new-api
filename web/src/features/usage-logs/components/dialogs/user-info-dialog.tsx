@@ -32,12 +32,14 @@ interface UserInfoDialogProps {
   userId: number | null
   open: boolean
   onOpenChange: (open: boolean) => void
+  onOpenChangeComplete?: (open: boolean) => void
 }
 
 export function UserInfoDialog({
   userId,
   open,
   onOpenChange,
+  onOpenChangeComplete,
 }: UserInfoDialogProps) {
   const { t } = useTranslation()
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null)
@@ -87,6 +89,7 @@ export function UserInfoDialog({
     <Dialog
       open={open}
       onOpenChange={onOpenChange}
+      onOpenChangeComplete={onOpenChangeComplete}
       title={t('User Information')}
       description={t(
         'View detailed information about this user including balance, usage statistics, and invitation details.'

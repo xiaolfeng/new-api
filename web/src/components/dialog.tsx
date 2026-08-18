@@ -35,6 +35,11 @@ type DialogProps = React.ComponentProps<typeof DialogRoot> & {
   children: React.ReactNode
   trigger?: React.ReactElement
   footer?: React.ReactNode
+  /**
+   * Extra nodes rendered inside Dialog.Root (for example a nested Sheet).
+   * Sibling modal roots are dismissed immediately by the parent overlay.
+   */
+  nested?: React.ReactNode
   contentHeight?: React.CSSProperties['height']
   contentClassName?: string
   headerClassName?: string
@@ -64,6 +69,7 @@ export function Dialog({
   footerClassName,
   initialFocus,
   showCloseButton,
+  nested,
   ...dialogProps
 }: DialogProps) {
   return (
@@ -123,6 +129,7 @@ export function Dialog({
           </DialogFooter>
         ) : null}
       </DialogContent>
+      {nested}
     </DialogRoot>
   )
 }

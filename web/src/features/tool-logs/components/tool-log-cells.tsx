@@ -16,8 +16,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { Link, getRouteApi } from '@tanstack/react-router'
-import { useState } from 'react'
+import { Link, getRouteApi, useNavigate } from '@tanstack/react-router'
 import { useTranslation } from 'react-i18next'
 
 import { GroupBadge } from '@/components/group-badge'
@@ -37,7 +36,7 @@ import {
 } from '../lib/utils'
 import type { ToolLog } from '../types'
 import { ToolKindBadge } from './tool-kind-badge'
-import { ToolResultDialog } from './tool-result-dialog'
+import { useToolLogsContext } from './tool-logs-provider'
 
 const route = getRouteApi('/_authenticated/tool-logs/')
 
@@ -126,59 +125,86 @@ export function ToolTokenCell(props: { log: ToolLog }) {
   )
 }
 
-export function ToolRequestIdCell(props: { log: ToolLog }) {
+export function ToolRequestIdLink(props: {
+  requestId: string
+  className?: string
+}) {
+  const navigate = useNavigate()
   const search = route.useSearch()
+  const { hasOpenDialog, closeDialogs, queueUsageLogsSearch } =
+    useToolLogsContext()
+  const usageLogsSearch = usageLogsSearchForRequest({
+    requestId: props.requestId,
+    startTime: search.startTime,
+    endTime: search.endTime,
+  })
+
+  return (
+    <Link
+      to='/usage-logs/$section'
+      params={{ section: 'common' }}
+      search={usageLogsSearch}
+      className={props.className}
+      onClick={(event) => {
+        if (
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
+          event.button !== 0
+        ) {
+          closeDialogs()
+          return
+        }
+        event.preventDefault()
+        event.stopPropagation()
+        if (hasOpenDialog) {
+          queueUsageLogsSearch(usageLogsSearch)
+          return
+        }
+        void navigate({
+          to: '/usage-logs/$section',
+          params: { section: 'common' },
+          search: usageLogsSearch,
+        })
+      }}
+    >
+      {props.requestId}
+    </Link>
+  )
+}
+
+export function ToolRequestIdCell(props: { log: ToolLog }) {
   const requestId = props.log.request_id
   if (!requestId) {
     return <span className='text-muted-foreground text-xs'>-</span>
   }
 
   return (
-    <Link
-      to='/usage-logs/$section'
-      params={{ section: 'common' }}
-      search={usageLogsSearchForRequest({
-        requestId,
-        startTime: search.startTime,
-        endTime: search.endTime,
-      })}
+    <ToolRequestIdLink
+      requestId={requestId}
       className='text-primary block max-w-[160px] truncate font-mono text-xs hover:underline'
-    >
-      {requestId}
-    </Link>
+    />
   )
 }
 
-export function ToolResultCell(props: { log: ToolLog; isAdmin: boolean }) {
-  const [open, setOpen] = useState(false)
-  const search = route.useSearch()
+export function ToolResultCell(props: { log: ToolLog }) {
+  const { openResultDialog } = useToolLogsContext()
   const preview = previewToolResult(props.log.result || '')
 
   return (
-    <>
-      <button
-        type='button'
-        className={cn(
-          'max-w-[180px] truncate text-left text-xs hover:underline',
-          preview
-            ? 'text-foreground'
-            : 'text-muted-foreground/50 cursor-default hover:no-underline'
-        )}
-        onClick={() => preview && setOpen(true)}
-      >
-        {preview || '—'}
-      </button>
-      <ToolResultDialog
-        log={props.log}
-        open={open}
-        onOpenChange={setOpen}
-        isAdmin={props.isAdmin}
-        usageLogsSearch={{
-          startTime: search.startTime,
-          endTime: search.endTime,
-        }}
-      />
-    </>
+    <button
+      type='button'
+      className={cn(
+        'max-w-[180px] truncate text-left text-xs hover:underline',
+        preview
+          ? 'text-foreground'
+          : 'text-muted-foreground/50 cursor-default hover:no-underline'
+      )}
+      onClick={() => preview && openResultDialog(props.log)}
+    >
+      {preview || '—'}
+    </button>
   )
 }
 
