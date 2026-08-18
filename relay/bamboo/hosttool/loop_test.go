@@ -24,6 +24,20 @@ func TestDecideAction(t *testing.T) {
 	assert.Equal(t, ActionFoldB, DecideAction(plan, []toolUseCall{{Name: "webfetch"}}))
 }
 
+func TestDecideActionGrokPassthroughWebSearch(t *testing.T) {
+	plan := &relaycommon.HostToolPlan{
+		Enabled: true,
+		Mode:    ModeLoop,
+		Decls:   []relaycommon.HostToolDecl{{OriginalName: "web_search", Canonical: CanonicalWebSearch}},
+	}
+	info := &relaycommon.RelayInfo{ClientProfile: common.ClientProfileGrokBuild}
+	assert.Equal(t, ActionPassthrough, DecideActionForClient(plan, []toolUseCall{{Name: "web_search"}}, info))
+	assert.Equal(t, ActionPassthrough, DecideActionForClient(plan, []toolUseCall{{Name: "WebSearch"}}, info))
+	assert.Equal(t, ActionHop2, DecideActionForClient(plan, []toolUseCall{{Name: "web_search"}}, nil))
+	assert.Equal(t, ActionHop2, DecideActionForClient(plan, []toolUseCall{{Name: "web_fetch"}}, info))
+	assert.Equal(t, ActionPassthrough, DecideActionForClient(plan, []toolUseCall{{Name: "web_search"}, {Name: "read_file"}}, info))
+}
+
 func TestDecideActionClaudeStrictPassthroughWebSearch(t *testing.T) {
 	plan := &relaycommon.HostToolPlan{
 		Enabled: true,

@@ -3,6 +3,7 @@ package hosttool
 import (
 	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/QuantumNous/new-api/common"
 )
@@ -29,9 +30,18 @@ type responsesWebSearchCall struct {
 }
 
 type responsesUsage struct {
-	InputTokens  int `json:"input_tokens"`
-	OutputTokens int `json:"output_tokens"`
-	TotalTokens  int `json:"total_tokens"`
+	InputTokens         int            `json:"input_tokens"`
+	OutputTokens        int            `json:"output_tokens"`
+	TotalTokens         int            `json:"total_tokens"`
+	InputTokensDetails  map[string]int `json:"input_tokens_details"`
+	OutputTokensDetails map[string]int `json:"output_tokens_details"`
+}
+
+func emptyResponsesUsage() responsesUsage {
+	return responsesUsage{
+		InputTokensDetails:  map[string]int{"cached_tokens": 0},
+		OutputTokensDetails: map[string]int{"reasoning_tokens": 0},
+	}
 }
 
 type responsesObject struct {
@@ -103,16 +113,72 @@ func builtinCallID(requestID string) string {
 	return "ws_" + requestID
 }
 
+func grokSearchMessageItem(requestID string, result ExecResult) map[string]any {
+	text, anns := formatGrokSearchOutput(result)
+	return map[string]any{
+		"type":   "message",
+		"id":     "msg_search_" + strings.TrimPrefix(builtinResponseID(requestID), "resp_"),
+		"status": "completed",
+		"role":   "assistant",
+		"content": []any{
+			map[string]any{
+				"type":        "output_text",
+				"text":        text,
+				"annotations": anns,
+			},
+		},
+	}
+}
+
+func formatGrokSearchOutput(result ExecResult) (string, []any) {
+	hits := resolvedHits(result)
+	if !result.OK || len(hits) == 0 {
+		return "No search results found.", []any{}
+	}
+	var b strings.Builder
+	anns := make([]any, 0, len(hits))
+	runePos := 0
+	for i, hit := range hits {
+		if strings.TrimSpace(hit.URL) == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+			runePos++
+		}
+		title := strings.TrimSpace(hit.Title)
+		if title == "" {
+			title = hit.URL
+		}
+		line := fmt.Sprintf("%d. [%s](%s)", i+1, title, hit.URL)
+		start := runePos
+		b.WriteString(line)
+		runePos += utf8.RuneCountInString(line)
+		anns = append(anns, map[string]any{
+			"type":        "url_citation",
+			"url":         hit.URL,
+			"title":       title,
+			"start_index": start,
+			"end_index":   runePos,
+		})
+	}
+	if b.Len() == 0 {
+		return "No search results found.", []any{}
+	}
+	return b.String(), anns
+}
+
 func MarshalBuiltinComplete(model, requestID string, createdAt int64, result ExecResult) ([]byte, error) {
 	call := buildWebSearchCall(builtinCallID(requestID), result)
+	msg := grokSearchMessageItem(requestID, result)
 	body := responsesObject{
 		ID:        builtinResponseID(requestID),
 		Object:    "response",
 		CreatedAt: createdAt,
 		Status:    "completed",
 		Model:     model,
-		Output:    []any{call},
-		Usage:     responsesUsage{},
+		Output:    []any{call, msg},
+		Usage:     emptyResponsesUsage(),
 	}
 	if !result.OK {
 		body.Status = "incomplete"
@@ -152,7 +218,7 @@ func BuiltinStreamFrames(model, requestID string, createdAt int64, result ExecRe
 		Status:    "in_progress",
 		Model:     model,
 		Output:    []any{},
-		Usage:     responsesUsage{},
+		Usage:     emptyResponsesUsage(),
 	}
 	seq := 0
 	next := func(eventType string, payload map[string]any) ([]byte, error) {
@@ -193,9 +259,28 @@ func BuiltinStreamFrames(model, requestID string, createdAt int64, result ExecRe
 	}
 	frames = append(frames, frame)
 
+	msg := grokSearchMessageItem(requestID, result)
+	frame, err = next("response.output_item.added", map[string]any{
+		"output_index": 1,
+		"item":         msg,
+	})
+	if err != nil {
+		return nil, err
+	}
+	frames = append(frames, frame)
+
+	frame, err = next("response.output_item.done", map[string]any{
+		"output_index": 1,
+		"item":         msg,
+	})
+	if err != nil {
+		return nil, err
+	}
+	frames = append(frames, frame)
+
 	done := base
 	done.Status = finalStatus
-	done.Output = []any{call}
+	done.Output = []any{call, msg}
 	frame, err = next("response.completed", map[string]any{"response": done})
 	if err != nil {
 		return nil, err

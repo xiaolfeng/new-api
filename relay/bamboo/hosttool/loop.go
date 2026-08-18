@@ -32,6 +32,9 @@ func DecideActionForClient(plan *relaycommon.HostToolPlan, uses []toolUseCall, i
 	if shouldPassthroughClaudeClientTools(info, uses) {
 		return ActionPassthrough
 	}
+	if shouldPassthroughGrokClientSearch(info, uses) {
+		return ActionPassthrough
+	}
 	if len(uses) == 0 {
 		return ActionPassthrough
 	}
@@ -58,6 +61,25 @@ func shouldPassthroughClaudeClientTools(info *relaycommon.RelayInfo, uses []tool
 		// WebSearch helper 会再打一枪 web_search_*；WebFetch 在 2.1.x 仍是本地 axios，
 		// 必须由网关 A-thin 代跑，否则永远走不到 NewAPI。
 		if use.Name != "WebSearch" {
+			return false
+		}
+	}
+	return true
+}
+
+func shouldPassthroughGrokClientSearch(info *relaycommon.RelayInfo, uses []toolUseCall) bool {
+	if info == nil || info.ClientProfile != common.ClientProfileGrokBuild {
+		return false
+	}
+	if len(uses) == 0 {
+		return false
+	}
+	for _, use := range uses {
+		// Grok Build 的 web_search 是客户端 function：主循环看见 function_call
+		// 就会跑 WebSearchTool，再 POST /v1/responses helper（只声明 type=web_search）。
+		// 和 Claude WebSearch 一样必须透传；A-thin hop2 后再抛同名 tool_call 会无限搜。
+		// web_fetch 仍是本地 HTTP，继续交给网关代跑。
+		if CanonicalFromName(use.Name) != CanonicalWebSearch {
 			return false
 		}
 	}

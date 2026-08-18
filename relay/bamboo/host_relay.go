@@ -111,16 +111,20 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 		folded := hosttool.FoldResponse(resp2.ID, resp2.Model, blocks2, results2, resp2.Usage)
 		return writeCompleteResponse(c, info, entryCodec, codecFmt, folded, usage, nil)
 	}
-	prependHostToolCalls(resp2, results)
+	prependHostToolCalls(resp2, info, results)
 	return writeCompleteResponse(c, info, entryCodec, codecFmt, resp2, usage, results)
 }
 
-func prependHostToolCalls(resp *bamboosdk.Response, results []hosttool.ExecResult) {
+func prependHostToolCalls(resp *bamboosdk.Response, info *relaycommon.RelayInfo, results []hosttool.ExecResult) {
 	if resp == nil || len(results) == 0 {
 		return
 	}
+	grok := info != nil && info.ClientProfile == common.ClientProfileGrokBuild
 	calls := make([]bamboosdk.ContentBlock, 0, len(results))
 	for i, r := range results {
+		if grok && r.Kind == "search" {
+			continue
+		}
 		id := r.CallID
 		if id == "" {
 			id = fmt.Sprintf("call_host_%d", i+1)
@@ -130,6 +134,9 @@ func prependHostToolCalls(resp *bamboosdk.Response, results []hosttool.ExecResul
 			name = r.Kind
 		}
 		calls = append(calls, bamboosdk.NewToolUseBlockWithRawInput(id, name, hosttool.CallInputJSON(r)))
+	}
+	if len(calls) == 0 {
+		return
 	}
 	resp.Content = append(calls, resp.Content...)
 }
@@ -244,7 +251,7 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 
 	cs.pausePing()
 	emitPendingVisibleBox(cs, info)
-	emitHostToolCalls(cs, results)
+	emitHostToolCalls(cs, info, results)
 	hop2, hop2Err := collectStreamHop(ctx, c, info, client, entryCodec, outFmt, hop2Req, true, writeSSE, cs)
 	if hop2Err != nil {
 		if cs.HasHeaders() {
@@ -557,11 +564,17 @@ func emitPendingVisibleBox(cs *clientStream, info *relaycommon.RelayInfo) {
 	}
 }
 
-func emitHostToolCalls(cs *clientStream, results []hosttool.ExecResult) {
+func emitHostToolCalls(cs *clientStream, info *relaycommon.RelayInfo, results []hosttool.ExecResult) {
 	if cs == nil {
 		return
 	}
+	grok := info != nil && info.ClientProfile == common.ClientProfileGrokBuild
 	for i, r := range results {
+		if grok && r.Kind == "search" {
+			// 主路径已对 grok search 透传；若仍走到 hop2，禁止再抛
+			// function_call name=web_search，否则客户端 helper 会再搜一轮。
+			continue
+		}
 		id := r.CallID
 		if id == "" {
 			id = fmt.Sprintf("call_host_%d", i+1)
