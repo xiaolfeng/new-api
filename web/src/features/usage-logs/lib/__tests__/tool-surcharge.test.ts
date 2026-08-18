@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { describe, expect, test } from 'vitest'
 
 import type { LogOtherData } from '../../types'
-import { hasToolSurcharge } from '../format'
+import { collectUsageActivityTags, hasToolSurcharge } from '../format'
 
 describe('tool surcharge detection', () => {
   test('shows the marker for a charged structured tool surcharge', () => {
@@ -93,5 +93,32 @@ describe('tool surcharge detection', () => {
     for (const other of invalidCases) {
       expect(hasToolSurcharge(other)).toBe(false)
     }
+  })
+})
+
+describe('usage activity tags', () => {
+  test('reads usage_tags and named fields for fetch and image recognition', () => {
+    expect(
+      collectUsageActivityTags({
+        usage_tags: ['web_fetch', 'image_recognize'],
+        web_fetch: true,
+        web_fetch_call_count: 1,
+        image_recognize: true,
+        image_recognize_image_count: 2,
+      }).map((tag) => tag.id)
+    ).toEqual(['web_fetch', 'image_recognize'])
+  })
+
+  test('still shows Web Search from billed tool surcharges', () => {
+    expect(
+      collectUsageActivityTags({
+        tool_surcharges: [{ name: 'web_search', count: 1, price: 10 }],
+      }).map((tag) => tag.id)
+    ).toEqual(['web_search'])
+  })
+
+  test('does not invent tags from empty other', () => {
+    expect(collectUsageActivityTags(null)).toEqual([])
+    expect(collectUsageActivityTags({})).toEqual([])
   })
 })

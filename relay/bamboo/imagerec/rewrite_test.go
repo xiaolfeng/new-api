@@ -46,7 +46,7 @@ func TestMaybeRewrite_Disabled(t *testing.T) {
 	req := imageReq([]bamboosdk.BambooMessage{
 		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("hi"), pngBlock("aaa")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req)
+	err := MaybeRewrite(testGinContext(), info, req, nil)
 	require.Nil(t, err)
 	require.NotNil(t, info.ImageRecognizePlan)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipDisabled, info.ImageRecognizePlan.SkippedReason)
@@ -59,7 +59,7 @@ func TestMaybeRewrite_InnerHopSkipped(t *testing.T) {
 	req := imageReq([]bamboosdk.BambooMessage{
 		bamboosdk.NewUserMessageBlocks(pngBlock("aaa")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req)
+	err := MaybeRewrite(testGinContext(), info, req, nil)
 	require.Nil(t, err)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipInnerHop, info.ImageRecognizePlan.SkippedReason)
 }
@@ -86,7 +86,7 @@ func TestMaybeRewrite_LatestUserImageRecognizedAndHistoryStripped(t *testing.T) 
 		bamboosdk.NewAssistantMessage("previous answer"),
 		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("what is this"), pngBlock("newimg")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req)
+	err := MaybeRewrite(testGinContext(), info, req, nil)
 	require.Nil(t, err)
 	require.NotNil(t, info.ImageRecognizePlan)
 	assert.True(t, info.ImageRecognizePlan.Enabled)
@@ -128,7 +128,7 @@ func TestMaybeRewrite_HistoryOnlyDoesNotHop(t *testing.T) {
 		bamboosdk.NewAssistantMessage("<<<image_recognition>>>\nold\n<<<end_image_recognition>>>"),
 		bamboosdk.NewUserMessage("just text now"),
 	})
-	err := MaybeRewrite(testGinContext(), info, req)
+	err := MaybeRewrite(testGinContext(), info, req, nil)
 	require.Nil(t, err)
 	assert.False(t, called)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipNoLatestUserImage, info.ImageRecognizePlan.SkippedReason)
@@ -149,7 +149,7 @@ func TestMaybeRewrite_NotConfigured(t *testing.T) {
 	req := imageReq([]bamboosdk.BambooMessage{
 		bamboosdk.NewUserMessageBlocks(pngBlock("newimg")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req)
+	err := MaybeRewrite(testGinContext(), info, req, nil)
 	require.NotNil(t, err)
 	assert.Equal(t, relaycommon.ImageRecognizeSkipNotConfigured, info.ImageRecognizePlan.SkippedReason)
 }
@@ -183,7 +183,7 @@ func TestBuildVisionRequestIsParserOnly(t *testing.T) {
 	req := imageReq([]bamboosdk.BambooMessage{
 		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("这是什么？帮我写邮件"), pngBlock("img")),
 	})
-	err := MaybeRewrite(testGinContext(), info, req)
+	err := MaybeRewrite(testGinContext(), info, req, nil)
 	require.Nil(t, err)
 	require.NotNil(t, got)
 	require.GreaterOrEqual(t, len(got.Messages), 2)
@@ -211,4 +211,140 @@ func TestSplitCaptionsPrefersMarkers(t *testing.T) {
 	require.Len(t, got, 2)
 	assert.Equal(t, "cat", got[0])
 	assert.Equal(t, "dog", got[1])
+}
+
+func enableImageRecognize(t *testing.T) {
+	t.Helper()
+	st := model_setting.GetBambooSettings()
+	prev := *st
+	t.Cleanup(func() { *st = prev })
+	st.EnableImageRecognize = true
+	st.ImageRecognizeChannelId = 9
+	st.ImageRecognizeModel = "vision-model"
+}
+
+func TestMaybeRewrite_TotalTokensTrailerDoesNotStripBeforeHop(t *testing.T) {
+	enableImageRecognize(t)
+
+	hopped := false
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+		hopped = true
+		parts := request.Messages[1].ParseContent()
+		hasImage := false
+		for _, p := range parts {
+			if p.Type == dto.ContentTypeImageURL {
+				hasImage = true
+			}
+		}
+		require.True(t, hasImage, "vision hop must receive the image before any [image] rewrite")
+		return "[Image 1]\nA screenshot", &dto.Usage{PromptTokens: 3, CompletionTokens: 2}, nil
+	}
+
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("这是啥"), pngBlock("pasted")),
+		bamboosdk.NewUserMessage("<total_tokens>15000000 tokens left</total_tokens>"),
+	})
+	err := MaybeRewrite(testGinContext(), info, req, nil)
+	require.Nil(t, err)
+	require.True(t, hopped)
+	require.NotNil(t, info.ImageRecognizePlan)
+	assert.True(t, info.ImageRecognizePlan.Enabled)
+	assert.Equal(t, 1, info.ImageRecognizePlan.ImageCount)
+	assert.Contains(t, info.ImageRecognizePlan.VisibleBox, "A screenshot")
+
+	var texts []string
+	for _, block := range req.Messages[0].Content {
+		tb, ok := block.(*bamboosdk.TextBlock)
+		if !ok {
+			continue
+		}
+		texts = append(texts, tb.Text)
+	}
+	joined := strings.Join(texts, "\n")
+	assert.Contains(t, joined, "A screenshot")
+	assert.NotContains(t, joined, relaycommon.ImageRecognizeHistoryMark)
+	_, isImg := req.Messages[0].Content[1].(*bamboosdk.ImageBlock)
+	assert.False(t, isImg)
+}
+
+func TestMaybeRewrite_TotalTokensTrailerDoesNotPromoteHistory(t *testing.T) {
+	enableImageRecognize(t)
+
+	called := false
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+		called = true
+		return "should not run", nil, nil
+	}
+
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(bamboosdk.NewTextBlock("old"), pngBlock("oldimg")),
+		bamboosdk.NewAssistantMessage("previous"),
+		bamboosdk.NewUserMessage("just text now"),
+		bamboosdk.NewUserMessage("<total_tokens>15000000 tokens left</total_tokens>"),
+	})
+	err := MaybeRewrite(testGinContext(), info, req, nil)
+	require.Nil(t, err)
+	assert.False(t, called)
+	assert.Equal(t, relaycommon.ImageRecognizeSkipNoLatestUserImage, info.ImageRecognizePlan.SkippedReason)
+	hist := req.Messages[0].Content[1].(*bamboosdk.TextBlock)
+	assert.Equal(t, relaycommon.ImageRecognizeHistoryMark, hist.Text)
+}
+
+func TestMaybeRewrite_LiftsToolResultImageThenRecognizes(t *testing.T) {
+	enableImageRecognize(t)
+
+	hopped := false
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *kittypes.NewAPIError) {
+		hopped = true
+		parts := request.Messages[1].ParseContent()
+		hasImage := false
+		for _, p := range parts {
+			if p.Type != dto.ContentTypeImageURL {
+				continue
+			}
+			if img := p.GetImageMedia(); img != nil && strings.Contains(img.Url, "abc123") {
+				hasImage = true
+			}
+		}
+		require.True(t, hasImage, "tool_result image must be lifted before the vision hop")
+		return "[Image 1]\nA photo", &dto.Usage{PromptTokens: 4, CompletionTokens: 2}, nil
+	}
+
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewAssistantMessageBlocks(bamboosdk.NewToolUseBlock("call_1", "Read", map[string]string{"file_path": "4.png"})),
+		bamboosdk.NewUserMessageBlocks(bamboosdk.NewToolResultBlock("call_1", "", false)),
+		bamboosdk.NewUserMessage("<total_tokens>14999596 tokens left</total_tokens>"),
+	})
+	entry := []byte(`{"messages":[
+		{"role":"assistant","content":[{"type":"tool_use","id":"call_1","name":"Read","input":{}}]},
+		{"role":"user","content":[{"type":"tool_result","tool_use_id":"call_1","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"abc123"}}]}]},
+		{"role":"user","content":"<total_tokens>14999596 tokens left</total_tokens>"}
+	]}`)
+	err := MaybeRewrite(testGinContext(), info, req, entry)
+	require.Nil(t, err)
+	require.True(t, hopped)
+	require.NotNil(t, info.ImageRecognizePlan)
+	assert.True(t, info.ImageRecognizePlan.Enabled)
+	assert.Contains(t, info.ImageRecognizePlan.VisibleBox, "A photo")
+
+	foundCaption := false
+	for _, block := range req.Messages[1].Content {
+		tb, ok := block.(*bamboosdk.TextBlock)
+		if !ok {
+			continue
+		}
+		if strings.Contains(tb.Text, "A photo") {
+			foundCaption = true
+		}
+	}
+	assert.True(t, foundCaption)
 }

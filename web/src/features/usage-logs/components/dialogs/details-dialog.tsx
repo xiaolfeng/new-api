@@ -226,6 +226,19 @@ function quotaSaturationKindLabel(
   return t("Invalid (NaN)");
 }
 
+function toolSurchargeLabel(t: (key: string) => string, name: string): string {
+  if (name === "web_search" || name === "web_search_preview") {
+    return t("Web Search");
+  }
+  if (name === "web_fetch") {
+    return t("WebFetch");
+  }
+  if (name === "image_recognize") {
+    return t("Image recognition");
+  }
+  return name;
+}
+
 function BillingBreakdown(props: {
   log: UsageLog;
   other: LogOtherData;
@@ -364,10 +377,47 @@ function BillingBreakdown(props: {
     }
   }
 
-  if (other.web_search && other.web_search_call_count) {
+  const surchargeNames = new Set(
+    (other.tool_surcharges ?? [])
+      .map((item) => (typeof item?.name === "string" ? item.name.trim() : ""))
+      .filter(Boolean),
+  );
+  if (Array.isArray(other.tool_surcharges)) {
+    for (const item of other.tool_surcharges) {
+      const name = typeof item?.name === "string" ? item.name.trim() : "";
+      if (name === "" || !item.count) continue;
+      rows.push({
+        label: toolSurchargeLabel(t, name),
+        value: `${item.count}x${item.price ? ` (${fmtPrice(item.price)})` : ""}`,
+      });
+    }
+  }
+
+  if (
+    other.web_search &&
+    other.web_search_call_count &&
+    !surchargeNames.has("web_search") &&
+    !surchargeNames.has("web_search_preview")
+  ) {
     rows.push({
       label: t("Web Search"),
       value: `${other.web_search_call_count}x${other.web_search_price ? ` (${fmtPrice(other.web_search_price)})` : ""}`,
+    });
+  }
+
+  if (other.web_fetch && other.web_fetch_call_count) {
+    rows.push({
+      label: t("WebFetch"),
+      value: `${other.web_fetch_call_count}x`,
+    });
+  }
+
+  if (other.image_recognize) {
+    rows.push({
+      label: t("Image recognition"),
+      value: other.image_recognize_image_count
+        ? String(other.image_recognize_image_count)
+        : "1",
     });
   }
 

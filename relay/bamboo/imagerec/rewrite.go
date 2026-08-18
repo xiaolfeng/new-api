@@ -2,7 +2,9 @@ package imagerec
 
 import (
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
 	"github.com/gin-gonic/gin"
 
+	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -39,13 +42,101 @@ func modelHasVision(info *relaycommon.RelayInfo) bool {
 	return false
 }
 
-func latestUserIndex(messages []bamboosdk.BambooMessage) int {
-	for i := len(messages) - 1; i >= 0; i-- {
-		if messages[i].Role == bamboosdk.RoleUser {
-			return i
+// Claude Code 会在真实用户消息后再塞一条预算提示，不能当成“最近一次用户输入”。
+var totalTokensTrailerRe = regexp.MustCompile(`(?s)^\s*<total_tokens>.*</total_tokens>\s*$`)
+
+func isSyntheticUserMessage(msg bamboosdk.BambooMessage) bool {
+	for _, block := range msg.Content {
+		switch b := block.(type) {
+		case *bamboosdk.ImageBlock:
+			if b != nil && b.Source != nil {
+				return false
+			}
+		case *bamboosdk.DocumentBlock:
+			if b != nil && b.Source != nil {
+				return false
+			}
+		case *bamboosdk.ToolResultBlock:
+			if b != nil {
+				return false
+			}
 		}
 	}
-	return -1
+	text := collectUserText(msg)
+	if text == "" {
+		return true
+	}
+	return totalTokensTrailerRe.MatchString(text)
+}
+
+// latestUserTurnStart 返回最近一轮用户消息的起点（不含助手）。
+// 会跳过 <total_tokens> 这类合成尾巴，避免把本轮图片误判成历史。
+func latestUserTurnStart(messages []bamboosdk.BambooMessage) int {
+	real := -1
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role != bamboosdk.RoleUser {
+			continue
+		}
+		if isSyntheticUserMessage(messages[i]) {
+			continue
+		}
+		real = i
+		break
+	}
+	if real < 0 {
+		return -1
+	}
+	for i := real - 1; i >= 0; i-- {
+		if messages[i].Role == bamboosdk.RoleAssistant {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+func collectTurnImages(messages []bamboosdk.BambooMessage, start int) []extractedImage {
+	if start < 0 {
+		return nil
+	}
+	seen := make(map[string]struct{})
+	out := make([]extractedImage, 0)
+	for i := start; i < len(messages); i++ {
+		if messages[i].Role != bamboosdk.RoleUser {
+			continue
+		}
+		for _, img := range collectImages(messages[i]) {
+			if _, dup := seen[img.Fingerprint]; dup {
+				continue
+			}
+			seen[img.Fingerprint] = struct{}{}
+			out = append(out, img)
+		}
+	}
+	return out
+}
+
+func collectTurnText(messages []bamboosdk.BambooMessage, start int) string {
+	if start < 0 {
+		return ""
+	}
+	var b strings.Builder
+	for i := start; i < len(messages); i++ {
+		if messages[i].Role != bamboosdk.RoleUser {
+			continue
+		}
+		if isSyntheticUserMessage(messages[i]) {
+			continue
+		}
+		text := collectUserText(messages[i])
+		if text == "" {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(text)
+	}
+	return b.String()
 }
 
 type extractedImage struct {
@@ -161,7 +252,8 @@ func truncateRunes(s string, max int) string {
 
 // MaybeRewrite inspects the parsed bamboo request and, when needed, runs
 // image recognition then strips every ImageBlock from the IR.
-func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest) *kittypes.NewAPIError {
+// entryBytes 是入口协议原文，用来把 codec 丢掉的 tool_result 图片捞回 IR。
+func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest, entryBytes []byte) *kittypes.NewAPIError {
 	if info == nil || req == nil {
 		return nil
 	}
@@ -187,15 +279,17 @@ func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.
 		return nil
 	}
 
-	latestIdx := latestUserIndex(req.Messages)
+	start := latestUserTurnStart(req.Messages)
+	liftToolResultImages(req, start, entryBytes)
 	var latestImages []extractedImage
 	var latestText string
-	if latestIdx >= 0 {
-		latestImages = collectImages(req.Messages[latestIdx])
-		latestText = collectUserText(req.Messages[latestIdx])
+	if start >= 0 {
+		latestImages = collectTurnImages(req.Messages, start)
+		latestText = collectTurnText(req.Messages, start)
 	}
 
 	if len(latestImages) == 0 {
+		// 本轮确认没图之后，才把历史 ImageBlock 改成 [image]，避免挡在识图前面。
 		stripAllImages(req, nil, nil)
 		info.ImageRecognizePlan = &relaycommon.ImageRecognizePlan{
 			Enabled:       false,
@@ -378,6 +472,81 @@ func buildVisionRequest(c *gin.Context, st *model_setting.BambooSettings, userTe
 }
 
 func commonBoolPtr(v bool) *bool { return &v }
+
+type wireMessage struct {
+	Role    string          `json:"role"`
+	Content json.RawMessage `json:"content"`
+}
+
+type wireContentPart struct {
+	Type    string                   `json:"type"`
+	Source  *bamboosdk.ContentSource `json:"source"`
+	Content json.RawMessage          `json:"content"`
+}
+
+func liftToolResultImages(req *bamboocodec.RelayRequest, start int, entryBytes []byte) {
+	if req == nil || start < 0 || len(entryBytes) == 0 {
+		return
+	}
+	var wire struct {
+		Messages []wireMessage `json:"messages"`
+	}
+	if err := common.Unmarshal(entryBytes, &wire); err != nil {
+		return
+	}
+	if len(wire.Messages) != len(req.Messages) {
+		return
+	}
+	for i := start; i < len(req.Messages); i++ {
+		if req.Messages[i].Role != bamboosdk.RoleUser {
+			continue
+		}
+		existing := collectImages(req.Messages[i])
+		seen := make(map[string]struct{}, len(existing))
+		for _, img := range existing {
+			seen[img.Fingerprint] = struct{}{}
+		}
+		for _, src := range imagesFromWireContent(wire.Messages[i].Content) {
+			srcCopy := src
+			fp := fingerprint(&srcCopy)
+			if _, ok := seen[fp]; ok {
+				continue
+			}
+			seen[fp] = struct{}{}
+			req.Messages[i].Content = append(req.Messages[i].Content, bamboosdk.NewImageBlock(srcCopy))
+		}
+	}
+}
+
+func imagesFromWireContent(raw json.RawMessage) []bamboosdk.ContentSource {
+	if len(raw) == 0 {
+		return nil
+	}
+	var asString string
+	if err := common.Unmarshal(raw, &asString); err == nil {
+		return nil
+	}
+	var parts []wireContentPart
+	if err := common.Unmarshal(raw, &parts); err != nil {
+		return nil
+	}
+	out := make([]bamboosdk.ContentSource, 0)
+	for _, part := range parts {
+		switch part.Type {
+		case "image":
+			if part.Source == nil {
+				continue
+			}
+			if strings.TrimSpace(part.Source.Data) == "" && strings.TrimSpace(part.Source.URL) == "" {
+				continue
+			}
+			out = append(out, *part.Source)
+		case "tool_result":
+			out = append(out, imagesFromWireContent(part.Content)...)
+		}
+	}
+	return out
+}
 
 func resolveImageDataURL(c *gin.Context, src *bamboosdk.ContentSource) (string, string, error) {
 	if src == nil {

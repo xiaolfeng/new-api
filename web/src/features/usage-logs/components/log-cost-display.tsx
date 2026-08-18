@@ -30,7 +30,11 @@ import {
 } from '@/components/ui/tooltip'
 import { formatLogQuota } from '@/lib/format'
 
-import { hasToolSurcharge } from '../lib/format'
+import {
+  collectUsageActivityTags,
+  hasToolSurcharge,
+  type UsageActivityTag,
+} from '../lib/format'
 import type { LogOtherData } from '../types'
 
 interface LogCostDisplayProps {
@@ -79,6 +83,29 @@ function ToolSurchargeMarker() {
   )
 }
 
+function UsageActivityTagBadge(props: { tag: UsageActivityTag }) {
+  const { t } = useTranslation()
+  const label = t(props.tag.labelKey)
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <StatusBadge
+            label={label}
+            variant='info'
+            size='sm'
+            copyable={false}
+            className='h-5 cursor-help px-1.5'
+            data-usage-activity-tag={props.tag.id}
+          />
+        }
+      />
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 function QuotaBadge(props: { quota: number }) {
   const quotaDisplay = splitQuotaDisplay(formatLogQuota(props.quota))
 
@@ -120,8 +147,9 @@ function SubscriptionBadge(props: { quota: number }) {
 export function LogCostDisplay(props: LogCostDisplayProps) {
   const isSubscription = props.other?.billing_source === 'subscription'
   const showToolSurcharge = hasToolSurcharge(props.other)
+  const activityTags = collectUsageActivityTags(props.other)
 
-  if (!isSubscription && !showToolSurcharge) {
+  if (!isSubscription && !showToolSurcharge && activityTags.length === 0) {
     return (
       <div className='flex flex-col gap-0.5'>
         <QuotaBadge quota={props.quota} />
@@ -131,12 +159,15 @@ export function LogCostDisplay(props: LogCostDisplayProps) {
 
   return (
     <TooltipProvider>
-      <div className='inline-flex items-center gap-1'>
+      <div className='inline-flex flex-wrap items-center gap-1'>
         {isSubscription ? (
           <SubscriptionBadge quota={props.quota} />
         ) : (
           <QuotaBadge quota={props.quota} />
         )}
+        {activityTags.map((tag) => (
+          <UsageActivityTagBadge key={tag.id} tag={tag} />
+        ))}
         {showToolSurcharge ? <ToolSurchargeMarker /> : null}
       </div>
     </TooltipProvider>

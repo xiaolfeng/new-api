@@ -370,6 +370,7 @@ type ResponsesReasoningSummaryPart struct {
 const (
 	BuildInToolWebSearchPreview = "web_search_preview"
 	BuildInToolWebSearch        = "web_search"
+	BuildInToolWebFetch         = "web_fetch"
 	BuildInToolFileSearch       = "file_search"
 	BuildInToolGoogleSearch     = "google_search"
 	BuildInToolImageGeneration  = "image_generation"

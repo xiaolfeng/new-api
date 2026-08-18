@@ -1,5 +1,12 @@
 package common
 
+import "strings"
+
+const (
+	HostToolCanonicalSearch = "host.web_search"
+	HostToolCanonicalFetch  = "host.web_fetch"
+)
+
 // HostToolPlan 是端侧工具检测/改写/执行的本地副本。
 // 放在 relay/common，避免 RelayInfo 导入 relay/bamboo/hosttool 造成循环依赖。
 type HostToolPlan struct {
@@ -57,4 +64,23 @@ func (p *HostToolPlan) DeclByCanonical(canonical string) *HostToolDecl {
 		}
 	}
 	return nil
+}
+
+// SuccessfulExecCounts 统计本轮成功执行的检索 / 抓取次数，供费用列标签使用。
+func (p *HostToolPlan) SuccessfulExecCounts() (search, fetch int) {
+	if p == nil {
+		return 0, 0
+	}
+	for _, ex := range p.Execs {
+		if strings.TrimSpace(ex.ErrorCode) != "" {
+			continue
+		}
+		switch ex.Canonical {
+		case HostToolCanonicalFetch:
+			fetch++
+		case HostToolCanonicalSearch:
+			search++
+		}
+	}
+	return search, fetch
 }

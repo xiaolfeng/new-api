@@ -41,6 +41,9 @@ describe('log cost display', () => {
       Subscription: 'Subscription',
       'Deducted by subscription': 'Deducted by subscription',
       'Includes tool-call surcharge': 'Includes tool-call surcharge',
+      'Web Search': 'Web Search',
+      WebFetch: 'WebFetch',
+      'Image recognition': 'Image recognition',
     })
   })
 
@@ -79,5 +82,29 @@ describe('log cost display', () => {
     expect(
       screen.getByRole('img', { name: 'Includes tool-call surcharge' })
     ).toHaveAttribute('data-tool-surcharge-indicator', 'true')
+    expect(screen.getByText('Web Search')).toBeInTheDocument()
+  })
+
+  test('adds named tags for WebFetch and image recognition next to cost', () => {
+    renderCost({
+      quota: 800,
+      other: {
+        usage_tags: ['web_fetch', 'image_recognize'],
+        web_fetch: true,
+        web_fetch_call_count: 1,
+        image_recognize: true,
+        image_recognize_image_count: 1,
+      },
+    })
+
+    expect(
+      screen.getByText('WebFetch').closest('[data-usage-activity-tag]')
+    ).toHaveAttribute('data-usage-activity-tag', 'web_fetch')
+    expect(
+      screen.getByText('Image recognition').closest('[data-usage-activity-tag]')
+    ).toHaveAttribute('data-usage-activity-tag', 'image_recognize')
+    expect(
+      screen.queryByRole('img', { name: 'Includes tool-call surcharge' })
+    ).not.toBeInTheDocument()
   })
 })

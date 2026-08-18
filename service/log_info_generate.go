@@ -143,6 +143,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	other["admin_info"] = adminInfo
 	appendHostToolAdminInfo(relayInfo, adminInfo)
 	appendImageRecognizeAdminInfo(relayInfo, adminInfo)
+	appendUsageActivityTags(relayInfo, other)
 	appendRequestPath(ctx, relayInfo, other)
 	appendRequestConversionChain(relayInfo, other)
 	appendFinalRequestFormat(relayInfo, other)
@@ -169,6 +170,62 @@ func appendImageRecognizeAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[s
 		"prompt_tokens":     plan.PromptTokens,
 		"completion_tokens": plan.CompletionTok,
 	}
+}
+
+func appendUsageActivityTags(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {
+	if relayInfo == nil || other == nil {
+		return
+	}
+	searchCount, fetchCount := countHostToolActivity(relayInfo)
+	tags := make([]string, 0, 3)
+	if searchCount > 0 {
+		other["web_search"] = true
+		other["web_search_call_count"] = searchCount
+		tags = append(tags, "web_search")
+	}
+	if fetchCount > 0 {
+		other["web_fetch"] = true
+		other["web_fetch_call_count"] = fetchCount
+		tags = append(tags, "web_fetch")
+	}
+	if relayInfo.ImageRecognizePlan != nil && relayInfo.ImageRecognizePlan.Enabled {
+		other["image_recognize"] = true
+		if relayInfo.ImageRecognizePlan.ImageCount > 0 {
+			other["image_recognize_image_count"] = relayInfo.ImageRecognizePlan.ImageCount
+		}
+		tags = append(tags, "image_recognize")
+	}
+	if len(tags) > 0 {
+		other["usage_tags"] = tags
+	}
+}
+
+func countHostToolActivity(relayInfo *relaycommon.RelayInfo) (search, fetch int) {
+	if relayInfo == nil {
+		return 0, 0
+	}
+	if relayInfo.HostToolPlan != nil {
+		search, fetch = relayInfo.HostToolPlan.SuccessfulExecCounts()
+	}
+	if relayInfo.ResponsesUsageInfo == nil {
+		return search, fetch
+	}
+	for name, tool := range relayInfo.ResponsesUsageInfo.BuiltInTools {
+		if tool == nil || tool.CallCount <= 0 {
+			continue
+		}
+		switch name {
+		case dto.BuildInToolWebSearch, dto.BuildInToolWebSearchPreview:
+			if tool.CallCount > search {
+				search = tool.CallCount
+			}
+		case dto.BuildInToolWebFetch:
+			if tool.CallCount > fetch {
+				fetch = tool.CallCount
+			}
+		}
+	}
+	return search, fetch
 }
 
 func appendHostToolAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[string]interface{}) {

@@ -103,7 +103,7 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 
 	info.BambooRelayData = extractBambooRelayData(relayReq)
 
-	if recErr := imagerec.MaybeRewrite(c, info, relayReq); recErr != nil {
+	if recErr := imagerec.MaybeRewrite(c, info, relayReq, requestBody); recErr != nil {
 		return nil, recErr
 	}
 

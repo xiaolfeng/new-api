@@ -153,6 +153,81 @@ export function hasToolSurcharge(other: LogOtherData | null): boolean {
   )
 }
 
+export type UsageActivityTagId =
+  | 'web_search'
+  | 'web_fetch'
+  | 'image_recognize'
+
+export interface UsageActivityTag {
+  id: UsageActivityTagId
+  labelKey: string
+}
+
+const usageActivityTagOrder: UsageActivityTag[] = [
+  { id: 'web_search', labelKey: 'Web Search' },
+  { id: 'web_fetch', labelKey: 'WebFetch' },
+  { id: 'image_recognize', labelKey: 'Image recognition' },
+]
+
+function surchargeNameLooksLike(
+  name: string,
+  prefix: 'web_search' | 'web_fetch'
+): boolean {
+  return name === prefix || name.startsWith(`${prefix}_`)
+}
+
+/**
+ * Named activity chips shown next to the cost. These are not surcharge
+ * markers: WebFetch is usually $0, and image recognition bills on its own hop.
+ */
+export function collectUsageActivityTags(
+  other: LogOtherData | null
+): UsageActivityTag[] {
+  if (!other) return []
+
+  const present = new Set<string>()
+  if (Array.isArray(other.usage_tags)) {
+    for (const tag of other.usage_tags) {
+      if (typeof tag === 'string' && tag.trim() !== '') {
+        present.add(tag.trim())
+      }
+    }
+  }
+  if (
+    other.web_search === true ||
+    isPositiveFiniteNumber(other.web_search_call_count)
+  ) {
+    present.add('web_search')
+  }
+  if (
+    other.web_fetch === true ||
+    isPositiveFiniteNumber(other.web_fetch_call_count)
+  ) {
+    present.add('web_fetch')
+  }
+  if (
+    other.image_recognize === true ||
+    isPositiveFiniteNumber(other.image_recognize_image_count)
+  ) {
+    present.add('image_recognize')
+  }
+  if (Array.isArray(other.tool_surcharges)) {
+    for (const item of other.tool_surcharges) {
+      const name = typeof item?.name === 'string' ? item.name.trim() : ''
+      if (name === '') continue
+      if (!isPositiveFiniteNumber(item.count)) continue
+      if (surchargeNameLooksLike(name, 'web_search')) {
+        present.add('web_search')
+      }
+      if (surchargeNameLooksLike(name, 'web_fetch')) {
+        present.add('web_fetch')
+      }
+    }
+  }
+
+  return usageActivityTagOrder.filter((tag) => present.has(tag.id))
+}
+
 /**
  * Parse the 'other' field from JSON string to object.
  * Returns null for falsy input, non-object parse results, or invalid JSON.

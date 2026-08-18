@@ -205,6 +205,11 @@ export interface LogOtherData {
   web_search?: boolean
   web_search_call_count?: number
   web_search_price?: number
+  web_fetch?: boolean
+  web_fetch_call_count?: number
+  image_recognize?: boolean
+  image_recognize_image_count?: number
+  usage_tags?: string[]
   file_search?: boolean
   file_search_call_count?: number
   file_search_price?: number
