@@ -18,16 +18,29 @@ import (
 )
 
 func ShouldNormalizeResponses(info *relaycommon.RelayInfo) bool {
+	return grokStrictEnabled(info) && info.RelayFormat == types.RelayFormatOpenAIResponses
+}
+
+func grokStrictEnabled(info *relaycommon.RelayInfo) bool {
 	if info == nil {
 		return false
 	}
 	if !model_setting.GetBambooSettings().GrokStrictEgressEnabled() {
 		return false
 	}
-	if info.ClientProfile != common.ClientProfileGrokBuild {
+	return info.ClientProfile == common.ClientProfileGrokBuild
+}
+
+func grokStrictMutate(info *relaycommon.RelayInfo) bool {
+	if !grokStrictEnabled(info) {
 		return false
 	}
-	return info.RelayFormat == types.RelayFormatOpenAIResponses
+	switch info.RelayFormat {
+	case types.RelayFormatOpenAIResponses, types.RelayFormatOpenAI:
+		return true
+	default:
+		return false
+	}
 }
 
 func NormalizeResponsesPayload(info *relaycommon.RelayInfo, payload []byte) []byte {
@@ -42,7 +55,7 @@ func NormalizeResponsesSSEFrame(info *relaycommon.RelayInfo, frame []byte) []byt
 	if info == nil || len(frame) == 0 {
 		return frame
 	}
-	if info.RelayFormat != types.RelayFormatOpenAIResponses {
+	if info.RelayFormat != types.RelayFormatOpenAIResponses && info.RelayFormat != types.RelayFormatOpenAI {
 		return frame
 	}
 	parts := splitSSEFrames(frame)
@@ -75,7 +88,7 @@ func normalizeResponsesJSON(info *relaycommon.RelayInfo, raw []byte, parentEvent
 	if info == nil || len(raw) == 0 {
 		return raw
 	}
-	if info.RelayFormat != types.RelayFormatOpenAIResponses {
+	if info.RelayFormat != types.RelayFormatOpenAIResponses && info.RelayFormat != types.RelayFormatOpenAI {
 		return raw
 	}
 	trimmed := bytes.TrimSpace(raw)
@@ -86,8 +99,10 @@ func normalizeResponsesJSON(info *relaycommon.RelayInfo, raw []byte, parentEvent
 	if err := common.Unmarshal(trimmed, &root); err != nil {
 		return raw
 	}
-	observeMissedUA(info, root, parentEvent)
-	if !ShouldNormalizeResponses(info) {
+	if info.RelayFormat == types.RelayFormatOpenAIResponses {
+		observeMissedUA(info, root, parentEvent)
+	}
+	if !grokStrictMutate(info) {
 		return raw
 	}
 	st := &responsesWalkState{info: info, eventType: parentEvent}
@@ -133,6 +148,8 @@ func walkResponsesObject(node map[string]any, st *responsesWalkState) {
 	if typ, _ := node["type"].(string); typ == "message" {
 		fillMessageContent(node, st)
 	}
+	fillOutputTextAnnotations(node, st)
+	fillUsageDetails(node, st)
 	savedEvent := st.eventType
 	for _, child := range node {
 		walkResponsesValue(child, st)
@@ -256,6 +273,61 @@ func fillMessageContent(node map[string]any, st *responsesWalkState) {
 	}
 	node["content"] = []any{}
 	st.mutated = true
+}
+
+func fillOutputTextAnnotations(node map[string]any, st *responsesWalkState) {
+	typ, _ := node["type"].(string)
+	if typ != "output_text" {
+		return
+	}
+	if v, ok := node["annotations"]; ok && v != nil {
+		return
+	}
+	node["annotations"] = []any{}
+	st.mutated = true
+}
+
+func fillUsageDetails(node map[string]any, st *responsesWalkState) {
+	if !looksLikeUsage(node) {
+		return
+	}
+	if v, ok := node["input_tokens_details"]; !ok || v == nil {
+		cached := 0
+		if details, ok := node["prompt_tokens_details"].(map[string]any); ok {
+			switch n := details["cached_tokens"].(type) {
+			case float64:
+				cached = int(n)
+			case int:
+				cached = n
+			case int64:
+				cached = int(n)
+			}
+		}
+		node["input_tokens_details"] = map[string]any{"cached_tokens": cached}
+		st.mutated = true
+	}
+	if _, hasInput := node["input_tokens"]; hasInput {
+		if v, ok := node["output_tokens_details"]; !ok || v == nil {
+			node["output_tokens_details"] = map[string]any{"reasoning_tokens": 0}
+			st.mutated = true
+		}
+	}
+}
+
+func looksLikeUsage(node map[string]any) bool {
+	_, hasPrompt := node["prompt_tokens"]
+	_, hasInput := node["input_tokens"]
+	_, hasCompletion := node["completion_tokens"]
+	_, hasOutput := node["output_tokens"]
+	if hasPrompt || hasInput {
+		return true
+	}
+	return (hasCompletion || hasOutput) && hasKey(node, "total_tokens")
+}
+
+func hasKey(node map[string]any, key string) bool {
+	_, ok := node[key]
+	return ok
 }
 
 func fillFunctionCall(node map[string]any, st *responsesWalkState) {

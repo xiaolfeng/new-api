@@ -83,14 +83,7 @@ func claudeMessageID(requestID string) string {
 	return "msg_" + requestID
 }
 
-func claudeSearchResultContent(result ExecResult) any {
-	if !result.OK {
-		code := result.ErrorCode
-		if code == "" {
-			code = ErrInvalidInput
-		}
-		return map[string]any{"error_code": code}
-	}
+func claudeSearchHits(result ExecResult) []map[string]any {
 	src := resolvedHits(result)
 	hits := make([]map[string]any, 0, len(src))
 	for _, hit := range src {
@@ -106,27 +99,61 @@ func claudeSearchResultContent(result ExecResult) any {
 	return hits
 }
 
+func claudeSearchErrorContent(result ExecResult) map[string]any {
+	code := result.ErrorCode
+	if code == "" {
+		code = ErrInvalidInput
+	}
+	return map[string]any{"error_code": code}
+}
+
+// claudeSearchResultBlocks 按 Claude Code 2.1.234 o4S 拆块：
+// 每个 web_search_tool_result 计 1 次搜索展示；content[] 才是该次的链接。
+// 全部 hits 塞进一块时软件只显示 Did 1 search，Links 也堆成一个数组。
+func claudeSearchResultBlocks(toolID string, result ExecResult) []any {
+	if !result.OK {
+		return []any{map[string]any{
+			"type":        "web_search_tool_result",
+			"tool_use_id": toolID,
+			"content":     claudeSearchErrorContent(result),
+		}}
+	}
+	hits := claudeSearchHits(result)
+	if len(hits) == 0 {
+		return []any{map[string]any{
+			"type":        "web_search_tool_result",
+			"tool_use_id": toolID,
+			"content":     []any{},
+		}}
+	}
+	out := make([]any, 0, len(hits))
+	for _, hit := range hits {
+		out = append(out, map[string]any{
+			"type":        "web_search_tool_result",
+			"tool_use_id": toolID,
+			"content":     []any{hit},
+		})
+	}
+	return out
+}
+
 func MarshalClaudeServerSearch(model, requestID string, result ExecResult) ([]byte, error) {
 	toolID := claudeServerToolID(requestID)
-	query := result.Query
-	body := map[string]any{
-		"id":    claudeMessageID(requestID),
-		"type":  "message",
-		"role":  "assistant",
-		"model": model,
-		"content": []any{
-			map[string]any{
-				"type":  "server_tool_use",
-				"id":    toolID,
-				"name":  "web_search",
-				"input": map[string]any{"query": query},
-			},
-			map[string]any{
-				"type":        "web_search_tool_result",
-				"tool_use_id": toolID,
-				"content":     claudeSearchResultContent(result),
-			},
+	content := []any{
+		map[string]any{
+			"type":  "server_tool_use",
+			"id":    toolID,
+			"name":  "web_search",
+			"input": map[string]any{"query": result.Query},
 		},
+	}
+	content = append(content, claudeSearchResultBlocks(toolID, result)...)
+	body := map[string]any{
+		"id":          claudeMessageID(requestID),
+		"type":        "message",
+		"role":        "assistant",
+		"model":       model,
+		"content":     content,
 		"stop_reason": "end_turn",
 		"usage": map[string]any{
 			"input_tokens":  0,
@@ -281,19 +308,17 @@ func ClaudeServerSearchStreamFrames(model, requestID string, result ExecResult) 
 		return nil, err
 	}
 
-	if err := appendFrame("content_block_start", map[string]any{
-		"index": 1,
-		"content_block": map[string]any{
-			"type":        "web_search_tool_result",
-			"tool_use_id": toolID,
-			"content":     claudeSearchResultContent(result),
-		},
-	}); err != nil {
-		return nil, err
-	}
-
-	if err := appendFrame("content_block_stop", map[string]any{"index": 1}); err != nil {
-		return nil, err
+	for i, block := range claudeSearchResultBlocks(toolID, result) {
+		idx := i + 1
+		if err := appendFrame("content_block_start", map[string]any{
+			"index":         idx,
+			"content_block": block,
+		}); err != nil {
+			return nil, err
+		}
+		if err := appendFrame("content_block_stop", map[string]any{"index": idx}); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := appendFrame("message_delta", map[string]any{

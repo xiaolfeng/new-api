@@ -162,6 +162,66 @@ func TestNormalizeMessageItemGetsEmptyContent(t *testing.T) {
 	assert.NotContains(t, string(got), `"content"`)
 }
 
+func TestNormalizeOutputTextGetsAnnotations(t *testing.T) {
+	info := grokResponsesInfo()
+	raw := []byte(`{"type":"response.content_part.added","part":{"type":"output_text","text":""}}`)
+	out := NormalizeResponsesSSEData(info, raw)
+	var root map[string]any
+	require.NoError(t, common.Unmarshal(out, &root))
+	part := root["part"].(map[string]any)
+	anns, ok := part["annotations"].([]any)
+	require.True(t, ok)
+	assert.Empty(t, anns)
+
+	info = grokResponsesInfo()
+	raw = []byte(`{"type":"response.output_item.done","item":{"type":"message","id":"msg_1","role":"assistant","status":"completed","content":[{"type":"output_text","text":"hi"}]}}`)
+	out = NormalizeResponsesSSEData(info, raw)
+	require.NoError(t, common.Unmarshal(out, &root))
+	item := root["item"].(map[string]any)
+	content := item["content"].([]any)
+	text := content[0].(map[string]any)
+	_, hasAnn := text["annotations"]
+	assert.True(t, hasAnn)
+
+	codex := &relaycommon.RelayInfo{
+		ClientProfile: common.ClientProfileCodex,
+		RelayFormat:   types.RelayFormatOpenAIResponses,
+		RequestId:     "req1",
+	}
+	raw = []byte(`{"type":"response.content_part.added","part":{"type":"output_text","text":""}}`)
+	got := NormalizeResponsesSSEData(codex, raw)
+	assert.Equal(t, raw, got)
+}
+
+func TestNormalizeUsageGetsInputTokensDetails(t *testing.T) {
+	info := grokResponsesInfo()
+	raw := []byte(`{"object":"response","created_at":1,"usage":{"input_tokens":3,"output_tokens":4,"total_tokens":7}}`)
+	out := NormalizeResponsesPayload(info, raw)
+	var root map[string]any
+	require.NoError(t, common.Unmarshal(out, &root))
+	usage := root["usage"].(map[string]any)
+	details := usage["input_tokens_details"].(map[string]any)
+	assert.Equal(t, float64(0), details["cached_tokens"])
+	_, hasOut := usage["output_tokens_details"]
+	assert.True(t, hasOut)
+
+	chat := grokResponsesInfo()
+	chat.RelayFormat = types.RelayFormatOpenAI
+	frame := []byte(`data: {"id":"chatcmpl-1","object":"chat.completion.chunk","created":1,"model":"x","choices":[],"usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}` + "\n\n")
+	framed := NormalizeResponsesSSEFrame(chat, frame)
+	assert.Contains(t, string(framed), `"input_tokens_details"`)
+	assert.Contains(t, string(framed), `"cached_tokens"`)
+
+	codex := &relaycommon.RelayInfo{
+		ClientProfile: common.ClientProfileCodex,
+		RelayFormat:   types.RelayFormatOpenAI,
+		RequestId:     "req1",
+	}
+	raw = []byte(`{"object":"chat.completion","usage":{"prompt_tokens":1,"completion_tokens":2,"total_tokens":3}}`)
+	got := NormalizeResponsesPayload(codex, raw)
+	assert.Equal(t, raw, got)
+}
+
 func TestNormalizeOutputItemEventDoesNotGetCreated(t *testing.T) {
 	info := grokResponsesInfo()
 	raw := []byte(`{"type":"response.output_item.added","output_index":0,"item":{"type":"web_search_call","id":"ws_1","status":"in_progress","action":{"type":"search","query":"q"}}}`)

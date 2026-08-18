@@ -134,6 +134,29 @@ func TestClaudeServerSearchStreamFrames(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(text, `"type":"input_json_delta"`))
 }
 
+func TestClaudeServerSearchStreamFramesSplitsHits(t *testing.T) {
+	frames, err := ClaudeServerSearchStreamFrames("claude-opus-4-6", "req1", ExecResult{
+		Kind:  "search",
+		OK:    true,
+		Query: "筱锋",
+		Hits: []SearchHit{
+			{Title: "GitHub", URL: "https://github.com/XiaoLFeng"},
+			{Title: "Blog", URL: "https://blog.x-lf.com"},
+		},
+	})
+	require.NoError(t, err)
+	joined := strings.Builder{}
+	for _, frame := range frames {
+		joined.Write(frame)
+	}
+	text := joined.String()
+	assert.Equal(t, 1, strings.Count(text, `"type":"server_tool_use"`))
+	assert.Equal(t, 2, strings.Count(text, `"type":"web_search_tool_result"`))
+	assert.Contains(t, text, `"index":1`)
+	assert.Contains(t, text, `"index":2`)
+	assert.Equal(t, 1, strings.Count(text, `"type":"input_json_delta"`))
+}
+
 func TestMarshalClaudeServerSearchMultipleHitsFromOpaque(t *testing.T) {
 	body, err := MarshalClaudeServerSearch("claude-opus-4-6", "req1", ExecResult{
 		Kind:  "search",
@@ -149,14 +172,22 @@ func TestMarshalClaudeServerSearchMultipleHitsFromOpaque(t *testing.T) {
 	var root map[string]any
 	require.NoError(t, common.Unmarshal(body, &root))
 	content := root["content"].([]any)
-	result := content[1].(map[string]any)
-	hits, ok := result["content"].([]any)
-	require.True(t, ok)
-	require.Len(t, hits, 3)
-	first := hits[0].(map[string]any)
-	assert.Equal(t, "web_search_result", first["type"])
-	assert.Equal(t, "https://github.com/XiaoLFeng", first["url"])
-	assert.Contains(t, string(body), `"url":"https://x.com/lfeng_xiao"`)
+	require.Len(t, content, 4)
+	assert.Equal(t, "server_tool_use", content[0].(map[string]any)["type"])
+	wantURLs := []string{
+		"https://github.com/XiaoLFeng",
+		"https://blog.x-lf.com",
+		"https://x.com/lfeng_xiao",
+	}
+	for i, want := range wantURLs {
+		block := content[i+1].(map[string]any)
+		assert.Equal(t, "web_search_tool_result", block["type"])
+		hits, ok := block["content"].([]any)
+		require.True(t, ok)
+		require.Len(t, hits, 1)
+		assert.Equal(t, want, hits[0].(map[string]any)["url"])
+	}
+	assert.Equal(t, 3, strings.Count(string(body), `"type":"web_search_tool_result"`))
 }
 
 func TestMarshalClaudeServerFetch(t *testing.T) {
