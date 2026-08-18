@@ -55,6 +55,7 @@ func buildWebSearchCall(id string, result ExecResult) responsesWebSearchCall {
 	case "fetch":
 		call.Action.Type = "open_page"
 		call.Action.URL = result.URL
+		call.Action.Pattern = result.Pattern
 	default:
 		call.Action.Type = "search"
 		call.Action.Query = result.Query

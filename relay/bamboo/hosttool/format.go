@@ -34,6 +34,7 @@ type ExecResult struct {
 	OpaqueText   string
 	Body         string
 	Prompt       string
+	Pattern      string
 	Backend      string
 	DurationMs   int64
 	Truncated    bool

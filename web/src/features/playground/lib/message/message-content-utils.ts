@@ -18,10 +18,14 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { MESSAGE_ROLES, MESSAGE_STATUS } from '../../constants'
 import type { Message } from '../../types'
+import { splitImageRecognitionContent } from './image-recognize-utils'
+import { hasMessageImages } from './message-utils'
 import { parseThinkTags } from './message-reasoning-utils'
 
 type MessageContentStateBase = {
   displayContent: string
+  recognitionContent?: string
+  isRecognitionStreaming: boolean
   hasSources: boolean
   isAssistant: boolean
   showLoader: boolean
@@ -58,13 +62,16 @@ function shouldShowMessageContent(
   message: Message,
   versionContent: string
 ): boolean {
+  const hasVisibleText =
+    splitImageRecognitionContent(getRawDisplayContent(message, versionContent))
+      .rest.length > 0
   return (
     (message.from === MESSAGE_ROLES.USER || !message.isReasoningStreaming) &&
-    versionContent.length > 0
+    (hasVisibleText || hasMessageImages(message))
   )
 }
 
-function getDisplayContent(message: Message, versionContent: string): string {
+function getRawDisplayContent(message: Message, versionContent: string): string {
   if (message.from !== MESSAGE_ROLES.ASSISTANT) {
     return versionContent
   }
@@ -74,6 +81,12 @@ function getDisplayContent(message: Message, versionContent: string): string {
   }
 
   return parseThinkTags(versionContent).visibleContent
+}
+
+function getDisplayContent(message: Message, versionContent: string): string {
+  return splitImageRecognitionContent(
+    getRawDisplayContent(message, versionContent)
+  ).rest
 }
 
 export function getMessageContentState(
@@ -89,9 +102,14 @@ export function getMessageContentState(
     versionContent
   )
   const showMessageContent = shouldShowMessageContent(message, versionContent)
+  const recognition = splitImageRecognitionContent(
+    getRawDisplayContent(message, versionContent)
+  )
 
   const baseState: MessageContentStateBase = {
     displayContent: getDisplayContent(message, versionContent),
+    recognitionContent: recognition.recognition,
+    isRecognitionStreaming: recognition.isStreaming,
     hasSources: sources.length > 0,
     isAssistant,
     showLoader,

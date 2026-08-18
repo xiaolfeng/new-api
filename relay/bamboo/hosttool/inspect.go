@@ -14,12 +14,12 @@ import (
 
 const (
 	searchDescription = "Search the public web. Use for current events, docs, or facts beyond the knowledge cutoff. Input: query (required)."
-	fetchDescription  = "Fetch a single http(s) URL and return extracted text/markdown. Input: url (required)."
+	fetchDescription  = "Fetch a single http(s) URL and return extracted text/markdown. JavaScript SPA shells include title, meta, HTML comments, and resource URLs from the HTTP HTML (no browser). Optional: prompt, format, timeout, pattern, start_line."
 )
 
 var searchSchemaJSON = []byte(`{"type":"object","properties":{"query":{"type":"string","description":"Search query"},"allowed_domains":{"type":"array","items":{"type":"string"}},"blocked_domains":{"type":"array","items":{"type":"string"}}},"required":["query"]}`)
 
-var fetchSchemaJSON = []byte(`{"type":"object","properties":{"url":{"type":"string","description":"http(s) URL to fetch"},"prompt":{"type":"string","description":"Optional focus question for the reader model"},"format":{"type":"string","enum":["text","markdown","html"]},"timeout":{"type":"number","description":"Timeout in seconds, max 120"}},"required":["url"]}`)
+var fetchSchemaJSON = []byte(`{"type":"object","properties":{"url":{"type":"string","description":"http(s) URL to fetch"},"prompt":{"type":"string","description":"Optional focus question for the reader model"},"format":{"type":"string","enum":["text","markdown","html"]},"timeout":{"type":"number","description":"Timeout in seconds, max 120"},"pattern":{"type":"string","description":"Optional case-insensitive regex; return matching lines with context"},"start_line":{"type":"number","description":"1-indexed line to start from (ignored when pattern is set)"},"max_matches":{"type":"number","description":"Max regex matches, default 50"},"context_lines":{"type":"number","description":"Context lines around each match, default 10"}},"required":["url"]}`)
 
 // InspectAndRewrite 扫描 Helper remash DTO + Config.Tools，按 canonical 去重并注入 function。
 func InspectAndRewrite(entryFormat types.RelayFormat, entryBytes []byte, req *bamboocodec.RelayRequest, st *model_setting.BambooSettings) (*relaycommon.HostToolPlan, error) {

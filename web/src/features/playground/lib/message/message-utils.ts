@@ -57,6 +57,14 @@ export function hasMessageContent(message: Message): boolean {
   return getMessageContent(message).trim() !== ''
 }
 
+export function getMessageImageUrls(message: Message): string[] {
+  return (message.imageUrls ?? []).filter((url) => url.trim() !== '')
+}
+
+export function hasMessageImages(message: Message): boolean {
+  return getMessageImageUrls(message).length > 0
+}
+
 /**
  * Update current version content in message
  */
@@ -76,13 +84,15 @@ export function updateCurrentVersionContent(
  */
 export function createUserMessage(
   content: string,
-  createdAt: number = Date.now()
+  createdAt: number = Date.now(),
+  imageUrls: string[] = []
 ): Message {
   return {
     key: nanoid(),
     from: MESSAGE_ROLES.USER,
     versions: [createMessageVersion(content)],
     createdAt,
+    ...(imageUrls.length > 0 ? { imageUrls } : {}),
   }
 }
 
@@ -154,9 +164,13 @@ export function getTextContent(content: string | ContentPart[]): string {
  */
 export function formatMessageForAPI(message: Message): ChatCompletionMessage {
   const currentVersion = getCurrentVersion(message)
+  const imageUrls = getMessageImageUrls(message)
   const result: ChatCompletionMessage = {
     role: message.from,
-    content: currentVersion.content,
+    content:
+      imageUrls.length > 0
+        ? buildMessageContent(currentVersion.content, imageUrls)
+        : currentVersion.content,
   }
   if (message.toolCalls) result.tool_calls = message.toolCalls
   if (message.toolCallId) result.tool_call_id = message.toolCallId
@@ -185,6 +199,14 @@ export function isValidMessage(message: Message): boolean {
 
   // Exclude empty assistant messages (loading/streaming placeholders)
   if (message.from === MESSAGE_ROLES.ASSISTANT && !hasMessageContent(message)) {
+    return false
+  }
+
+  if (
+    message.from === MESSAGE_ROLES.USER &&
+    !hasMessageContent(message) &&
+    !hasMessageImages(message)
+  ) {
     return false
   }
 

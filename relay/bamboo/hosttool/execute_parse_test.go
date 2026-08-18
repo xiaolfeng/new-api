@@ -92,6 +92,16 @@ func TestClientIPFromHeaders(t *testing.T) {
 	assert.Empty(t, clientIPFromHeaders(nil))
 }
 
+func TestParseFetchFocusAndPattern(t *testing.T) {
+	t.Parallel()
+	raw, _ := parseToolInput([]byte(`{"url":"https://example.com","requested_focus":"list nav","find":"bamboo","startLine":3,"maxMatches":2,"contextLines":1}`))
+	assert.Equal(t, "list nav", firstNonEmpty(asString(raw["prompt"]), asString(raw["requested_focus"])))
+	assert.Equal(t, "bamboo", firstNonEmpty(asString(raw["pattern"]), asString(raw["find"])))
+	assert.Equal(t, 3, firstPositiveInt(raw["start_line"], raw["startLine"]))
+	assert.Equal(t, 2, firstPositiveInt(raw["max_matches"], raw["maxMatches"]))
+	assert.Equal(t, 1, firstPositiveInt(raw["context_lines"], raw["contextLines"]))
+}
+
 func TestParseFetchURLConcatenated(t *testing.T) {
 	t.Parallel()
 	raw, scalar := parseToolInput([]byte(`{}{"url":"https://example.com"}`))

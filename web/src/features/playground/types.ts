@@ -44,6 +44,7 @@ export interface Message {
   key: string
   from: MessageRole
   versions: MessageVersion[]
+  imageUrls?: string[]
   createdAt?: number
   startedAt?: number
   completedAt?: number

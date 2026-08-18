@@ -13,10 +13,14 @@ import (
 )
 
 type fetchRequest struct {
-	URL     string
-	Format  string
-	Timeout time.Duration
-	Prompt  string
+	URL          string
+	Format       string
+	Timeout      time.Duration
+	Prompt       string
+	Pattern      string
+	StartLine    int
+	MaxMatches   int
+	ContextLines int
 }
 
 func runFetch(ctx context.Context, st *model_setting.BambooSettings, in fetchRequest) ExecResult {
@@ -62,22 +66,16 @@ func runFetch(ctx context.Context, st *model_setting.BambooSettings, in fetchReq
 	if format == "" {
 		format = "markdown"
 	}
-	switch format {
-	case "html":
+	switch {
+	case format == "html":
 		result.Body = body
-	case "text":
-		if strings.Contains(mime, "html") {
-			result.Body = extractVisibleText(body)
-		} else {
-			result.Body = body
-		}
+	case strings.Contains(mime, "html"):
+		result.Body = composeFetchedHTML(body, format)
 	default:
-		if strings.Contains(mime, "html") {
-			result.Body = htmlToMarkdown(body)
-		} else {
-			result.Body = body
-		}
+		result.Body = body
 	}
+	result.Body = applyFetchView(result.Body, in.StartLine, in.Pattern, in.MaxMatches, in.ContextLines)
+	result.Pattern = in.Pattern
 	result.OK = true
 	return result
 }

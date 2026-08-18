@@ -78,6 +78,8 @@ export function PlaygroundMessageContent({
   const { t } = useTranslation()
   const {
     displayContent,
+    recognitionContent,
+    isRecognitionStreaming,
     hasReasoning,
     hasSources,
     isAssistant,
@@ -86,6 +88,7 @@ export function PlaygroundMessageContent({
     showMessageContent,
     sources,
   } = getMessageContentState(message, versionContent)
+  const imageUrls = message.imageUrls ?? []
   const isError = isErrorMessage(message)
   const isMessageFinal =
     message.status !== MESSAGE_STATUS.LOADING &&
@@ -122,6 +125,34 @@ export function PlaygroundMessageContent({
           <ReasoningTrigger />
           <ReasoningContent>{reasoningContent}</ReasoningContent>
         </Reasoning>
+      )}
+
+      {isAssistant && recognitionContent && (
+        <Tool defaultOpen>
+          <ToolHeader
+            title={t('Image recognition')}
+            type='tool-image_recognition'
+            state={
+              isRecognitionStreaming ? 'input-available' : 'output-available'
+            }
+          />
+          <ToolContent>
+            <ToolOutput output={recognitionContent} errorText={undefined} />
+          </ToolContent>
+        </Tool>
+      )}
+
+      {imageUrls.length > 0 && (
+        <div className='mb-2 flex flex-wrap gap-2'>
+          {imageUrls.map((url) => (
+            <img
+              alt={t('Image')}
+              className='max-h-48 max-w-full rounded-md border object-contain'
+              key={url}
+              src={url}
+            />
+          ))}
+        </div>
       )}
 
       {isAssistant && message.toolCalls && message.toolCalls.length > 0 && (

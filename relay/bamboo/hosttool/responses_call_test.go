@@ -31,15 +31,17 @@ func TestMarshalBuiltinCompleteSearch(t *testing.T) {
 
 func TestMarshalBuiltinCompleteFetchNoSearchBillShape(t *testing.T) {
 	body, err := MarshalBuiltinComplete("grok-4.6", "req1", 1, ExecResult{
-		Kind: "fetch",
-		OK:   true,
-		URL:  "https://example.com",
-		Body: "# Hello",
+		Kind:    "fetch",
+		OK:      true,
+		URL:     "https://example.com",
+		Body:    "# Hello",
+		Pattern: "nav",
 	})
 	require.NoError(t, err)
 	text := string(body)
 	assert.Contains(t, text, `"type":"open_page"`)
 	assert.Contains(t, text, `"url":"https://example.com"`)
+	assert.Contains(t, text, `"pattern":"nav"`)
 	assert.NotContains(t, text, "# Hello")
 }
 

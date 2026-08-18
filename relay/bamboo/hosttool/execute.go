@@ -235,10 +235,14 @@ func executeOne(ctx context.Context, info *relaycommon.RelayInfo, st *model_sett
 			timeout = time.Duration(sec * float64(time.Second))
 		}
 		return runFetch(ctx, st, fetchRequest{
-			URL:     urlStr,
-			Format:  asString(raw["format"]),
-			Timeout: timeout,
-			Prompt:  asString(raw["prompt"]),
+			URL:          urlStr,
+			Format:       asString(raw["format"]),
+			Timeout:      timeout,
+			Prompt:       firstNonEmpty(asString(raw["prompt"]), asString(raw["requested_focus"])),
+			Pattern:      firstNonEmpty(asString(raw["pattern"]), asString(raw["find"])),
+			StartLine:    firstPositiveInt(raw["start_line"], raw["startLine"]),
+			MaxMatches:   firstPositiveInt(raw["max_matches"], raw["maxMatches"]),
+			ContextLines: firstPositiveInt(raw["context_lines"], raw["contextLines"]),
 		})
 	}
 
@@ -323,6 +327,23 @@ func kindOf(can string) string {
 		return "fetch"
 	}
 	return "search"
+}
+
+func firstPositiveInt(vals ...any) int {
+	for _, v := range vals {
+		if n := asPositiveInt(v); n > 0 {
+			return n
+		}
+	}
+	return 0
+}
+
+func asPositiveInt(v any) int {
+	n, ok := asFloat(v)
+	if !ok || n <= 0 || n > 1e9 {
+		return 0
+	}
+	return int(n)
 }
 
 func asFloat(v any) (float64, bool) {

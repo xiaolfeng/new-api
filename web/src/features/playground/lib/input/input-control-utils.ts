@@ -26,6 +26,7 @@ type InputControlStateOptions = {
   isModelLoading?: boolean
   models: ModelOption[]
   text: string
+  hasAttachments?: boolean
 }
 
 type InputControlState = {
@@ -36,17 +37,53 @@ type InputControlState = {
 
 type SubmittableInputMessage = {
   text?: string | null
+  files?: Array<{ url?: string; mediaType?: string }>
+}
+
+export type SubmittablePlaygroundInput = {
+  text: string
+  imageUrls: string[]
+}
+
+export function getImageUrlsFromFiles(
+  files?: Array<{ url?: string; mediaType?: string }>
+): string[] {
+  if (!files?.length) {
+    return []
+  }
+
+  return files
+    .filter((file) => {
+      const url = file.url?.trim()
+      if (!url) return false
+      if (file.mediaType?.startsWith('image/')) return true
+      return url.startsWith('data:image/')
+    })
+    .map((file) => file.url!.trim())
+}
+
+export function getSubmittablePlaygroundInput(
+  message: SubmittableInputMessage,
+  disabled?: boolean
+): SubmittablePlaygroundInput | null {
+  if (disabled) {
+    return null
+  }
+
+  const text = message.text?.trim() ?? ''
+  const imageUrls = getImageUrlsFromFiles(message.files)
+  if (!text && imageUrls.length === 0) {
+    return null
+  }
+
+  return { text, imageUrls }
 }
 
 export function getSubmittableInputText(
   message: SubmittableInputMessage,
   disabled?: boolean
 ): string | null {
-  if (disabled || !message.text?.trim()) {
-    return null
-  }
-
-  return message.text
+  return getSubmittablePlaygroundInput(message, disabled)?.text || null
 }
 
 export function getInputControlState({
@@ -57,11 +94,13 @@ export function getInputControlState({
   isModelLoading,
   models,
   text,
+  hasAttachments = false,
 }: InputControlStateOptions): InputControlState {
   const hasModels = models.length > 0
 
   return {
-    canSubmit: !disabled && hasModels && text.trim().length > 0,
+    canSubmit:
+      !disabled && hasModels && (text.trim().length > 0 || hasAttachments),
     isSelectorDisabled: disabled || isModelLoading || groups.length === 0,
     shouldShowStop: Boolean(isGenerating && hasStopHandler),
   }
