@@ -7,6 +7,7 @@ import (
 	pkgErrors "github.com/bamboo-services/bamboo-messages/pkg/errors"
 	"github.com/gin-gonic/gin"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
@@ -32,6 +33,7 @@ type clientStream struct {
 	hasOpen   bool
 	sawDelta  bool
 	frames    []string
+	format    bamboocodec.FormatType
 }
 
 func newClientStream(c *gin.Context, entryCodec bamboocodec.Codec, info *relaycommon.RelayInfo, model string) *clientStream {
@@ -39,10 +41,11 @@ func newClientStream(c *gin.Context, entryCodec bamboocodec.Codec, info *relayco
 		return nil
 	}
 	cs := &clientStream{
-		c:    c,
-		info: info,
-		ser:  entryCodec.NewSerializer(model),
-		ok:   true,
+		c:      c,
+		info:   info,
+		ser:    entryCodec.NewSerializer(model),
+		ok:     true,
+		format: entryCodec.Format(),
 	}
 	cs.writeSSE = func(data []byte) bool {
 		if c == nil || c.Writer == nil {
@@ -178,6 +181,63 @@ func (s *clientStream) closeBlock(idx int) {
 	}
 	if s.hasOpen && s.openIdx == idx {
 		s.hasOpen = false
+	}
+}
+
+func (s *clientStream) emitToolUse(id, name, input string) {
+	if s == nil {
+		return
+	}
+	s.forward(bamboosdk.StreamEvent{
+		Type:         bamboosdk.EventContentBlockStart,
+		Index:        0,
+		ContentBlock: bamboosdk.NewToolUseBlockWithRawInput(id, name, ""),
+	})
+	if input != "" {
+		s.forward(bamboosdk.StreamEvent{
+			Type:  bamboosdk.EventContentBlockDelta,
+			Index: 0,
+			Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaInputJSON, PartialJSON: input},
+		})
+	}
+	s.forward(bamboosdk.StreamEvent{Type: bamboosdk.EventContentBlockStop, Index: 0})
+}
+
+func (s *clientStream) emitOpenAIToolOutput(index int, id, output string) {
+	if s == nil || !s.ok || s.format != bamboocodec.FormatOpenAI {
+		return
+	}
+	s.ensureStart()
+	payload := map[string]any{
+		"id":     "chatcmpl-host-tool",
+		"object": "chat.completion.chunk",
+		"choices": []any{
+			map[string]any{
+				"index": 0,
+				"delta": map[string]any{
+					"tool_calls": []any{
+						map[string]any{
+							"index": index,
+							"id":    id,
+							"type":  "function",
+							"function": map[string]any{
+								"output": output,
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	data, err := common.Marshal(payload)
+	if err != nil || len(data) == 0 {
+		return
+	}
+	frame := append([]byte("data: "), data...)
+	frame = append(frame, '\n', '\n')
+	s.frames = append(s.frames, string(frame))
+	if !s.writeSSE(frame) {
+		s.ok = false
 	}
 }
 

@@ -4861,6 +4861,7 @@
     "Tool": "工具",
     "Tool / function declarations the model may call": "模型可调用的工具 / 函数声明",
     "Tool Calls": "工具调用",
+    "Tool failed": "工具执行失败",
     "Tool identifier": "工具标识",
     "Tool Logs": "工具日志",
     "Tool price settings": "工具价格设置",

@@ -100,7 +100,7 @@ func ExecuteCalls(ctx context.Context, info *relaycommon.RelayInfo, st *model_se
 		}
 		mu.Unlock()
 		if over {
-			results[i] = ExecResult{OriginalName: call.Name, Kind: kindOf(can), OK: false, ErrorCode: ErrTooManyCalls}
+			results[i] = ExecResult{OriginalName: call.Name, CallID: call.ID, Input: call.Input, Kind: kindOf(can), OK: false, ErrorCode: ErrTooManyCalls}
 			continue
 		}
 		wg.Add(1)
@@ -110,6 +110,8 @@ func ExecuteCalls(ctx context.Context, info *relaycommon.RelayInfo, st *model_se
 			res := executeOne(ctx, info, st, call, can)
 			res.DurationMs = time.Since(start).Milliseconds()
 			res.OriginalName = call.Name
+			res.CallID = call.ID
+			res.Input = call.Input
 			ch <- slot{idx: idx, res: res}
 		}(i, call, can)
 	}

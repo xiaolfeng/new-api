@@ -42,6 +42,7 @@ import {
   Tool,
   ToolContent,
   ToolHeader,
+  ToolInput,
   ToolOutput,
 } from '@/components/ai-elements/tool'
 import { cn } from '@/lib/utils'
@@ -176,23 +177,54 @@ export function PlaygroundMessageContent({
 
       {isAssistant && message.toolCalls && message.toolCalls.length > 0 && (
         <div className='space-y-2'>
-          {message.toolCalls.map((toolCall, toolCallIndex) => (
-            <Tool key={toolCall.id || toolCallIndex}>
-              <ToolHeader
-                title={toolCall.function?.name || `Tool ${toolCallIndex + 1}`}
-                type='tool-call'
-                state='output-available'
-              />
-              <ToolContent>
-                {toolCall.function?.arguments && (
+          {message.toolCalls.map((toolCall, toolCallIndex) => {
+            let parsedInput: unknown = toolCall.function?.arguments
+            if (toolCall.function?.arguments) {
+              try {
+                parsedInput = JSON.parse(toolCall.function.arguments)
+              } catch {
+                parsedInput = toolCall.function.arguments
+              }
+            }
+            let parsedOutput: unknown = toolCall.function?.output
+            if (toolCall.function?.output) {
+              try {
+                parsedOutput = JSON.parse(toolCall.function.output)
+              } catch {
+                parsedOutput = toolCall.function.output
+              }
+            }
+            const outputIsError =
+              typeof parsedOutput === 'object' &&
+              parsedOutput !== null &&
+              'isError' in parsedOutput &&
+              (parsedOutput as { isError?: boolean }).isError === true
+
+            return (
+              <Tool defaultOpen key={toolCall.id || toolCallIndex}>
+                <ToolHeader
+                  title={toolCall.function?.name || `Tool ${toolCallIndex + 1}`}
+                  type='tool-call'
+                  state={
+                    toolCall.function?.output
+                      ? outputIsError
+                        ? 'output-error'
+                        : 'output-available'
+                      : 'input-available'
+                  }
+                />
+                <ToolContent>
+                  {parsedInput !== undefined && parsedInput !== '' && (
+                    <ToolInput input={parsedInput} />
+                  )}
                   <ToolOutput
-                    output={toolCall.function.arguments}
-                    errorText={undefined}
+                    output={parsedOutput}
+                    errorText={outputIsError ? t('Tool failed') : undefined}
                   />
-                )}
-              </ToolContent>
-            </Tool>
-          ))}
+                </ToolContent>
+              </Tool>
+            )
+          })}
         </div>
       )}
 

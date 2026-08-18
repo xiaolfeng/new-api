@@ -4861,6 +4861,7 @@
     "Tool": "Công cụ",
     "Tool / function declarations the model may call": "Khai báo công cụ / hàm mà model có thể gọi",
     "Tool Calls": "Lệnh gọi công cụ",
+    "Tool failed": "Công cụ thất bại",
     "Tool identifier": "Định danh công cụ",
     "Tool Logs": "Nhật ký công cụ",
     "Tool price settings": "Cài đặt giá công cụ",

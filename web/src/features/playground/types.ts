@@ -26,6 +26,7 @@ export type PlaygroundMessageLayoutMode = 'alternating' | 'left'
 export interface ToolCallFunction {
   name: string
   arguments: string
+  output?: string
 }
 
 export interface ToolCallDelta {

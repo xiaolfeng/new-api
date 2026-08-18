@@ -73,6 +73,19 @@ func TestClientStreamSplitsLongText(t *testing.T) {
 	assert.GreaterOrEqual(t, strings.Count(joined, `"content"`), 2)
 }
 
+func TestClientStreamEmitsOpenAIToolCall(t *testing.T) {
+	cs := testClientStream(t, bamboocodec.FormatOpenAI)
+	cs.emitToolUse("call_1", "WebSearch", `{"query":"cats"}`)
+	cs.emitOpenAIToolOutput(0, "call_1", `{"content":[{"type":"text","text":"ok"}],"isError":false}`)
+	cs.finish()
+	joined := strings.Join(cs.Frames(), "")
+	assert.Contains(t, joined, `"tool_calls"`)
+	assert.Contains(t, joined, `"WebSearch"`)
+	assert.Contains(t, joined, `"arguments"`)
+	assert.Contains(t, joined, `"output"`)
+	assert.Contains(t, joined, "isError")
+}
+
 func TestBlocksToStreamEventsKeepsToolUse(t *testing.T) {
 	blocks := []bamboosdk.ContentBlock{
 		bamboosdk.NewTextBlock("hi"),

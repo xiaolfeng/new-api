@@ -1,32 +1,58 @@
 package hosttool
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/QuantumNous/new-api/common"
 )
 
-func TestVisibleFenceSearchAndFetch(t *testing.T) {
-	search := VisibleFence(ExecResult{
+func TestMCPResultJSONShape(t *testing.T) {
+	raw := MCPResultJSON(ExecResult{
 		OriginalName: "WebSearch",
 		Kind:         "search",
 		OK:           true,
 		Query:        "cats",
 		Hits:         []SearchHit{{Title: "Cat", URL: "https://c", Snippet: "meow"}},
 	})
-	require.Contains(t, search, "<<<host_web_search>>>")
-	require.Contains(t, search, "<<<end_host_web_search>>>")
-	assert.Contains(t, search, `[WebSearch] query="cats"`)
+	var parsed map[string]any
+	require.NoError(t, common.Unmarshal([]byte(raw), &parsed))
+	assert.Equal(t, false, parsed["isError"])
+	content, ok := parsed["content"].([]any)
+	require.True(t, ok)
+	require.NotEmpty(t, content)
+	item, _ := content[0].(map[string]any)
+	require.Equal(t, "text", item["type"])
+	text, _ := item["text"].(string)
+	assert.Contains(t, text, `[WebSearch] query="cats"`)
+}
 
-	fetch := VisibleFence(ExecResult{
-		OriginalName: "WebFetch",
-		Kind:         "fetch",
+func TestInjectOpenAIToolOutputs(t *testing.T) {
+	body := []byte(`{"choices":[{"message":{"role":"assistant","content":"hi","tool_calls":[{"id":"call_1","type":"function","function":{"name":"WebSearch","arguments":"{\"query\":\"cats\"}"}}]}}]}`)
+	out := InjectOpenAIToolOutputs(body, []ExecResult{{
+		CallID:       "call_1",
+		OriginalName: "WebSearch",
+		Kind:         "search",
 		OK:           true,
-		URL:          "https://example.com",
-		Body:         strings.Repeat("x", 5000),
-	})
-	require.Contains(t, fetch, "<<<host_web_fetch>>>")
-	assert.Less(t, len([]rune(fetch)), 5000)
+		Query:        "cats",
+	}})
+	var parsed map[string]any
+	require.NoError(t, common.Unmarshal(out, &parsed))
+	choices := parsed["choices"].([]any)
+	msg := choices[0].(map[string]any)["message"].(map[string]any)
+	calls := msg["tool_calls"].([]any)
+	fn := calls[0].(map[string]any)["function"].(map[string]any)
+	output, _ := fn["output"].(string)
+	assert.Contains(t, output, `"content"`)
+	assert.Contains(t, output, `"isError"`)
+}
+
+func TestCallInputJSONPrefersRawInput(t *testing.T) {
+	assert.Equal(t, `{"query":"raw"}`, CallInputJSON(ExecResult{
+		Kind:  "search",
+		Query: "ignored",
+		Input: []byte(`{"query":"raw"}`),
+	}))
 }

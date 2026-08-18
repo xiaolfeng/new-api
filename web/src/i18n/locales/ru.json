@@ -4861,6 +4861,7 @@
     "Tool": "Инструмент",
     "Tool / function declarations the model may call": "Объявления инструментов и функций, которые модель может вызывать",
     "Tool Calls": "Вызовы инструментов",
+    "Tool failed": "Ошибка инструмента",
     "Tool identifier": "Идентификатор инструмента",
     "Tool Logs": "Журналы инструментов",
     "Tool price settings": "Настройки цен на инструменты",

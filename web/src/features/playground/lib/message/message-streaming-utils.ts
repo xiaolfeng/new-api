@@ -126,11 +126,53 @@ export function applyStreamingToolCalls(
     return message
   }
 
-  const toolCalls = JSON.parse(toolCallChunk) as ToolCallDelta[]
+  const incoming = JSON.parse(toolCallChunk) as ToolCallDelta[]
+  const next = [...(message.toolCalls || [])]
+
+  for (const delta of incoming) {
+    const matchIndex = next.findIndex((item) => {
+      if (delta.id && item.id) {
+        return item.id === delta.id
+      }
+      if (delta.index !== undefined && item.index !== undefined) {
+        return item.index === delta.index
+      }
+      return false
+    })
+
+    if (matchIndex === -1) {
+      next.push({
+        index: delta.index ?? next.length,
+        id: delta.id,
+        type: delta.type ?? 'function',
+        function: {
+          name: delta.function?.name ?? '',
+          arguments: delta.function?.arguments ?? '',
+          output: delta.function?.output,
+        },
+      })
+      continue
+    }
+
+    const current = next[matchIndex]
+    next[matchIndex] = {
+      ...current,
+      id: delta.id || current.id,
+      type: delta.type || current.type,
+      index: delta.index ?? current.index,
+      function: {
+        name: delta.function?.name || current.function?.name || '',
+        arguments:
+          (current.function?.arguments || '') +
+          (delta.function?.arguments || ''),
+        output: delta.function?.output ?? current.function?.output,
+      },
+    }
+  }
 
   return {
     ...message,
-    toolCalls: [...(message.toolCalls || []), ...toolCalls],
+    toolCalls: next,
     status: MESSAGE_STATUS.STREAMING,
   }
 }

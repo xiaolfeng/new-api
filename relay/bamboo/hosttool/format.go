@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 )
@@ -26,6 +27,8 @@ type SearchHit struct {
 
 type ExecResult struct {
 	OriginalName string
+	CallID       string
+	Input        []byte
 	Kind         string // search | fetch
 	OK           bool
 	ErrorCode    string
@@ -94,18 +97,106 @@ func FormatToolResultWithLimit(r ExecResult, maxRunes int) (content string, isEr
 	}
 }
 
-func VisibleFence(r ExecResult) string {
-	limit := relaycommon.HostToolVisibleSearchRunes
-	start, end := relaycommon.HostWebSearchFenceStart, relaycommon.HostWebSearchFenceEnd
+func visibleResultLimit(r ExecResult) int {
 	if r.Kind == "fetch" {
-		limit = relaycommon.HostToolVisibleFetchRunes
-		start, end = relaycommon.HostWebFetchFenceStart, relaycommon.HostWebFetchFenceEnd
+		return relaycommon.HostToolVisibleFetchRunes
 	}
-	body, _ := FormatToolResultWithLimit(r, limit)
-	if strings.TrimSpace(body) == "" {
-		return ""
+	return relaycommon.HostToolVisibleSearchRunes
+}
+
+func CallInputJSON(r ExecResult) string {
+	if len(r.Input) > 0 {
+		return string(r.Input)
 	}
-	return start + "\n" + body + "\n" + end + "\n"
+	switch r.Kind {
+	case "fetch":
+		payload, err := common.Marshal(map[string]string{"url": r.URL})
+		if err != nil {
+			return "{}"
+		}
+		return string(payload)
+	default:
+		payload, err := common.Marshal(map[string]string{"query": r.Query})
+		if err != nil {
+			return "{}"
+		}
+		return string(payload)
+	}
+}
+
+func InjectOpenAIToolOutputs(body []byte, results []ExecResult) []byte {
+	if len(body) == 0 || len(results) == 0 {
+		return body
+	}
+	var payload map[string]any
+	if err := common.Unmarshal(body, &payload); err != nil {
+		return body
+	}
+	choices, _ := payload["choices"].([]any)
+	if len(choices) == 0 {
+		return body
+	}
+	choice, _ := choices[0].(map[string]any)
+	if choice == nil {
+		return body
+	}
+	msg, _ := choice["message"].(map[string]any)
+	if msg == nil {
+		return body
+	}
+	calls, _ := msg["tool_calls"].([]any)
+	if len(calls) == 0 {
+		return body
+	}
+	byID := make(map[string]ExecResult, len(results))
+	for _, r := range results {
+		if r.CallID != "" {
+			byID[r.CallID] = r
+		}
+	}
+	for i, raw := range calls {
+		call, _ := raw.(map[string]any)
+		if call == nil {
+			continue
+		}
+		id, _ := call["id"].(string)
+		r, ok := byID[id]
+		if !ok && i < len(results) {
+			r = results[i]
+		} else if !ok {
+			continue
+		}
+		fn, _ := call["function"].(map[string]any)
+		if fn == nil {
+			fn = map[string]any{}
+			call["function"] = fn
+		}
+		fn["output"] = MCPResultJSON(r)
+		calls[i] = call
+	}
+	msg["tool_calls"] = calls
+	choice["message"] = msg
+	choices[0] = choice
+	payload["choices"] = choices
+	out, err := common.Marshal(payload)
+	if err != nil {
+		return body
+	}
+	return out
+}
+
+func MCPResultJSON(r ExecResult) string {
+	text, isErr := FormatToolResultWithLimit(r, visibleResultLimit(r))
+	payload, err := common.Marshal(map[string]any{
+		"content": []map[string]any{
+			{"type": "text", "text": text},
+		},
+		"isError": isErr,
+	})
+	if err != nil {
+		return `{"content":[{"type":"text","text":""}],"isError":true}`
+	}
+	return string(payload)
 }
 
 func JoinFormattedResults(results []ExecResult) string {

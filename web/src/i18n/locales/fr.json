@@ -4861,6 +4861,7 @@
     "Tool": "Outil",
     "Tool / function declarations the model may call": "Déclarations d'outils / fonctions que le modèle peut appeler",
     "Tool Calls": "Appels d'outil",
+    "Tool failed": "Échec de l’outil",
     "Tool identifier": "Identifiant d’outil",
     "Tool Logs": "Journaux d’outils",
     "Tool price settings": "Paramètres de prix des outils",

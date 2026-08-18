@@ -74,14 +74,14 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 	uses := hosttool.CollectToolUses(blocks)
 	action := hosttool.DecideAction(info.HostToolPlan, uses)
 	if action == hosttool.ActionPassthrough {
-		return writeCompleteResponse(c, info, entryCodec, codecFmt, resp, usage)
+		return writeCompleteResponse(c, info, entryCodec, codecFmt, resp, usage, nil)
 	}
 
 	st := model_setting.GetBambooSettings()
 	results := hosttool.ExecuteCalls(c.Request.Context(), info, st, uses)
 	if action == hosttool.ActionFoldB {
 		folded := hosttool.FoldResponse(resp.ID, resp.Model, blocks, results, resp.Usage)
-		return writeCompleteResponse(c, info, entryCodec, codecFmt, folded, usage)
+		return writeCompleteResponse(c, info, entryCodec, codecFmt, folded, usage, nil)
 	}
 
 	hop2Req := hosttool.BuildHop2Request(req, blocks, results, uses)
@@ -90,7 +90,7 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 			info.HostToolPlan.StoppedReason = reason
 		}
 		folded := hosttool.FoldResponse(resp.ID, resp.Model, blocks, results, resp.Usage)
-		return writeCompleteResponse(c, info, entryCodec, codecFmt, folded, usage)
+		return writeCompleteResponse(c, info, entryCodec, codecFmt, folded, usage, nil)
 	}
 
 	resp2, err := client.Complete(c.Request.Context(), hop2Req.Messages, hop2Req.System, hop2Req.Config)
@@ -108,30 +108,33 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 	if hosttool.AllHostToolUses(info.HostToolPlan, uses2) && len(uses2) > 0 {
 		results2 := hosttool.ExecuteCalls(c.Request.Context(), info, st, uses2)
 		folded := hosttool.FoldResponse(resp2.ID, resp2.Model, blocks2, results2, resp2.Usage)
-		return writeCompleteResponse(c, info, entryCodec, codecFmt, folded, usage)
+		return writeCompleteResponse(c, info, entryCodec, codecFmt, folded, usage, nil)
 	}
-	prependHostFences(resp2, results)
-	return writeCompleteResponse(c, info, entryCodec, codecFmt, resp2, usage)
+	prependHostToolCalls(resp2, results)
+	return writeCompleteResponse(c, info, entryCodec, codecFmt, resp2, usage, results)
 }
 
-func prependHostFences(resp *bamboosdk.Response, results []hosttool.ExecResult) {
+func prependHostToolCalls(resp *bamboosdk.Response, results []hosttool.ExecResult) {
 	if resp == nil || len(results) == 0 {
 		return
 	}
-	fences := make([]bamboosdk.ContentBlock, 0, len(results))
-	for _, r := range results {
-		if fence := hosttool.VisibleFence(r); fence != "" {
-			fences = append(fences, bamboosdk.NewTextBlock(fence))
+	calls := make([]bamboosdk.ContentBlock, 0, len(results))
+	for i, r := range results {
+		id := r.CallID
+		if id == "" {
+			id = fmt.Sprintf("call_host_%d", i+1)
 		}
+		name := r.OriginalName
+		if name == "" {
+			name = r.Kind
+		}
+		calls = append(calls, bamboosdk.NewToolUseBlockWithRawInput(id, name, hosttool.CallInputJSON(r)))
 	}
-	if len(fences) == 0 {
-		return
-	}
-	resp.Content = append(fences, resp.Content...)
+	resp.Content = append(calls, resp.Content...)
 }
 
 func writeCompleteResponse(c *gin.Context, info *relaycommon.RelayInfo, entryCodec bamboocodec.Codec,
-	codecFmt bamboocodec.FormatType, resp *bamboosdk.Response, usage *dto.Usage) (*dto.Usage, *types.NewAPIError) {
+	codecFmt bamboocodec.FormatType, resp *bamboosdk.Response, usage *dto.Usage, results []hosttool.ExecResult) (*dto.Usage, *types.NewAPIError) {
 	if info.HostToolExecuted {
 		common.SetContextKey(c, constant.ContextKeyEmptyResponse, false)
 	} else if resp != nil && len(resp.Content) == 0 && resp.Usage.OutputTokens == 0 {
@@ -141,6 +144,9 @@ func writeCompleteResponse(c *gin.Context, info *relaycommon.RelayInfo, entryCod
 	body, serr := entryCodec.SerializeResponse(resp)
 	if serr != nil {
 		return usage, translateCodecError(serr)
+	}
+	if entryCodec.Format() == bamboocodec.FormatOpenAI {
+		body = hosttool.InjectOpenAIToolOutputs(body, results)
 	}
 	if info.BambooDebug != nil {
 		info.BambooDebug.RelayResponse = bamboorelay.FormatRelayResponse("CompleteRelay", codecFmt, codecFmt, body)
@@ -236,7 +242,7 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 
 	cs.pausePing()
 	emitPendingVisibleBox(cs, info)
-	emitHostToolFences(cs, results)
+	emitHostToolCalls(cs, results)
 	hop2, hop2Err := collectStreamHop(ctx, c, info, client, entryCodec, outFmt, hop2Req, true, writeSSE, cs)
 	if hop2Err != nil {
 		if cs.HasHeaders() {
@@ -549,14 +555,21 @@ func emitPendingVisibleBox(cs *clientStream, info *relaycommon.RelayInfo) {
 	}
 }
 
-func emitHostToolFences(cs *clientStream, results []hosttool.ExecResult) {
+func emitHostToolCalls(cs *clientStream, results []hosttool.ExecResult) {
 	if cs == nil {
 		return
 	}
-	for _, r := range results {
-		if fence := hosttool.VisibleFence(r); fence != "" {
-			cs.emitClosedText(fence)
+	for i, r := range results {
+		id := r.CallID
+		if id == "" {
+			id = fmt.Sprintf("call_host_%d", i+1)
 		}
+		name := r.OriginalName
+		if name == "" {
+			name = r.Kind
+		}
+		cs.emitToolUse(id, name, hosttool.CallInputJSON(r))
+		cs.emitOpenAIToolOutput(i, id, hosttool.MCPResultJSON(r))
 	}
 }
 

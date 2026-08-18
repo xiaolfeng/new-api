@@ -4861,6 +4861,7 @@
     "Tool": "ツール",
     "Tool / function declarations the model may call": "モデルが呼び出せるツール / 関数の宣言",
     "Tool Calls": "ツール呼び出し",
+    "Tool failed": "ツール失敗",
     "Tool identifier": "ツールID",
     "Tool Logs": "ツールログ",
     "Tool price settings": "ツール価格設定",
