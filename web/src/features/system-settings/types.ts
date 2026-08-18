@@ -244,6 +244,12 @@ export type ModelSettings = {
   'bamboo.max_search_results': number
   'bamboo.max_fetch_bytes': number
   'bamboo.host_tool_timeout_ms': number
+  'bamboo.enable_image_recognize': boolean
+  'bamboo.image_recognize_channel_id': number
+  'bamboo.image_recognize_model': string
+  'bamboo.image_recognize_prompt': string
+  'bamboo.image_recognize_max_images': number
+  'bamboo.image_recognize_timeout_ms': number
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
   'gemini.safety_settings': string

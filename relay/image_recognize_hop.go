@@ -1,0 +1,298 @@
+package relay
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	rootcommon "github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/relay/bamboo/imagerec"
+	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	relayconstant "github.com/QuantumNous/new-api/relay/constant"
+	"github.com/QuantumNous/new-api/relay/helper"
+	"github.com/QuantumNous/new-api/relaykit/dto"
+	relaykittypes "github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/model_setting"
+)
+
+func init() {
+	imagerec.SetHopFunc(executeImageRecognizeHop)
+}
+
+func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest) (string, *dto.Usage, *relaykittypes.NewAPIError) {
+	if parent == nil || request == nil {
+		return "", nil, relaykittypes.NewError(fmt.Errorf("image recognition hop missing request"), relaykittypes.ErrorCodeInvalidRequest, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	st := model_setting.GetBambooSettings()
+	if st == nil {
+		return "", nil, relaykittypes.NewError(fmt.Errorf("bamboo settings unavailable"), relaykittypes.ErrorCodeInvalidRequest, relaykittypes.ErrOptionWithSkipRetry())
+	}
+
+	channel, err := model.GetChannelById(st.ImageRecognizeChannelId, true)
+	if err != nil {
+		return "", nil, relaykittypes.NewError(fmt.Errorf("image recognition channel %d not found", st.ImageRecognizeChannelId), relaykittypes.ErrorCodeGetChannelFailed, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	if channel.Status != rootcommon.ChannelStatusEnabled {
+		return "", nil, relaykittypes.NewError(fmt.Errorf("image recognition channel %d is disabled", channel.Id), relaykittypes.ErrorCodeGetChannelFailed, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	modelName := strings.TrimSpace(st.ImageRecognizeModel)
+	if !channelAllowsModel(channel, modelName) {
+		return "", nil, relaykittypes.NewError(fmt.Errorf("image recognition model %s is not on channel %d", modelName, channel.Id), relaykittypes.ErrorCodeInvalidRequest, relaykittypes.ErrOptionWithSkipRetry())
+	}
+
+	apiType, ok := rootcommon.ChannelType2APIType(channel.Type)
+	if !ok {
+		return "", nil, relaykittypes.NewError(fmt.Errorf("image recognition channel type %d is not supported", channel.Type), relaykittypes.ErrorCodeInvalidApiType, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	adaptor := GetAdaptor(apiType)
+	if adaptor == nil {
+		return "", nil, relaykittypes.NewError(fmt.Errorf("image recognition adaptor missing for api type %d", apiType), relaykittypes.ErrorCodeInvalidApiType, relaykittypes.ErrOptionWithSkipRetry())
+	}
+
+	key, keyIndex, keyErr := channel.GetNextEnabledKey()
+	if keyErr != nil {
+		return "", nil, keyErr
+	}
+
+	inner, rec := newImageRecognizeGinContext(parentCtx)
+	bindImageRecognizeChannel(inner, channel, modelName, key, keyIndex)
+	timeout := time.Duration(st.ClampImageRecognizeTimeout()) * time.Millisecond
+	ctx, cancel := context.WithTimeout(inner.Request.Context(), timeout)
+	defer cancel()
+	inner.Request = inner.Request.WithContext(ctx)
+
+	child := buildImageRecognizeRelayInfo(parent, request, modelName)
+	child.InitChannelMeta(inner)
+	child.ImageRecognizeInner = true
+	child.OriginModelName = modelName
+	child.UpstreamModelName = modelName
+	if child.ChannelMeta != nil {
+		child.ChannelMeta.UpstreamModelName = modelName
+	}
+
+	meta := request.GetTokenCountMeta()
+	tokens, tokenErr := service.EstimateRequestToken(inner, meta, child)
+	if tokenErr != nil {
+		return "", nil, relaykittypes.NewError(tokenErr, relaykittypes.ErrorCodeCountTokenFailed, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	child.SetEstimatePromptTokens(tokens)
+	priceData, priceErr := helper.ModelPriceHelper(inner, child, tokens, meta)
+	if priceErr != nil {
+		return "", nil, relaykittypes.NewError(priceErr, relaykittypes.ErrorCodeModelPriceError, relaykittypes.ErrOptionWithStatusCode(http.StatusBadRequest))
+	}
+	if !priceData.FreeModel {
+		if preErr := service.PreConsumeBilling(inner, priceData.QuotaToPreConsume, child); preErr != nil {
+			return "", nil, preErr
+		}
+		defer func() {
+			if child.Billing != nil && child.Billing.NeedsRefund() {
+				child.Billing.Refund(inner)
+			}
+		}()
+	}
+
+	adaptor.Init(child)
+	converted, convErr := adaptor.ConvertOpenAIRequest(inner, child, request)
+	if convErr != nil {
+		return "", nil, relaykittypes.NewError(convErr, relaykittypes.ErrorCodeConvertRequestFailed, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	jsonData, marshalErr := rootcommon.Marshal(converted)
+	if marshalErr != nil {
+		return "", nil, relaykittypes.NewError(marshalErr, relaykittypes.ErrorCodeJsonMarshalFailed, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	jsonData, fieldErr := relaycommon.RemoveDisabledFields(jsonData, child.ChannelOtherSettings, child.ChannelSetting.PassThroughBodyEnabled)
+	if fieldErr != nil {
+		return "", nil, relaykittypes.NewError(fieldErr, relaykittypes.ErrorCodeConvertRequestFailed, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	if len(child.ParamOverride) > 0 {
+		var poErr error
+		jsonData, poErr = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, child)
+		if poErr != nil {
+			return "", nil, relaykittypes.NewError(poErr, relaykittypes.ErrorCodeChannelParamOverrideInvalid, relaykittypes.ErrOptionWithSkipRetry())
+		}
+	}
+
+	respAny, doErr := adaptor.DoRequest(inner, child, bytes.NewReader(jsonData))
+	if doErr != nil {
+		return "", nil, relaykittypes.NewError(doErr, relaykittypes.ErrorCodeDoRequestFailed, relaykittypes.ErrOptionWithSkipRetry())
+	}
+	httpResp, _ := respAny.(*http.Response)
+	usageAny, respErr := adaptor.DoResponse(inner, httpResp, child)
+	if respErr != nil {
+		return "", nil, respErr
+	}
+
+	usage, _ := usageAny.(*dto.Usage)
+	caption := extractCaptionFromRecorder(rec)
+	if strings.TrimSpace(caption) == "" {
+		return "", usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+	}
+
+	service.PostTextConsumeQuota(inner, child, usage, []string{"image_recognize"})
+	return caption, usage, nil
+}
+
+func channelAllowsModel(channel *model.Channel, name string) bool {
+	if channel == nil || name == "" {
+		return false
+	}
+	for _, item := range channel.GetModels() {
+		item = strings.TrimSpace(item)
+		if item == "*" || item == name {
+			return true
+		}
+	}
+	return false
+}
+
+func newImageRecognizeGinContext(parent *gin.Context) (*gin.Context, *httptest.ResponseRecorder) {
+	rec := httptest.NewRecorder()
+	inner, _ := gin.CreateTestContext(rec)
+	if parent != nil && parent.Request != nil {
+		inner.Request = parent.Request.Clone(parent.Request.Context())
+	} else {
+		inner.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	}
+	if inner.Request.Header == nil {
+		inner.Request.Header = make(http.Header)
+	}
+	inner.Request.Header.Set("Content-Type", "application/json")
+	inner.Request.Header.Set("Accept", "application/json")
+	if parent != nil {
+		copyGinKeysForImageRecognize(parent, inner)
+	}
+	return inner, rec
+}
+
+func bindImageRecognizeChannel(c *gin.Context, channel *model.Channel, modelName, key string, keyIndex int) {
+	if c == nil || channel == nil {
+		return
+	}
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelId, channel.Id)
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelName, channel.Name)
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelType, channel.Type)
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelCreateTime, channel.CreatedTime)
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelSetting, channel.GetSetting())
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelOtherSetting, channel.GetOtherSettings())
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelParamOverride, channel.GetParamOverride())
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelHeaderOverride, channel.GetHeaderOverride())
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelKey, key)
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelBaseUrl, channel.GetBaseURL())
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelModelMapping, channel.GetModelMapping())
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelStatusCodeMapping, channel.GetStatusCodeMapping())
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelIsMultiKey, channel.ChannelInfo.IsMultiKey)
+	rootcommon.SetContextKey(c, constant.ContextKeyChannelMultiKeyIndex, keyIndex)
+	rootcommon.SetContextKey(c, constant.ContextKeyOriginalModel, modelName)
+	if channel.OpenAIOrganization != nil && *channel.OpenAIOrganization != "" {
+		rootcommon.SetContextKey(c, constant.ContextKeyChannelOrganization, *channel.OpenAIOrganization)
+	}
+}
+
+func copyGinKeysForImageRecognize(parent, inner *gin.Context) {
+	keep := []constant.ContextKey{
+		constant.ContextKeyUserId,
+		constant.ContextKeyUserGroup,
+		constant.ContextKeyUsingGroup,
+		constant.ContextKeyUserQuota,
+		constant.ContextKeyUserEmail,
+		constant.ContextKeyUserSetting,
+		constant.ContextKeyTokenId,
+		constant.ContextKeyTokenKey,
+		constant.ContextKeyTokenUnlimited,
+		constant.ContextKeyTokenGroup,
+		constant.ContextKeyRequestStartTime,
+	}
+	for _, key := range keep {
+		if val, ok := parent.Get(string(key)); ok {
+			inner.Set(string(key), val)
+		}
+	}
+	if val, ok := parent.Get(rootcommon.RequestIdKey); ok {
+		inner.Set(rootcommon.RequestIdKey, val)
+	}
+}
+
+func buildImageRecognizeRelayInfo(parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, modelName string) *relaycommon.RelayInfo {
+	info := &relaycommon.RelayInfo{
+		Request:             request,
+		UserId:              parent.UserId,
+		UsingGroup:          parent.UsingGroup,
+		UserGroup:           parent.UserGroup,
+		UserQuota:           parent.UserQuota,
+		UserEmail:           parent.UserEmail,
+		UserSetting:         parent.UserSetting,
+		TokenId:             parent.TokenId,
+		TokenKey:            parent.TokenKey,
+		TokenUnlimited:      parent.TokenUnlimited,
+		TokenGroup:          parent.TokenGroup,
+		RequestId:           parent.RequestId + "-imagerec",
+		OriginModelName:     modelName,
+		RelayMode:           relayconstant.RelayModeChatCompletions,
+		RelayFormat:         relaykittypes.RelayFormatOpenAI,
+		RequestURLPath:      "/v1/chat/completions",
+		IsStream:            false,
+		StartTime:           time.Now(),
+		ImageRecognizeInner: true,
+	}
+	if parent.RequestId == "" {
+		info.RequestId = rootcommon.NewRequestId() + "-imagerec"
+	}
+	return info
+}
+
+func extractCaptionFromRecorder(rec *httptest.ResponseRecorder) string {
+	if rec == nil {
+		return ""
+	}
+	body := rec.Body.Bytes()
+	if len(body) == 0 {
+		return ""
+	}
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content any `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+	if err := rootcommon.Unmarshal(body, &parsed); err != nil {
+		return strings.TrimSpace(string(body))
+	}
+	if len(parsed.Choices) == 0 {
+		return ""
+	}
+	return mediaContentToString(parsed.Choices[0].Message.Content)
+}
+
+func mediaContentToString(content any) string {
+	switch v := content.(type) {
+	case string:
+		return strings.TrimSpace(v)
+	case []any:
+		var b strings.Builder
+		for _, item := range v {
+			m, ok := item.(map[string]any)
+			if !ok {
+				continue
+			}
+			if text, ok := m["text"].(string); ok {
+				if b.Len() > 0 {
+					b.WriteByte('\n')
+				}
+				b.WriteString(text)
+			}
+		}
+		return strings.TrimSpace(b.String())
+	default:
+		return strings.TrimSpace(fmt.Sprintf("%v", content))
+	}
+}

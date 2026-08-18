@@ -1,6 +1,8 @@
 package model_setting
 
 import (
+	"strings"
+
 	"github.com/QuantumNous/new-api/setting/config"
 )
 
@@ -57,6 +59,19 @@ type BambooSettings struct {
 	MaxFetchBytes     int `json:"max_fetch_bytes"`
 	MaxResultRunes    int `json:"max_result_runes"`
 	HostToolTimeoutMs int `json:"host_tool_timeout_ms"`
+
+	// EnableImageRecognize 在 Bamboo 对话路径上预识别最新 user 消息里的图。
+	// 不是 host tool，不走 tool_call。默认关闭。
+	EnableImageRecognize bool `json:"enable_image_recognize"`
+	// ImageRecognizeChannelId 指定识别渠道；0 表示未配置。
+	ImageRecognizeChannelId int `json:"image_recognize_channel_id"`
+	// ImageRecognizeModel 指定识别模型（渠道模型列表中的名字）。
+	ImageRecognizeModel string `json:"image_recognize_model"`
+	// ImageRecognizePrompt 识别 hop 的系统提示。空则用内置默认。
+	ImageRecognizePrompt         string `json:"image_recognize_prompt"`
+	ImageRecognizeMaxImages      int    `json:"image_recognize_max_images"`
+	ImageRecognizeTimeoutMs      int    `json:"image_recognize_timeout_ms"`
+	ImageRecognizeMaxOutputRunes int    `json:"image_recognize_max_output_runes"`
 }
 
 const (
@@ -66,21 +81,25 @@ const (
 
 // 默认配置
 var defaultBambooSettings = BambooSettings{
-	EnableBambooRelay:           false,
-	EnableBambooDebugLog:        false,
-	DegradedReason:              "stop",
-	EnableHostTools:             false,
-	HostToolMode:                "loop",
-	SearchBackend:               "off",
-	AllowThirdPartySearchEgress: false,
-	SearchFallback:              []string{},
-	ExaMCPURL:                   DefaultExaMCPURL,
-	ParallelMCPURL:              DefaultParallelMCPURL,
-	MaxHostToolRounds:           1,
-	MaxSearchResults:            8,
-	MaxFetchBytes:               1048576,
-	MaxResultRunes:              65536,
-	HostToolTimeoutMs:           15000,
+	EnableBambooRelay:            false,
+	EnableBambooDebugLog:         false,
+	DegradedReason:               "stop",
+	EnableHostTools:              false,
+	HostToolMode:                 "loop",
+	SearchBackend:                "off",
+	AllowThirdPartySearchEgress:  false,
+	SearchFallback:               []string{},
+	ExaMCPURL:                    DefaultExaMCPURL,
+	ParallelMCPURL:               DefaultParallelMCPURL,
+	MaxHostToolRounds:            1,
+	MaxSearchResults:             8,
+	MaxFetchBytes:                1048576,
+	MaxResultRunes:               65536,
+	HostToolTimeoutMs:            15000,
+	EnableImageRecognize:         false,
+	ImageRecognizeMaxImages:      4,
+	ImageRecognizeTimeoutMs:      20000,
+	ImageRecognizeMaxOutputRunes: 4096,
 }
 
 // 全局实例
@@ -192,4 +211,53 @@ func (s *BambooSettings) ResolvedParallelMCPURL() string {
 		return s.ParallelMCPURL
 	}
 	return DefaultParallelMCPURL
+}
+
+func (s *BambooSettings) ClampImageRecognizeMaxImages() int {
+	n := 4
+	if s != nil && s.ImageRecognizeMaxImages > 0 {
+		n = s.ImageRecognizeMaxImages
+	}
+	if n > 8 {
+		return 8
+	}
+	if n < 1 {
+		return 1
+	}
+	return n
+}
+
+func (s *BambooSettings) ClampImageRecognizeTimeout() int {
+	n := 20000
+	if s != nil && s.ImageRecognizeTimeoutMs > 0 {
+		n = s.ImageRecognizeTimeoutMs
+	}
+	if n > 60000 {
+		return 60000
+	}
+	if n < 1 {
+		return 20000
+	}
+	return n
+}
+
+func (s *BambooSettings) ClampImageRecognizeMaxOutputRunes() int {
+	n := 4096
+	if s != nil && s.ImageRecognizeMaxOutputRunes > 0 {
+		n = s.ImageRecognizeMaxOutputRunes
+	}
+	if n > 16384 {
+		return 16384
+	}
+	if n < 1 {
+		return 4096
+	}
+	return n
+}
+
+func (s *BambooSettings) ResolvedImageRecognizePrompt() string {
+	if s != nil && strings.TrimSpace(s.ImageRecognizePrompt) != "" {
+		return strings.TrimSpace(s.ImageRecognizePrompt)
+	}
+	return "Describe each attached image. List visible text (OCR) and key objects. Do not invent details. Reply as [Image N] then the description."
 }

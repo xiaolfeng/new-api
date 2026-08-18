@@ -68,6 +68,12 @@ const customizationSchema = z.object({
     max_search_results: z.coerce.number().int().min(1).max(20),
     max_fetch_bytes: z.coerce.number().int().min(1),
     host_tool_timeout_ms: z.coerce.number().int().min(1).max(30000),
+    enable_image_recognize: z.boolean(),
+    image_recognize_channel_id: z.coerce.number().int().min(0),
+    image_recognize_model: z.string(),
+    image_recognize_prompt: z.string(),
+    image_recognize_max_images: z.coerce.number().int().min(1).max(8),
+    image_recognize_timeout_ms: z.coerce.number().int().min(1).max(60000),
   }),
   retry_setting: z.object({
     record_consume_log_detail_enabled: z.boolean(),
@@ -541,6 +547,115 @@ export function CustomizationSection({
                       )}
                     />
                   </div>
+                </div>
+              )}
+
+              <FormField
+                control={form.control}
+                name='bamboo.enable_image_recognize'
+                render={({ field }) => (
+                  <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
+                    <div className='space-y-0.5'>
+                      <FormLabel className='text-base'>
+                        {t('Bamboo image recognition')}
+                      </FormLabel>
+                      <FormDescription>
+                        {t(
+                          'When the main model has no Vision tag, recognize images in the latest user message on a designated channel and model. Images are stripped before the main hop, and the caption is boxed at the start of the reply. Tag Vision on /models/metadata to skip this.'
+                        )}
+                      </FormDescription>
+                    </div>
+                    <FormControl>
+                      <Switch
+                        checked={field.value}
+                        onCheckedChange={field.onChange}
+                      />
+                    </FormControl>
+                  </FormItem>
+                )}
+              />
+
+              {form.watch('bamboo.enable_image_recognize') && (
+                <div className='grid gap-4 rounded-lg border p-4 sm:grid-cols-2'>
+                  <FormField
+                    control={form.control}
+                    name='bamboo.image_recognize_channel_id'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          {t('Image recognition channel ID')}
+                        </FormLabel>
+                        <FormControl>
+                          <Input type='number' min={0} {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.image_recognize_model'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>{t('Image recognition model')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={t('Model name on that channel')}
+                            {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.image_recognize_max_images'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          {t('Max images in latest message')}
+                        </FormLabel>
+                        <FormControl>
+                          <Input type='number' min={1} max={8} {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.image_recognize_timeout_ms'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          {t('Image recognition timeout (ms)')}
+                        </FormLabel>
+                        <FormControl>
+                          <Input
+                            type='number'
+                            min={1}
+                            max={60000}
+                            {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.image_recognize_prompt'
+                    render={({ field }) => (
+                      <FormItem className='sm:col-span-2'>
+                        <FormLabel>{t('Image recognition prompt')}</FormLabel>
+                        <FormControl>
+                          <Input
+                            placeholder={t(
+                              'Leave empty to use the built-in prompt'
+                            )}
+                            {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
                 </div>
               )}
             </>

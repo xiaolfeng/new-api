@@ -25,6 +25,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/bamboo/hosttool"
+	"github.com/QuantumNous/new-api/relay/bamboo/imagerec"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -101,6 +102,10 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 
 	info.BambooRelayData = extractBambooRelayData(relayReq)
+
+	if recErr := imagerec.MaybeRewrite(c, info, relayReq); recErr != nil {
+		return nil, recErr
+	}
 
 	bambooSettings := model_setting.GetBambooSettings()
 	if bambooSettings.EnableHostTools {
@@ -240,6 +245,7 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	}
 	streamBlocks := make(map[int]*streamBlockAccum)
 	var orderedIndices []int
+	boxInjected := visibleBoxText(info) == ""
 
 	for event := range eventCh {
 		if event.Type == bamboosdk.EventError {
@@ -356,6 +362,14 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 
 			if !writeSSE(frame) {
 				break
+			}
+		}
+		if !boxInjected && event.Type == bamboosdk.EventMessageStart {
+			if writeVisibleBoxFrames(serializer, visibleBoxText(info), func(frame []byte) bool {
+				streamItems = append(streamItems, string(frame))
+				return writeSSE(frame)
+			}) {
+				boxInjected = true
 			}
 		}
 	}
@@ -534,6 +548,7 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 	}
 
 	info.SetFirstResponseTime()
+	prependVisibleBox(resp, info)
 
 	// 空响应检测：content 为空且 output_tokens 为 0 时标记，供 controller 触发重试。
 	// 参考 service/text_quota.go 的 CompletionTokens==0 && PromptTokens>0 判断，

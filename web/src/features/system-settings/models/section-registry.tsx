@@ -231,6 +231,18 @@ const MODELS_SECTIONS = [
             max_fetch_bytes: settings['bamboo.max_fetch_bytes'] ?? 1048576,
             host_tool_timeout_ms:
               settings['bamboo.host_tool_timeout_ms'] ?? 15000,
+            enable_image_recognize:
+              settings['bamboo.enable_image_recognize'] ?? false,
+            image_recognize_channel_id:
+              settings['bamboo.image_recognize_channel_id'] ?? 0,
+            image_recognize_model:
+              settings['bamboo.image_recognize_model'] ?? '',
+            image_recognize_prompt:
+              settings['bamboo.image_recognize_prompt'] ?? '',
+            image_recognize_max_images:
+              settings['bamboo.image_recognize_max_images'] ?? 4,
+            image_recognize_timeout_ms:
+              settings['bamboo.image_recognize_timeout_ms'] ?? 20000,
           },
           retry_setting: {
             record_consume_log_detail_enabled:

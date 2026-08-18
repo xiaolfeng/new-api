@@ -887,7 +887,9 @@ export function ModelMutateDrawer({
                       />
                     </FormControl>
                     <FormDescription>
-                      {t('Press Enter or comma to add tags')}
+                      {t(
+                        'Press Enter or comma to add tags. Add Vision so this model receives original images and skips Bamboo image recognition.'
+                      )}
                     </FormDescription>
                     <FormMessage />
                   </FormItem>

@@ -232,6 +232,11 @@ type RelayInfo struct {
 	HostToolPlan *HostToolPlan
 	// HostToolExecuted 表示本请求已成功或失败地执行过至少一次 host 工具。
 	HostToolExecuted bool
+
+	// ImageRecognizePlan 是 Bamboo 图片预识别的改写/回包结果。
+	ImageRecognizePlan *ImageRecognizePlan
+	// ImageRecognizeInner 标记这是识别子 hop，禁止再进预识别。
+	ImageRecognizeInner bool
 }
 
 // BambooRelayExtract 是 bamboo N2N 中间态请求的本地提取副本。

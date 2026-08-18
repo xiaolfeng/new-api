@@ -142,6 +142,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 
 	other["admin_info"] = adminInfo
 	appendHostToolAdminInfo(relayInfo, adminInfo)
+	appendImageRecognizeAdminInfo(relayInfo, adminInfo)
 	appendRequestPath(ctx, relayInfo, other)
 	appendRequestConversionChain(relayInfo, other)
 	appendFinalRequestFormat(relayInfo, other)
@@ -150,6 +151,24 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendStreamStatus(relayInfo, other)
 	appendBambooTiming(relayInfo, other)
 	return other
+}
+
+func appendImageRecognizeAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[string]interface{}) {
+	if relayInfo == nil || admin == nil || relayInfo.ImageRecognizePlan == nil {
+		return
+	}
+	plan := relayInfo.ImageRecognizePlan
+	admin["image_recognize"] = map[string]interface{}{
+		"enabled":           plan.Enabled,
+		"skipped_reason":    plan.SkippedReason,
+		"channel_id":        plan.ChannelId,
+		"model":             plan.Model,
+		"image_count":       plan.ImageCount,
+		"duration_ms":       plan.DurationMs,
+		"error":             plan.Error,
+		"prompt_tokens":     plan.PromptTokens,
+		"completion_tokens": plan.CompletionTok,
+	}
 }
 
 func appendHostToolAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[string]interface{}) {

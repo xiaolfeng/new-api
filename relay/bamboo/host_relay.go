@@ -119,6 +119,7 @@ func writeCompleteResponse(c *gin.Context, info *relaycommon.RelayInfo, entryCod
 	} else if resp != nil && len(resp.Content) == 0 && resp.Usage.OutputTokens == 0 {
 		common.SetContextKey(c, constant.ContextKeyEmptyResponse, true)
 	}
+	prependVisibleBox(resp, info)
 	body, serr := entryCodec.SerializeResponse(resp)
 	if serr != nil {
 		return usage, translateCodecError(serr)
@@ -447,6 +448,7 @@ func emitFoldedStream(c *gin.Context, info *relaycommon.RelayInfo, entryCodec ba
 	hop collectedHop, results []hosttool.ExecResult, writeSSE func([]byte) bool) (*dto.Usage, *types.NewAPIError) {
 	info.SetFirstResponseTime()
 	folded := hosttool.FoldResponse(hop.id, firstNonEmptyStr(hop.model, model), hop.blocks, results, hop.bambooU)
+	prependVisibleBox(folded, info)
 	ser := entryCodec.NewSerializer(firstNonEmptyStr(hop.model, model))
 	var items []string
 	for _, ev := range hosttool.FoldToStreamEvents(folded) {

@@ -56,7 +56,17 @@ var (
 	modelEnableGroups     = make(map[string][]string)
 	modelQuotaTypeMap     = make(map[string]int)
 	modelEnableGroupsLock = sync.RWMutex{}
+
+	modelTagExact    = make(map[string]string)
+	modelTagPrefix   []modelTagRule
+	modelTagSuffix   []modelTagRule
+	modelTagContains []modelTagRule
 )
+
+type modelTagRule struct {
+	name string
+	tags string
+}
 
 var (
 	modelSupportEndpointTypes = make(map[string][]constant.EndpointType)
@@ -84,6 +94,57 @@ func InvalidatePricingCache() {
 	pricingMap = nil
 	vendorsList = nil
 	lastGetPricingTime = time.Time{}
+}
+
+// ModelHasTag reports whether model metadata tags contain want (case-insensitive).
+// Matching follows the same NameRule order as pricing: exact, then prefix, suffix, contains.
+// Missing metadata returns false.
+func ModelHasTag(modelName, want string) bool {
+	modelName = strings.TrimSpace(modelName)
+	want = strings.TrimSpace(want)
+	if modelName == "" || want == "" {
+		return false
+	}
+	if DB != nil {
+		GetPricing()
+	}
+
+	modelEnableGroupsLock.RLock()
+	defer modelEnableGroupsLock.RUnlock()
+
+	if tags, ok := modelTagExact[modelName]; ok {
+		return tagListHas(tags, want)
+	}
+	for _, rule := range modelTagPrefix {
+		if strings.HasPrefix(modelName, rule.name) && tagListHas(rule.tags, want) {
+			return true
+		}
+	}
+	for _, rule := range modelTagSuffix {
+		if strings.HasSuffix(modelName, rule.name) && tagListHas(rule.tags, want) {
+			return true
+		}
+	}
+	for _, rule := range modelTagContains {
+		if strings.Contains(modelName, rule.name) && tagListHas(rule.tags, want) {
+			return true
+		}
+	}
+	return false
+}
+
+func tagListHas(tags, want string) bool {
+	if tags == "" {
+		return false
+	}
+	for _, part := range strings.FieldsFunc(tags, func(r rune) bool {
+		return r == ',' || r == ';' || r == '|' || r == ' ' || r == '\t' || r == '\n'
+	}) {
+		if strings.EqualFold(strings.TrimSpace(part), want) {
+			return true
+		}
+	}
+	return false
 }
 
 // GetVendors 返回当前定价接口使用到的供应商信息
@@ -191,18 +252,26 @@ func updatePricing() {
 	prefixList := make([]*Model, 0)
 	suffixList := make([]*Model, 0)
 	containsList := make([]*Model, 0)
+	nextExact := make(map[string]string)
+	nextPrefix := make([]modelTagRule, 0)
+	nextSuffix := make([]modelTagRule, 0)
+	nextContains := make([]modelTagRule, 0)
 	for i := range allMeta {
 		m := &allMeta[i]
 		if m.NameRule == NameRuleExact {
 			metaMap[m.ModelName] = m
+			nextExact[m.ModelName] = m.Tags
 		} else {
 			switch m.NameRule {
 			case NameRulePrefix:
 				prefixList = append(prefixList, m)
+				nextPrefix = append(nextPrefix, modelTagRule{name: m.ModelName, tags: m.Tags})
 			case NameRuleSuffix:
 				suffixList = append(suffixList, m)
+				nextSuffix = append(nextSuffix, modelTagRule{name: m.ModelName, tags: m.Tags})
 			case NameRuleContains:
 				containsList = append(containsList, m)
+				nextContains = append(nextContains, modelTagRule{name: m.ModelName, tags: m.Tags})
 			}
 		}
 	}
@@ -422,6 +491,10 @@ func updatePricing() {
 		modelEnableGroups[p.ModelName] = p.EnableGroup
 		modelQuotaTypeMap[p.ModelName] = p.QuotaType
 	}
+	modelTagExact = nextExact
+	modelTagPrefix = nextPrefix
+	modelTagSuffix = nextSuffix
+	modelTagContains = nextContains
 	modelEnableGroupsLock.Unlock()
 
 	lastGetPricingTime = time.Now()
