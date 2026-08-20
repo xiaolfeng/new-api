@@ -99,25 +99,3 @@ func TestClientStreamEmitsOpenAIToolCall(t *testing.T) {
 	assert.Contains(t, joined, `"model":"test-model"`)
 	assert.Regexp(t, `"created":\d+`, joined)
 }
-
-func TestBlocksToStreamEventsKeepsToolUse(t *testing.T) {
-	blocks := []bamboosdk.ContentBlock{
-		bamboosdk.NewTextBlock("hi"),
-		bamboosdk.NewToolUseBlockWithRawInput("call_1", "bash", `{"cmd":"ls"}`),
-	}
-	events := blocksToStreamEvents(blocks)
-	var kinds []bamboosdk.StreamEventType
-	for _, ev := range events {
-		kinds = append(kinds, ev.Type)
-	}
-	require.Contains(t, kinds, bamboosdk.EventContentBlockStart)
-	var sawTool bool
-	for _, ev := range events {
-		if ev.Type == bamboosdk.EventContentBlockStart {
-			if _, ok := ev.ContentBlock.(*bamboosdk.ToolUseBlock); ok {
-				sawTool = true
-			}
-		}
-	}
-	assert.True(t, sawTool)
-}

@@ -211,8 +211,9 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 	cs.ensureHeaders()
 	cs.resumePing()
 
-	writeSSE := cs.writeSSE
-	hop1, hopErr := collectStreamHop(ctx, c, info, client, entryCodec, outFmt, req, false, writeSSE, nil)
+	// 第一跳 tee：工具调用出现前的 thinking/text 实时透传，使首字延迟等于上游真实首字；
+	// 首个 tool_use 是 commit point，其后的 tool_use 帧不示人，交折叠/hop2 决策统一收尾。
+	hop1, hopErr := collectStreamHop(ctx, c, info, client, req, true, cs)
 	if hopErr != nil {
 		cs.pausePing()
 		if cs.HasHeaders() {
@@ -229,15 +230,23 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 	uses := hosttool.CollectToolUses(hop1.blocks)
 	action := hosttool.DecideActionForClient(info.HostToolPlan, uses, info)
 	if action == hosttool.ActionPassthrough {
+		// tee 已实时写完全部内容，只需补终止帧。
 		cs.pausePing()
-		return replayOrForwardHop(c, info, cs, hop1)
+		cs.finish()
+		finishHostStream(c, info, cs)
+		return hop1.usage, nil
 	}
 
 	st := model_setting.GetBambooSettings()
 	results := hosttool.ExecuteCalls(ctx, info, st, uses)
 	if action == hosttool.ActionFoldB {
+		// 折叠保留 thinking/text，tee 已实时透传同质内容，只追加工具结果 dump。
 		cs.pausePing()
-		return emitFoldedStream(c, info, cs, hop1, results)
+		emitPendingVisibleBox(cs, info)
+		appendToolDump(cs, results)
+		cs.finish()
+		finishHostStream(c, info, cs)
+		return hop1.usage, nil
 	}
 
 	hop2Req := hosttool.BuildHop2Request(req, hop1.blocks, results, uses)
@@ -246,13 +255,20 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 			info.HostToolPlan.StoppedReason = reason
 		}
 		cs.pausePing()
-		return emitFoldedStream(c, info, cs, hop1, results)
+		emitPendingVisibleBox(cs, info)
+		appendToolDump(cs, results)
+		cs.finish()
+		finishHostStream(c, info, cs)
+		return hop1.usage, nil
 	}
 
 	cs.pausePing()
-	emitPendingVisibleBox(cs, info)
+	if !hop1.liveEmitted {
+		// tee 未透传任何思考内容（模型直接发起工具调用），用 visible box 兜底反馈。
+		emitPendingVisibleBox(cs, info)
+	}
 	emitHostToolCalls(cs, info, results)
-	hop2, hop2Err := collectStreamHop(ctx, c, info, client, entryCodec, outFmt, hop2Req, true, writeSSE, cs)
+	hop2, hop2Err := collectStreamHop(ctx, c, info, client, hop2Req, false, cs)
 	if hop2Err != nil {
 		if cs.HasHeaders() {
 			cs.emitError(hop2Err)
@@ -262,35 +278,75 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 	usage := hosttool.AddUsage(hop1.usage, hop2.usage)
 	uses2 := hosttool.CollectToolUses(hop2.blocks)
 	if hosttool.AllHostToolUses(info.HostToolPlan, uses2) && len(uses2) > 0 {
-		results2 := hosttool.ExecuteCalls(ctx, info, st, uses2)
-		return emitFoldedStream(c, info, cs, hop2, results2)
+		// hop2 只调工具未成文：实时内容已透传，补工具结果 dump 收尾。
+		appendToolDump(cs, hosttool.ExecuteCalls(ctx, info, st, uses2))
 	}
 	cs.finish()
-	if frames := cs.Frames(); len(frames) > 0 {
-		info.ResponseBody = truncateResponseBody(strings.Join(frames, "\n"))
-	}
-	if c.Request.Context().Err() != nil {
-		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
-	} else {
-		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
-	}
+	finishHostStream(c, info, cs)
 	return usage, nil
 }
 
 type collectedHop struct {
 	blocks    []bamboosdk.ContentBlock
-	frames    [][]byte
 	usage     *dto.Usage
-	id        string
-	model     string
-	bambooU   bamboosdk.Usage
 	cancelled bool
-	flush     []byte
+	// liveEmitted 表示 tee 模式已实时透传过 thinking/text 内容，
+	// 供 hop2 路径决定是否还需要 visible box 兜底反馈。
+	liveEmitted bool
+}
+
+// teeRelay 按 commit-point 规则实时透传 hop1 的 thinking/text 内容。
+// 首个 tool_use（start 或 partial_json delta）出现后进入 committed 状态，
+// 只允许补发已打开内容块的 stop，避免客户端看到会被折叠/续写掉的工具调用帧。
+type teeRelay struct {
+	committed      bool
+	openBlocks     map[int]bool
+	emittedContent bool
+}
+
+func (t *teeRelay) forward(cs *clientStream, ev bamboosdk.StreamEvent) bool {
+	if t == nil || cs == nil {
+		return true
+	}
+	if t.committed {
+		if ev.Type == bamboosdk.EventContentBlockStop && t.openBlocks[ev.Index] {
+			delete(t.openBlocks, ev.Index)
+			return cs.forward(ev)
+		}
+		return true
+	}
+	switch ev.Type {
+	case bamboosdk.EventContentBlockStart:
+		if _, isTool := ev.ContentBlock.(*bamboosdk.ToolUseBlock); isTool {
+			t.committed = true
+			return true
+		}
+		t.emittedContent = true
+		t.openBlocks[ev.Index] = true
+		return cs.forward(ev)
+	case bamboosdk.EventContentBlockDelta:
+		if d, ok := ev.Delta.(*bamboosdk.StreamDelta); ok && d.Type == bamboosdk.DeltaInputJSON {
+			t.committed = true
+			return true
+		}
+		t.emittedContent = true
+		return cs.forward(ev)
+	case bamboosdk.EventContentBlockStop:
+		if t.openBlocks[ev.Index] {
+			delete(t.openBlocks, ev.Index)
+			return cs.forward(ev)
+		}
+		return true
+	case bamboosdk.EventMessageStart:
+		return cs.forward(ev)
+	default:
+		// message_delta / message_stop / ping：终止语义由收尾路径统一补发，不实时透传。
+		return true
+	}
 }
 
 func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk.BambooClient,
-	entryCodec bamboocodec.Codec, outFmt bamboocodec.FormatType, req *bamboocodec.RelayRequest,
-	writeLive bool, writeSSE func([]byte) bool, live *clientStream) (collectedHop, *types.NewAPIError) {
+	req *bamboocodec.RelayRequest, tee bool, live *clientStream) (collectedHop, *types.NewAPIError) {
 
 	out := collectedHop{usage: &dto.Usage{UsageSemantic: "anthropic"}}
 	eventCh, err := client.Chat(ctx, req.Messages, req.System, req.Config)
@@ -303,12 +359,6 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 		return out, translateSDKError(err)
 	}
 
-	modelName := ""
-	if req.Config != nil {
-		modelName = req.Config.Model
-	}
-	out.model = modelName
-	serializer := entryCodec.NewSerializer(modelName)
 	collector := newBambooTimingCollector()
 
 	type streamBlockAccum struct {
@@ -323,6 +373,11 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 	var orderedIndices []int
 	var usage dto.Usage
 	usage.UsageSemantic = "anthropic"
+
+	var relay *teeRelay
+	if tee {
+		relay = &teeRelay{openBlocks: make(map[int]bool)}
+	}
 
 	for event := range eventCh {
 		if event.Type == bamboosdk.EventError {
@@ -342,15 +397,6 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 		}
 		collector.observe(event)
 		accumulateReasoningFromEvent(info.OriginModelName, &usage, &event)
-		if event.Type == bamboosdk.EventMessageStart && event.Message != nil {
-			// ID 不在 BambooMessage 上时用空；fold 会兜底。
-		}
-		if event.Usage != nil && event.Type == bamboosdk.EventMessageStart {
-			out.bambooU = *event.Usage
-		}
-		if event.Type == bamboosdk.EventMessageDelta && event.Usage != nil {
-			out.bambooU = *event.Usage
-		}
 
 		switch event.Type {
 		case bamboosdk.EventContentBlockStart:
@@ -399,54 +445,24 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 			extractStreamUsage(&usage, &event)
 		}
 
-		if writeLive && live != nil {
-			if !live.forward(event) {
+		if live != nil {
+			ok := true
+			if relay != nil {
+				// tee：tool_use 前的 thinking/text 实时透传，commit 后交由决策收尾。
+				ok = relay.forward(live, event)
+			} else {
+				// live：hop2 全量透传。
+				ok = live.forward(event)
+			}
+			if !ok {
 				out.cancelled = true
 				out.usage = &usage
 				return out, nil
 			}
-			continue
-		}
-		data, serr := serializer.Serialize(event)
-		if serr != nil {
-			return out, translateCodecError(serr)
-		}
-		if writeLive {
-			info.SetFirstResponseTime()
-		}
-		if data == nil {
-			continue
-		}
-		for _, frame := range bamboorelay.SplitSSEFrames(data) {
-			out.frames = append(out.frames, frame)
-			if writeLive {
-				if info.BambooDebug != nil && len(info.BambooDebug.RelayResponse) < maxBambooDebugStreamLen {
-					debugFrame := bamboorelay.FormatRelayResponseFrame("StreamRelay", outFmt, outFmt, frame)
-					if info.BambooDebug.RelayResponse == "" {
-						info.BambooDebug.RelayResponse = debugFrame
-					} else {
-						info.BambooDebug.RelayResponse += "\n" + debugFrame
-					}
-				}
-				if !writeSSE(frame) {
-					out.cancelled = true
-					out.usage = &usage
-					return out, nil
-				}
-			}
 		}
 	}
-	if writeLive && live != nil {
-		// Flush is owned by the shared clientStream after hop2.
-	} else {
-		tail, _ := serializer.Flush()
-		out.flush = tail
-		if writeLive && len(tail) > 0 {
-			for _, frame := range bamboorelay.SplitSSEFrames(tail) {
-				out.frames = append(out.frames, frame)
-				_ = writeSSE(frame)
-			}
-		}
+	if relay != nil {
+		out.liveEmitted = relay.emittedContent
 	}
 
 	blocks := make([]bamboosdk.ContentBlock, 0, len(orderedIndices))
@@ -480,77 +496,27 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 	return out, nil
 }
 
-func replayOrForwardHop(c *gin.Context, info *relaycommon.RelayInfo, cs *clientStream, hop collectedHop) (*dto.Usage, *types.NewAPIError) {
-	if cs != nil && cs.Started() {
-		emitPendingVisibleBox(cs, info)
-		for _, ev := range blocksToStreamEvents(hop.blocks) {
-			if !cs.forward(ev) {
-				break
-			}
-		}
-		cs.finish()
-		if frames := cs.Frames(); len(frames) > 0 {
-			info.ResponseBody = truncateResponseBody(strings.Join(frames, "\n"))
-		}
-		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
-		return hop.usage, nil
-	}
-	if cs != nil && !cs.HasHeaders() {
-		cs.ensureHeaders()
-	}
-	writeSSE := func(data []byte) bool {
-		if cs != nil {
-			return cs.writeSSE(data)
-		}
-		if _, err := c.Writer.Write(data); err != nil {
-			return false
-		}
-		c.Writer.Flush()
-		return true
-	}
-	return replayStreamHop(c, info, hop, writeSSE)
-}
-
-func replayStreamHop(c *gin.Context, info *relaycommon.RelayInfo, hop collectedHop, writeSSE func([]byte) bool) (*dto.Usage, *types.NewAPIError) {
-	info.SetFirstResponseTime()
-	var items []string
-	for _, frame := range hop.frames {
-		items = append(items, string(frame))
-		if !writeSSE(frame) {
-			break
-		}
-	}
-	if len(hop.flush) > 0 {
-		for _, frame := range bamboorelay.SplitSSEFrames(hop.flush) {
-			items = append(items, string(frame))
-			_ = writeSSE(frame)
-		}
-	}
-	if len(items) > 0 {
-		info.ResponseBody = truncateResponseBody(strings.Join(items, "\n"))
-	}
-	ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
-	return hop.usage, nil
-}
-
-func emitFoldedStream(c *gin.Context, info *relaycommon.RelayInfo, cs *clientStream, hop collectedHop, results []hosttool.ExecResult) (*dto.Usage, *types.NewAPIError) {
-	if cs == nil {
-		return hop.usage, types.NewError(fmt.Errorf("missing client stream"), types.ErrorCodeBadResponseBody)
-	}
-	emitPendingVisibleBox(cs, info)
-	folded := hosttool.FoldResponse(hop.id, firstNonEmptyStr(hop.model, ""), hop.blocks, results, hop.bambooU)
-	prependVisibleBox(folded, info)
-	for _, ev := range hosttool.FoldToStreamEvents(folded) {
-		if !cs.forward(ev) {
-			break
-		}
-	}
-	cs.finish()
+// finishHostStream 统一记录流式收尾的响应体与结束原因。
+func finishHostStream(c *gin.Context, info *relaycommon.RelayInfo, cs *clientStream) {
 	if frames := cs.Frames(); len(frames) > 0 {
 		info.ResponseBody = truncateResponseBody(strings.Join(frames, "\n"))
 	}
-	ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
-	return hop.usage, nil
+	if c.Request.Context().Err() != nil {
+		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonClientGone, c.Request.Context().Err())
+	} else {
+		ensureStreamStatus(info).SetEndReason(relaycommon.StreamEndReasonDone, nil)
+	}
+}
+
+// appendToolDump 在 tee 已实时透传的流末尾追加工具结果摘要文本块。
+func appendToolDump(cs *clientStream, results []hosttool.ExecResult) {
+	if cs == nil {
+		return
+	}
+	dump := hosttool.JoinFormattedResults(results)
+	if dump != "" {
+		cs.emitClosedText(dump)
+	}
 }
 
 func emitPendingVisibleBox(cs *clientStream, info *relaycommon.RelayInfo) {
@@ -613,15 +579,6 @@ func recordResponseBlocks(info *relaycommon.RelayInfo, blocks []bamboosdk.Conten
 		responseBlocks = append(responseBlocks, ext)
 	}
 	info.BambooRelayData.ResponseBlocks = responseBlocks
-}
-
-func firstNonEmptyStr(vals ...string) string {
-	for _, v := range vals {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 func doHostBuiltinResponses(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
