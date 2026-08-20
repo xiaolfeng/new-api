@@ -230,8 +230,11 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 	uses := hosttool.CollectToolUses(hop1.blocks)
 	action := hosttool.DecideActionForClient(info.HostToolPlan, uses, info)
 	if action == hosttool.ActionPassthrough {
-		// tee 已实时写完全部内容，只需补终止帧。
+		// tee 已实时写完全部 thinking/text；commit point 遮住的
+		// tool_use 及后续内容需补发——透传型客户端（Grok/Claude Code）
+		// 看不到 function_call 就无法发起下一轮。
 		cs.pausePing()
+		cs.emitHeld(hop1.held)
 		cs.finish()
 		finishHostStream(c, info, cs)
 		return hop1.usage, nil
@@ -293,15 +296,21 @@ type collectedHop struct {
 	// liveEmitted 表示 tee 模式已实时透传过 thinking/text 内容，
 	// 供 hop2 路径决定是否还需要 visible box 兜底反馈。
 	liveEmitted bool
+	// held 是 tee 模式 commit point 之后被遮住的事件，
+	// passthrough 决策后需原样补发（透传型客户端的 function_call）。
+	held []bamboosdk.StreamEvent
 }
 
 // teeRelay 按 commit-point 规则实时透传 hop1 的 thinking/text 内容。
 // 首个 tool_use（start 或 partial_json delta）出现后进入 committed 状态，
-// 只允许补发已打开内容块的 stop，避免客户端看到会被折叠/续写掉的工具调用帧。
+// 只允许补发已打开内容块的 stop；被遮住的 tool_use 及后续事件暂存到 held，
+// 供 passthrough 决策后原样补发（Grok Build / Claude Code 的客户端工具
+// 必须看到 function_call 才能发起下一轮）。
 type teeRelay struct {
 	committed      bool
 	openBlocks     map[int]bool
 	emittedContent bool
+	held           []bamboosdk.StreamEvent
 }
 
 func (t *teeRelay) forward(cs *clientStream, ev bamboosdk.StreamEvent) bool {
@@ -313,12 +322,14 @@ func (t *teeRelay) forward(cs *clientStream, ev bamboosdk.StreamEvent) bool {
 			delete(t.openBlocks, ev.Index)
 			return cs.forward(ev)
 		}
+		t.held = append(t.held, ev)
 		return true
 	}
 	switch ev.Type {
 	case bamboosdk.EventContentBlockStart:
 		if _, isTool := ev.ContentBlock.(*bamboosdk.ToolUseBlock); isTool {
 			t.committed = true
+			t.held = append(t.held, ev)
 			return true
 		}
 		t.emittedContent = true
@@ -327,6 +338,7 @@ func (t *teeRelay) forward(cs *clientStream, ev bamboosdk.StreamEvent) bool {
 	case bamboosdk.EventContentBlockDelta:
 		if d, ok := ev.Delta.(*bamboosdk.StreamDelta); ok && d.Type == bamboosdk.DeltaInputJSON {
 			t.committed = true
+			t.held = append(t.held, ev)
 			return true
 		}
 		t.emittedContent = true
@@ -463,6 +475,7 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 	}
 	if relay != nil {
 		out.liveEmitted = relay.emittedContent
+		out.held = relay.held
 	}
 
 	blocks := make([]bamboosdk.ContentBlock, 0, len(orderedIndices))

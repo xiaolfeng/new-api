@@ -393,6 +393,23 @@ func (s *clientStream) finish() {
 	}
 }
 
+// emitHeld 补发 tee 模式下被 commit point 遮住的内容块事件。
+// 只补发 content 块（start/delta/stop），message 级终止语义仍由 finish 统一补发；
+// 走 forward 保证索引与已透传块连续衔接。
+func (s *clientStream) emitHeld(held []bamboosdk.StreamEvent) {
+	if s == nil {
+		return
+	}
+	for _, ev := range held {
+		switch ev.Type {
+		case bamboosdk.EventContentBlockStart, bamboosdk.EventContentBlockDelta, bamboosdk.EventContentBlockStop:
+			if !s.forward(ev) {
+				return
+			}
+		}
+	}
+}
+
 func (s *clientStream) emitError(err error) {
 	if s == nil {
 		return

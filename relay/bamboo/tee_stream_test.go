@@ -11,9 +11,13 @@ import (
 	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
 	_ "github.com/bamboo-services/bamboo-messages/bamboo/codec/anthropic"
 	"github.com/gin-gonic/gin"
+	"github.com/glebarez/sqlite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"gorm.io/gorm"
 
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -45,11 +49,21 @@ func TestTeeRelayForwardsThinkingThenCommitsAtToolUse(t *testing.T) {
 	joined := strings.Join(cs.Frames(), "\n")
 	// 工具调用前的 thinking 已实时透传。
 	assert.Contains(t, joined, "first think")
-	// tool_use 及其之后的文本都不得出现。
+	// tool_use 及其之后的文本都不得实时透传。
 	assert.NotContains(t, joined, "web_search")
 	assert.NotContains(t, joined, "leaked text")
 	// 消息终止语义统一由收尾路径补发，tee 不提前写 stop。
 	assert.NotContains(t, joined, "message_stop")
+	// commit point 遮住的事件全部暂存，供 passthrough 补发。
+	require.Len(t, relay.held, 6)
+	assert.Equal(t, bamboosdk.EventContentBlockStart, relay.held[0].Type)
+	if tu, ok := relay.held[0].ContentBlock.(*bamboosdk.ToolUseBlock); ok {
+		assert.Equal(t, "web_search", tu.Name)
+	} else {
+		t.Fatalf("held[0] 应为 ToolUseBlock，got %T", relay.held[0].ContentBlock)
+	}
+	assert.Contains(t, string(relay.held[1].Delta.(*bamboosdk.StreamDelta).PartialJSON), "cats")
+	assert.Equal(t, bamboosdk.EventContentBlockStop, relay.held[5].Type)
 	assert.True(t, relay.emittedContent)
 	assert.True(t, relay.committed)
 }
@@ -130,16 +144,40 @@ func TestTeeRelayClosesOpenBlockAfterCommit(t *testing.T) {
 	assert.Empty(t, relay.openBlocks)
 }
 
-// fakeBambooClient 用预置事件流模拟上游 Chat。
+// setupToolLogDB 为 ExecuteCalls 的日志记录路径初始化 sqlite 内存库。
+func setupToolLogDB(t *testing.T) {
+	t.Helper()
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	require.NoError(t, err)
+	sqlDB, err := db.DB()
+	require.NoError(t, err)
+	sqlDB.SetMaxOpenConns(1)
+	oldDB, oldLogDB := model.DB, model.LOG_DB
+	model.DB = db
+	model.LOG_DB = db
+	require.NoError(t, db.AutoMigrate(&model.ToolLog{}))
+	t.Cleanup(func() {
+		model.DB = oldDB
+		model.LOG_DB = oldLogDB
+	})
+}
+
+// fakeBambooClient 按调用次序依次回放预置的 hop 事件流，模拟上游多轮 Chat。
 type fakeBambooClient struct {
-	events []bamboosdk.StreamEvent
+	hops [][]bamboosdk.StreamEvent
+	call int
 }
 
 func (f *fakeBambooClient) Chat(ctx context.Context, _ []bamboosdk.BambooMessage, _ string, _ *bamboosdk.RequestConfig) (<-chan bamboosdk.StreamEvent, error) {
-	ch := make(chan bamboosdk.StreamEvent, len(f.events))
+	var events []bamboosdk.StreamEvent
+	if f.call < len(f.hops) {
+		events = f.hops[f.call]
+		f.call++
+	}
+	ch := make(chan bamboosdk.StreamEvent, len(events))
 	go func() {
 		defer close(ch)
-		for _, ev := range f.events {
+		for _, ev := range events {
 			select {
 			case <-ctx.Done():
 				return
@@ -179,7 +217,7 @@ func TestDoHostStreamRelayPassthroughStreamsWholeAnswer(t *testing.T) {
 	info, err := relaycommon.GenRelayInfo(c, types.RelayFormatClaude, &dto.BaseRequest{}, nil)
 	require.NoError(t, err)
 	cs := newClientStream(c, codec, info, "test-model")
-	client := &fakeBambooClient{events: []bamboosdk.StreamEvent{
+	client := &fakeBambooClient{hops: [][]bamboosdk.StreamEvent{{
 		{Type: bamboosdk.EventMessageStart, Message: &bamboosdk.BambooMessage{Role: bamboosdk.RoleAssistant}, Usage: &bamboosdk.Usage{InputTokens: 10, OutputTokens: 5}},
 		{Type: bamboosdk.EventContentBlockStart, Index: 0, ContentBlock: bamboosdk.NewThinkingBlock("", "")},
 		{Type: bamboosdk.EventContentBlockDelta, Index: 0, Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaThinkingDelta, Thinking: "thinking live"}},
@@ -189,7 +227,7 @@ func TestDoHostStreamRelayPassthroughStreamsWholeAnswer(t *testing.T) {
 		{Type: bamboosdk.EventContentBlockStop, Index: 1},
 		{Type: bamboosdk.EventMessageDelta, Delta: &bamboosdk.MessageDelta{StopReason: bamboosdk.FinishReasonEndTurn}},
 		{Type: bamboosdk.EventMessageStop},
-	}}
+	}}}
 
 	usage, apiErr := doHostStreamRelay(c, info, client, codec, codec.Format(), &bamboocodec.RelayRequest{
 		Messages: []bamboosdk.BambooMessage{{Role: bamboosdk.RoleUser, Content: []bamboosdk.ContentBlock{bamboosdk.NewTextBlock("hi")}}},
@@ -215,4 +253,116 @@ func TestDoHostStreamRelayPassthroughStreamsWholeAnswer(t *testing.T) {
 	assert.False(t, info.FirstResponseTime.IsZero())
 	// 上游字节已实时写出。
 	assert.NotEmpty(t, w.Body.String())
+}
+
+// TestDoHostStreamRelayGrokPassthroughForwardsToolUse 复现"无第二轮"回归：
+// Grok Build 的 web_search 是客户端 function，走 passthrough 时必须把
+// tee 遮住的 function_call 补发给客户端，客户端才能执行搜索并发起第二轮。
+func TestDoHostStreamRelayGrokPassthroughForwardsToolUse(t *testing.T) {
+	codec := testCodec(t, bamboocodec.FormatAnthropic)
+	c, _ := newHostTestContext(t)
+	info, err := relaycommon.GenRelayInfo(c, types.RelayFormatClaude, &dto.BaseRequest{}, nil)
+	require.NoError(t, err)
+	info.ClientProfile = common.ClientProfileGrokBuild
+	info.HostToolPlan = &relaycommon.HostToolPlan{
+		Enabled: true,
+		Mode:    "loop",
+	}
+	cs := newClientStream(c, codec, info, "test-model")
+
+	hop1 := []bamboosdk.StreamEvent{
+		{Type: bamboosdk.EventMessageStart, Message: &bamboosdk.BambooMessage{Role: bamboosdk.RoleAssistant}},
+		{Type: bamboosdk.EventContentBlockStart, Index: 0, ContentBlock: bamboosdk.NewThinkingBlock("", "")},
+		{Type: bamboosdk.EventContentBlockDelta, Index: 0, Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaThinkingDelta, Thinking: "need latest"}},
+		{Type: bamboosdk.EventContentBlockStop, Index: 0},
+		{Type: bamboosdk.EventContentBlockStart, Index: 1, ContentBlock: bamboosdk.NewToolUseBlockWithRawInput("call_1", "web_search", `{"query":"latest news"}`)},
+		{Type: bamboosdk.EventContentBlockDelta, Index: 1, Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaInputJSON, PartialJSON: `{"query":"latest news"}`}},
+		{Type: bamboosdk.EventContentBlockStop, Index: 1},
+		{Type: bamboosdk.EventMessageDelta, Delta: &bamboosdk.MessageDelta{StopReason: bamboosdk.FinishReasonToolUse}},
+		{Type: bamboosdk.EventMessageStop},
+	}
+	client := &fakeBambooClient{hops: [][]bamboosdk.StreamEvent{hop1}}
+
+	usage, apiErr := doHostStreamRelay(c, info, client, codec, codec.Format(), &bamboocodec.RelayRequest{
+		Messages: []bamboosdk.BambooMessage{{Role: bamboosdk.RoleUser, Content: []bamboosdk.ContentBlock{bamboosdk.NewTextBlock("news?")}}},
+		Config:   &bamboosdk.RequestConfig{Model: "test-model"},
+		IsStream: true,
+	}, cs)
+
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	joined := strings.Join(cs.Frames(), "\n")
+	// 思考实时透传。
+	assert.Contains(t, joined, "need latest")
+	// Grok search 是透传型工具：function_call（web_search）必须补发给客户端。
+	assert.Contains(t, joined, "web_search")
+	assert.Contains(t, joined, "latest news")
+	// 客户端据此发起第二轮，流以正常终止帧收尾。
+	assert.Equal(t, 1, strings.Count(joined, "event: message_stop"))
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
+	// 工具未在网关执行（passthrough 不发工具公告）。
+	assert.NotContains(t, joined, "ssrf_blocked")
+}
+
+// TestDoHostStreamRelayHop2ContinuesAfterToolUse 复现"工具调用后无续流"：
+// hop1 思考后调用 web_fetch（host 工具），网关执行后应继续 hop2 并透传最终答案。
+// 工具执行用 127.0.0.1 触发 SSRF 保护快速失败，避免测试联网。
+func TestDoHostStreamRelayHop2ContinuesAfterToolUse(t *testing.T) {
+	setupToolLogDB(t)
+	codec := testCodec(t, bamboocodec.FormatAnthropic)
+	c, _ := newHostTestContext(t)
+	info, err := relaycommon.GenRelayInfo(c, types.RelayFormatClaude, &dto.BaseRequest{}, nil)
+	require.NoError(t, err)
+	info.ChannelMeta = &relaycommon.ChannelMeta{ChannelId: 1}
+	info.HostToolPlan = &relaycommon.HostToolPlan{
+		Enabled: true,
+		Mode:    "loop",
+		Decls: []relaycommon.HostToolDecl{
+			{OriginalName: "web_fetch", Canonical: relaycommon.HostToolCanonicalFetch},
+		},
+	}
+	cs := newClientStream(c, codec, info, "test-model")
+
+	// hop1：思考 + web_fetch 工具调用（tee 应透传思考、挡住 tool_use）。
+	hop1 := []bamboosdk.StreamEvent{
+		{Type: bamboosdk.EventMessageStart, Message: &bamboosdk.BambooMessage{Role: bamboosdk.RoleAssistant}},
+		{Type: bamboosdk.EventContentBlockStart, Index: 0, ContentBlock: bamboosdk.NewThinkingBlock("", "")},
+		{Type: bamboosdk.EventContentBlockDelta, Index: 0, Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaThinkingDelta, Thinking: "need data"}},
+		{Type: bamboosdk.EventContentBlockStop, Index: 0},
+		{Type: bamboosdk.EventContentBlockStart, Index: 1, ContentBlock: bamboosdk.NewToolUseBlockWithRawInput("call_1", "web_fetch", `{"url":"http://127.0.0.1:1/","format":"text"}`)},
+		{Type: bamboosdk.EventContentBlockStop, Index: 1},
+		{Type: bamboosdk.EventMessageDelta, Delta: &bamboosdk.MessageDelta{StopReason: bamboosdk.FinishReasonToolUse}},
+		{Type: bamboosdk.EventMessageStop},
+	}
+	// hop2：模型基于工具结果给出最终答案。
+	hop2 := []bamboosdk.StreamEvent{
+		{Type: bamboosdk.EventMessageStart, Message: &bamboosdk.BambooMessage{Role: bamboosdk.RoleAssistant}},
+		{Type: bamboosdk.EventContentBlockStart, Index: 0, ContentBlock: bamboosdk.NewTextBlock("")},
+		{Type: bamboosdk.EventContentBlockDelta, Index: 0, Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaTextDelta, Text: "hop2 final answer"}},
+		{Type: bamboosdk.EventContentBlockStop, Index: 0},
+		{Type: bamboosdk.EventMessageDelta, Delta: &bamboosdk.MessageDelta{StopReason: bamboosdk.FinishReasonEndTurn}},
+		{Type: bamboosdk.EventMessageStop},
+	}
+	client := &fakeBambooClient{hops: [][]bamboosdk.StreamEvent{hop1, hop2}}
+
+	usage, apiErr := doHostStreamRelay(c, info, client, codec, codec.Format(), &bamboocodec.RelayRequest{
+		Messages: []bamboosdk.BambooMessage{{Role: bamboosdk.RoleUser, Content: []bamboosdk.ContentBlock{bamboosdk.NewTextBlock("fetch it")}}},
+		Config:   &bamboosdk.RequestConfig{Model: "test-model"},
+		IsStream: true,
+	}, cs)
+
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	joined := strings.Join(cs.Frames(), "\n")
+	// 思考实时透传。
+	assert.Contains(t, joined, "need data")
+	// 工具公告（host web_fetch）发出，但 hop1 的 tool_use 帧不透传 tool_use 名。
+	assert.Contains(t, joined, "web_fetch")
+	// hop2 的最终答案必须出现在流中——缺失即复现"直接终止"。
+	assert.Contains(t, joined, "hop2 final answer")
+	assert.Equal(t, 1, strings.Count(joined, "event: message_stop"))
+	// 流正常结束。
+	require.NotNil(t, info.StreamStatus)
+	assert.Equal(t, relaycommon.StreamEndReasonDone, info.StreamStatus.EndReason)
 }
