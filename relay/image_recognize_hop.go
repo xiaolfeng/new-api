@@ -64,7 +64,11 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 
 	key, keyIndex, keyErr := channel.GetNextEnabledKey()
 	if keyErr != nil {
-		return "", nil, keyErr
+		// 识别子渠道无可用 key：包成带 skipRetry 的渠道错误，避免被外层
+		// 当成主对话渠道错误处理而误禁用主渠道。
+		return "", nil, relaykittypes.NewError(
+			fmt.Errorf("image recognition channel %d has no available key", channel.Id),
+			relaykittypes.ErrorCodeChannelNoAvailableKey, relaykittypes.ErrOptionWithSkipRetry())
 	}
 
 	stream := live != nil && request.IsStream(nil)
@@ -128,17 +132,20 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 
 	respAny, doErr := adaptor.DoRequest(inner, child, bytes.NewReader(jsonData))
 	if doErr != nil {
-		return "", nil, relaykittypes.NewError(doErr, relaykittypes.ErrorCodeDoRequestFailed, relaykittypes.ErrOptionWithSkipRetry())
+		// 上游瞬时错误（5xx/网络），可重试：不标 skipRetry。
+		return "", nil, relaykittypes.NewError(doErr, relaykittypes.ErrorCodeDoRequestFailed)
 	}
 	httpResp, _ := respAny.(*http.Response)
 	if stream {
 		var scanErr error
 		caption, usage, scanErr = consumeVisionStream(httpResp, live)
 		if scanErr != nil {
-			return caption, usage, relaykittypes.NewError(scanErr, relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+			// 响应体解析失败，可重试：不标 skipRetry。
+			return caption, usage, relaykittypes.NewError(scanErr, relaykittypes.ErrorCodeBadResponseBody)
 		}
 		if strings.TrimSpace(caption) == "" {
-			return caption, usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+			// 空内容，可重试换 key 再试：不标 skipRetry。
+			return caption, usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody)
 		}
 		service.PostTextConsumeQuota(inner, child, usage, []string{"image_recognize"})
 		return caption, usage, nil
@@ -151,7 +158,8 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 	usage, _ = usageAny.(*dto.Usage)
 	caption = extractCaptionFromRecorder(rec)
 	if strings.TrimSpace(caption) == "" {
-		return caption, usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody, relaykittypes.ErrOptionWithSkipRetry())
+		// 空内容，可重试换 key 再试：不标 skipRetry。
+		return caption, usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody)
 	}
 
 	service.PostTextConsumeQuota(inner, child, usage, []string{"image_recognize"})

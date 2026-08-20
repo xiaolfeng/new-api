@@ -243,6 +243,10 @@ const MODELS_SECTIONS = [
               settings['bamboo.image_recognize_max_images'] ?? 4,
             image_recognize_timeout_ms:
               settings['bamboo.image_recognize_timeout_ms'] ?? 20000,
+            image_recognize_retry_times:
+              settings['bamboo.image_recognize_retry_times'] ?? 1,
+            image_recognize_fail_open:
+              settings['bamboo.image_recognize_fail_open'] ?? true,
           },
           retry_setting: {
             record_consume_log_detail_enabled:

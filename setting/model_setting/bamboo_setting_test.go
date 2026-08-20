@@ -88,3 +88,16 @@ func TestBambooClientProfileFlagNilHelpers(t *testing.T) {
 	assert.True(t, empty.ClaudeStrictEgressEnabled())
 	assert.False(t, empty.ClientReturnProfilesEnabled())
 }
+
+func TestClampImageRecognizeRetryTimes(t *testing.T) {
+	st := &BambooSettings{}
+	assert.Equal(t, 0, st.ClampImageRecognizeRetryTimes(), "zero value means no retry")
+	st.ImageRecognizeRetryTimes = 0
+	assert.Equal(t, 0, st.ClampImageRecognizeRetryTimes())
+	st.ImageRecognizeRetryTimes = -1
+	assert.Equal(t, 0, st.ClampImageRecognizeRetryTimes())
+	st.ImageRecognizeRetryTimes = 8
+	assert.Equal(t, 5, st.ClampImageRecognizeRetryTimes())
+	st.ImageRecognizeRetryTimes = 2
+	assert.Equal(t, 2, st.ClampImageRecognizeRetryTimes())
+}

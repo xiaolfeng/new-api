@@ -259,6 +259,8 @@ func truncateRunes(s string, max int) string {
 
 // MaybeRewrite inspects the parsed bamboo request and, when needed, runs
 // image recognition then strips every ImageBlock from the IR.
+// 失败语义：hop 执行/识别请求构造失败先按 ImageRecognizeRetryTimes 重试瞬时错误；
+// 重试耗尽后按 ImageRecognizeFailOpen 决定降级继续（剥图 + 说明）还是返回错误。
 // entryBytes 是入口协议原文，用来把 codec 丢掉的 tool_result 图片捞回 IR。
 func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest, entryBytes []byte, live CaptionLive) *kittypes.NewAPIError {
 	if info == nil || req == nil {
@@ -338,28 +340,62 @@ func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.
 
 	visionReq, err := buildVisionRequest(c, st, latestText, latestImages, live != nil)
 	if err != nil {
+		if st.ImageRecognizeFailOpen {
+			return failOpenImageRecognize(info, st, req, latestImages, err)
+		}
 		return kittypes.NewError(err, kittypes.ErrorCodeInvalidRequest, kittypes.ErrOptionWithSkipRetry())
 	}
 
-	if live != nil {
-		live.Begin()
-	}
+	// 重试循环：仅瞬时/上游类错误（非 skipRetry）触发重试；中间尝试不直播
+	// caption（live=nil），避免客户端看到重试产生的重复/残缺内容。
+	retries := st.ClampImageRecognizeRetryTimes()
 	started := time.Now()
-	rawCaption, usage, hopErr := hopFunc(c, info, visionReq, live)
-	if live != nil {
-		live.End()
+	var (
+		rawCaption string
+		usage      *dto.Usage
+		hopErr     *kittypes.NewAPIError
+	)
+	executed := 0
+	for attempt := 0; attempt <= retries; attempt++ {
+		executed++
+		last := attempt == retries
+		var tryLive CaptionLive
+		if last {
+			tryLive = live
+		}
+		if tryLive != nil {
+			tryLive.Begin()
+		}
+		rawCaption, usage, hopErr = hopFunc(c, info, visionReq, tryLive)
+		if tryLive != nil {
+			tryLive.End()
+		}
+		if hopErr != nil && !last && !kittypes.IsSkipRetryError(hopErr) {
+			continue
+		}
+		break
 	}
 	duration := time.Since(started).Milliseconds()
 	if hopErr != nil {
 		info.ImageRecognizePlan = &relaycommon.ImageRecognizePlan{
 			Enabled:    true,
+			Failed:     true,
+			RetryCount: executed - 1,
 			ChannelId:  st.ImageRecognizeChannelId,
 			Model:      strings.TrimSpace(st.ImageRecognizeModel),
 			ImageCount: len(latestImages),
 			DurationMs: duration,
 			Error:      hopErr.Error(),
 		}
-		return hopErr
+		if st.ImageRecognizeFailOpen {
+			return failOpenImageRecognize(info, st, req, latestImages, hopErr)
+		}
+		if kittypes.IsSkipRetryError(hopErr) {
+			return hopErr
+		}
+		// 重试已耗尽：补包 skipRetry，抑制外层主链路对同一请求再整单重试。
+		return kittypes.NewError(hopErr.Err, hopErr.GetErrorCode(),
+			kittypes.ErrOptionWithSkipRetry(), kittypes.ErrOptionWithStatusCode(hopErr.StatusCode))
 	}
 
 	maxRunes := st.ClampImageRecognizeMaxOutputRunes()
@@ -378,6 +414,7 @@ func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.
 
 	plan := &relaycommon.ImageRecognizePlan{
 		Enabled:    true,
+		RetryCount: executed - 1,
 		ChannelId:  st.ImageRecognizeChannelId,
 		Model:      strings.TrimSpace(st.ImageRecognizeModel),
 		ImageCount: len(latestImages),
@@ -391,6 +428,33 @@ func MaybeRewrite(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.
 		plan.CompletionTok = usage.CompletionTokens
 	}
 	info.ImageRecognizePlan = plan
+	return nil
+}
+
+// failOpenImageRecognize 是识图最终失败（重试耗尽或请求构造失败）时的降级出口：
+// 把所有图片替换成占位符，在 visible box 说明失败，让主流程继续而不是失败整个请求。
+// plan 已存在（hop 失败路径）时复用并补 VisibleBox；否则新建。
+func failOpenImageRecognize(info *relaycommon.RelayInfo, st *model_setting.BambooSettings, req *bamboocodec.RelayRequest, latestImages []extractedImage, failErr error) *kittypes.NewAPIError {
+	if info == nil || req == nil {
+		return nil
+	}
+	plan := info.ImageRecognizePlan
+	if plan == nil {
+		plan = &relaycommon.ImageRecognizePlan{
+			Enabled:    true,
+			Failed:     true,
+			ChannelId:  st.ImageRecognizeChannelId,
+			Model:      strings.TrimSpace(st.ImageRecognizeModel),
+			ImageCount: len(latestImages),
+		}
+		info.ImageRecognizePlan = plan
+	}
+	plan.Failed = true
+	plan.VisibleBox = relaycommon.ImageRecognizeFailOpenNote + "\n"
+	if plan.Error == "" && failErr != nil {
+		plan.Error = failErr.Error()
+	}
+	stripAllImages(req, nil, nil)
 	return nil
 }
 
@@ -482,11 +546,9 @@ func buildVisionRequest(c *gin.Context, st *model_setting.BambooSettings, userTe
 	return &dto.GeneralOpenAIRequest{
 		Model:    modelName,
 		Messages: messages,
-		Stream:   commonBoolPtr(stream),
+		Stream:   &stream,
 	}, nil
 }
-
-func commonBoolPtr(v bool) *bool { return &v }
 
 type wireMessage struct {
 	Role    string          `json:"role"`

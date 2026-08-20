@@ -72,6 +72,10 @@ type BambooSettings struct {
 	ImageRecognizeMaxImages      int    `json:"image_recognize_max_images"`
 	ImageRecognizeTimeoutMs      int    `json:"image_recognize_timeout_ms"`
 	ImageRecognizeMaxOutputRunes int    `json:"image_recognize_max_output_runes"`
+	// ImageRecognizeRetryTimes 识图 hop 失败后的重试次数；0 = 不重试。
+	ImageRecognizeRetryTimes int `json:"image_recognize_retry_times"`
+	// ImageRecognizeFailOpen 重试耗尽后仍失败时，剥图降级继续主流程而不是失败整个请求。默认 true。
+	ImageRecognizeFailOpen bool `json:"image_recognize_fail_open"`
 
 	// EnableGrokStrictEgress 仅门控 grok_build + Responses 写边界。缺键 / nil = true。
 	EnableGrokStrictEgress *bool `json:"enable_grok_strict_egress"`
@@ -110,6 +114,8 @@ var defaultBambooSettings = BambooSettings{
 	ImageRecognizeMaxImages:      4,
 	ImageRecognizeTimeoutMs:      20000,
 	ImageRecognizeMaxOutputRunes: 4096,
+	ImageRecognizeRetryTimes:     1,
+	ImageRecognizeFailOpen:       true,
 	EnableGrokStrictEgress:       boolPtr(true),
 	EnableClaudeStrictEgress:     boolPtr(true),
 	EnableClientReturnProfiles:   boolPtr(false),
@@ -308,6 +314,20 @@ func (s *BambooSettings) ClampImageRecognizeMaxOutputRunes() int {
 	}
 	if n < 1 {
 		return 4096
+	}
+	return n
+}
+
+func (s *BambooSettings) ClampImageRecognizeRetryTimes() int {
+	n := 1
+	if s != nil {
+		n = s.ImageRecognizeRetryTimes // 0 是合法值（不重试）
+	}
+	if n > 5 {
+		return 5
+	}
+	if n < 0 {
+		return 0
 	}
 	return n
 }

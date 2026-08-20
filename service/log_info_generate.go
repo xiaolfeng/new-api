@@ -162,6 +162,8 @@ func appendImageRecognizeAdminInfo(relayInfo *relaycommon.RelayInfo, admin map[s
 	plan := relayInfo.ImageRecognizePlan
 	admin["image_recognize"] = map[string]interface{}{
 		"enabled":           plan.Enabled,
+		"failed":            plan.Failed,
+		"retry_count":       plan.RetryCount,
 		"skipped_reason":    plan.SkippedReason,
 		"channel_id":        plan.ChannelId,
 		"model":             plan.Model,

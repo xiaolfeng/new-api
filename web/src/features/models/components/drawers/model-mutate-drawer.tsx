@@ -315,6 +315,8 @@ export function ModelMutateDrawer({
       'bamboo.image_recognize_prompt': '',
       'bamboo.image_recognize_max_images': 4,
       'bamboo.image_recognize_timeout_ms': 20000,
+      'bamboo.image_recognize_retry_times': 1,
+      'bamboo.image_recognize_fail_open': true,
       'general_setting.ping_interval_enabled': false,
       'general_setting.ping_interval_seconds': 60,
       'gemini.safety_settings': '',

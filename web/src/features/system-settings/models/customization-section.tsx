@@ -74,6 +74,8 @@ const customizationSchema = z.object({
     image_recognize_prompt: z.string(),
     image_recognize_max_images: z.coerce.number().int().min(1).max(8),
     image_recognize_timeout_ms: z.coerce.number().int().min(1).max(60000),
+    image_recognize_retry_times: z.coerce.number().int().min(0).max(5),
+    image_recognize_fail_open: z.boolean(),
   }),
   retry_setting: z.object({
     record_consume_log_detail_enabled: z.boolean(),
@@ -634,6 +636,44 @@ export function CustomizationSection({
                             min={1}
                             max={60000}
                             {...field}
+                          />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.image_recognize_retry_times'
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>
+                          {t('Image recognition retry times')}
+                        </FormLabel>
+                        <FormControl>
+                          <Input type='number' min={0} max={5} {...field} />
+                        </FormControl>
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={form.control}
+                    name='bamboo.image_recognize_fail_open'
+                    render={({ field }) => (
+                      <FormItem className='sm:col-span-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
+                        <div className='space-y-0.5'>
+                          <FormLabel className='text-base'>
+                            {t('Image recognition fail open')}
+                          </FormLabel>
+                          <FormDescription>
+                            {t(
+                              'Continue the request, with images stripped, when image recognition finally fails.'
+                            )}
+                          </FormDescription>
+                        </div>
+                        <FormControl>
+                          <Switch
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
                           />
                         </FormControl>
                       </FormItem>

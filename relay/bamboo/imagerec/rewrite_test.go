@@ -1,6 +1,7 @@
 package imagerec
 
 import (
+	"errors"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -347,4 +348,195 @@ func TestMaybeRewrite_LiftsToolResultImageThenRecognizes(t *testing.T) {
 		}
 	}
 	assert.True(t, foundCaption)
+}
+
+func TestMaybeRewrite_HopFailureRetriesThenSucceeds(t *testing.T) {
+	enableImageRecognize(t)
+	st := model_setting.GetBambooSettings()
+	st.ImageRecognizeRetryTimes = 1
+
+	calls := 0
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
+		calls++
+		if calls == 1 {
+			return "", nil, kittypes.NewError(errors.New("transient 5xx"), kittypes.ErrorCodeDoRequestFailed)
+		}
+		return "[Image 1]\nA red cat", &dto.Usage{PromptTokens: 10, CompletionTokens: 4}, nil
+	}
+
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(pngBlock("aaa")),
+	})
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
+	require.Nil(t, err)
+	require.Equal(t, 2, calls)
+	require.NotNil(t, info.ImageRecognizePlan)
+	assert.False(t, info.ImageRecognizePlan.Failed)
+	assert.Equal(t, 1, info.ImageRecognizePlan.RetryCount)
+	assert.Contains(t, info.ImageRecognizePlan.VisibleBox, "A red cat")
+}
+
+func TestMaybeRewrite_HopFailureFailOpenContinues(t *testing.T) {
+	enableImageRecognize(t)
+	st := model_setting.GetBambooSettings()
+	st.ImageRecognizeRetryTimes = 1
+	st.ImageRecognizeFailOpen = true
+
+	calls := 0
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
+		calls++
+		return "", nil, kittypes.NewError(errors.New("upstream down"), kittypes.ErrorCodeDoRequestFailed)
+	}
+
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(pngBlock("aaa")),
+	})
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
+	require.Nil(t, err)
+	require.Equal(t, 2, calls)
+	require.NotNil(t, info.ImageRecognizePlan)
+	assert.True(t, info.ImageRecognizePlan.Failed)
+	assert.Equal(t, 1, info.ImageRecognizePlan.RetryCount)
+	assert.Contains(t, info.ImageRecognizePlan.VisibleBox, relaycommon.ImageRecognizeFailOpenNote)
+	for _, msg := range req.Messages {
+		for _, block := range msg.Content {
+			_, isImg := block.(*bamboosdk.ImageBlock)
+			assert.False(t, isImg, "fail-open must strip all images")
+		}
+	}
+}
+
+func TestMaybeRewrite_HopFailureFailClosedReturnsError(t *testing.T) {
+	enableImageRecognize(t)
+	st := model_setting.GetBambooSettings()
+	st.ImageRecognizeRetryTimes = 1
+	st.ImageRecognizeFailOpen = false
+
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
+		return "", nil, kittypes.NewError(errors.New("upstream down"), kittypes.ErrorCodeDoRequestFailed)
+	}
+
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(pngBlock("aaa")),
+	})
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
+	require.NotNil(t, err)
+	assert.True(t, kittypes.IsSkipRetryError(err), "final error must suppress outer retry")
+	require.NotNil(t, info.ImageRecognizePlan)
+	assert.True(t, info.ImageRecognizePlan.Failed)
+	assert.Equal(t, 1, info.ImageRecognizePlan.RetryCount)
+}
+
+func TestMaybeRewrite_HopSkipRetryErrorNoRetry(t *testing.T) {
+	enableImageRecognize(t)
+	st := model_setting.GetBambooSettings()
+	st.ImageRecognizeRetryTimes = 3
+	st.ImageRecognizeFailOpen = true
+
+	calls := 0
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
+		calls++
+		return "", nil, kittypes.NewError(errors.New("channel disabled"), kittypes.ErrorCodeGetChannelFailed, kittypes.ErrOptionWithSkipRetry())
+	}
+
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(pngBlock("aaa")),
+	})
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
+	require.Nil(t, err)
+	require.Equal(t, 1, calls, "skip-retry errors must not be retried")
+	require.NotNil(t, info.ImageRecognizePlan)
+	assert.True(t, info.ImageRecognizePlan.Failed)
+	assert.Zero(t, info.ImageRecognizePlan.RetryCount)
+}
+
+type testCaptionLive struct {
+	begins int
+	ended  bool
+}
+
+func (l *testCaptionLive) Begin() bool {
+	l.begins++
+	return true
+}
+
+func (l *testCaptionLive) OnDelta(text string) {}
+
+func (l *testCaptionLive) End() {
+	l.ended = true
+}
+
+func TestMaybeRewrite_RetryDoesNotStreamInterimAttempts(t *testing.T) {
+	enableImageRecognize(t)
+	st := model_setting.GetBambooSettings()
+	st.ImageRecognizeRetryTimes = 1
+
+	var gotLive []CaptionLive
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
+		gotLive = append(gotLive, live)
+		if len(gotLive) == 1 {
+			return "", nil, kittypes.NewError(errors.New("transient"), kittypes.ErrorCodeDoRequestFailed)
+		}
+		return "[Image 1]\nok", &dto.Usage{PromptTokens: 1, CompletionTokens: 1}, nil
+	}
+
+	live := &testCaptionLive{}
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(pngBlock("aaa")),
+	})
+	err := MaybeRewrite(testGinContext(), info, req, nil, live)
+	require.Nil(t, err)
+	require.Len(t, gotLive, 2)
+	assert.Nil(t, gotLive[0], "interim attempts must not live-stream")
+	assert.Same(t, live, gotLive[1], "final attempt uses the live caption stream")
+	assert.Equal(t, 1, live.begins)
+	assert.True(t, live.ended)
+}
+
+func TestMaybeRewrite_BuildVisionRequestFailureFailOpen(t *testing.T) {
+	enableImageRecognize(t)
+	st := model_setting.GetBambooSettings()
+	st.ImageRecognizeFailOpen = true
+
+	called := false
+	origHop := hopFunc
+	t.Cleanup(func() { hopFunc = origHop })
+	hopFunc = func(c *gin.Context, parent *relaycommon.RelayInfo, request *dto.GeneralOpenAIRequest, live CaptionLive) (string, *dto.Usage, *kittypes.NewAPIError) {
+		called = true
+		return "", nil, nil
+	}
+
+	// base64 空数据会让 resolveImageDataURL 在 hop 之前失败。
+	bad := bamboosdk.NewImageBlock(bamboosdk.ContentSource{Type: "base64", MediaType: "image/png", Data: ""})
+	info := &relaycommon.RelayInfo{OriginModelName: "deepseek-chat"}
+	req := imageReq([]bamboosdk.BambooMessage{
+		bamboosdk.NewUserMessageBlocks(bad),
+	})
+	err := MaybeRewrite(testGinContext(), info, req, nil, nil)
+	require.Nil(t, err)
+	assert.False(t, called, "hop must not run when the vision request cannot be built")
+	require.NotNil(t, info.ImageRecognizePlan)
+	assert.True(t, info.ImageRecognizePlan.Failed)
+	assert.Contains(t, info.ImageRecognizePlan.VisibleBox, relaycommon.ImageRecognizeFailOpenNote)
+	for _, msg := range req.Messages {
+		for _, block := range msg.Content {
+			_, isImg := block.(*bamboosdk.ImageBlock)
+			assert.False(t, isImg)
+		}
+	}
 }

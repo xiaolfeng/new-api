@@ -250,6 +250,8 @@ export type ModelSettings = {
   'bamboo.image_recognize_prompt': string
   'bamboo.image_recognize_max_images': number
   'bamboo.image_recognize_timeout_ms': number
+  'bamboo.image_recognize_retry_times': number
+  'bamboo.image_recognize_fail_open': boolean
   'general_setting.ping_interval_enabled': boolean
   'general_setting.ping_interval_seconds': number
   'gemini.safety_settings': string
