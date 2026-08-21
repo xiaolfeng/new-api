@@ -117,6 +117,12 @@ func parseAgentSessionFromHeaders(headers map[string]string, source string) (age
 		parentSessionId = getHeaderIgnoreCase(headers, "X-Codex-Parent-Thread-Id")
 		return "", sessionId, parentSessionId
 	}
+	// Grok Build: X-Grok-Agent-Id 是 Agent 父会话，X-Grok-Session-Id 是当前子对话。
+	if source == "Grok Build" {
+		parentSessionId = getHeaderIgnoreCase(headers, "X-Grok-Agent-Id")
+		sessionId = getHeaderIgnoreCase(headers, "X-Grok-Session-Id")
+		return "", sessionId, parentSessionId
+	}
 	// OpenCode headers (highest priority)
 	sessionId = getHeaderIgnoreCase(headers, "X-Session-Affinity")
 	parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Session-Id")

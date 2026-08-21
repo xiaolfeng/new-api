@@ -69,6 +69,7 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 	}
 	info.SetFirstResponseTime()
 	usage := usageFromBamboo(resp)
+	rawUsage1 := resp.Usage
 	blocks := hosttool.BlocksFromResponse(resp)
 	recordResponseBlocks(info, blocks)
 
@@ -103,6 +104,9 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 	}
 	usage2 := usageFromBamboo(resp2)
 	usage = hosttool.AddUsage(usage, usage2)
+	// 出口响应的 usage 必须反映两轮模型调用的总消耗（客户端按最后一次 usage
+	// 计），否则客户端看到的总 token 只含 hop2，漏掉 hop1 的输出与缓存。
+	resp2.Usage = mergeHopRawUsage(rawUsage1, resp2.Usage)
 	blocks2 := hosttool.BlocksFromResponse(resp2)
 	recordResponseBlocks(info, blocks2)
 	uses2 := hosttool.CollectToolUses(blocks2)
@@ -183,6 +187,38 @@ func usageFromBamboo(resp *bamboosdk.Response) *dto.Usage {
 			CachedTokens:         int(resp.Usage.CacheReadInputTokens),
 			CachedCreationTokens: int(resp.Usage.CacheCreationInputTokens),
 		},
+	}
+}
+
+// trackHopRawUsage 汇总单 hop 事件流中的原始用量：事件携带的是"当时累计值"，
+// 各字段取最大值即为该 hop 的最终用量（含缓存，上游口径）。
+func trackHopRawUsage(total *bamboosdk.Usage, u *bamboosdk.Usage) {
+	if total == nil || u == nil {
+		return
+	}
+	if u.InputTokens > total.InputTokens {
+		total.InputTokens = u.InputTokens
+	}
+	if u.OutputTokens > total.OutputTokens {
+		total.OutputTokens = u.OutputTokens
+	}
+	if u.CacheReadInputTokens > total.CacheReadInputTokens {
+		total.CacheReadInputTokens = u.CacheReadInputTokens
+	}
+	if u.CacheCreationInputTokens > total.CacheCreationInputTokens {
+		total.CacheCreationInputTokens = u.CacheCreationInputTokens
+	}
+}
+
+// mergeHopRawUsage 把两 hop 的原始用量相加，作为出口响应的总消耗：
+// 网关为一次客户端请求实际执行了多轮模型调用，hop 间输入/输出/缓存
+// 各字段都会真实发生，因此客户端可见的 total 应为逐项之和。
+func mergeHopRawUsage(a, b bamboosdk.Usage) bamboosdk.Usage {
+	return bamboosdk.Usage{
+		InputTokens:              a.InputTokens + b.InputTokens,
+		OutputTokens:             a.OutputTokens + b.OutputTokens,
+		CacheReadInputTokens:     a.CacheReadInputTokens + b.CacheReadInputTokens,
+		CacheCreationInputTokens: a.CacheCreationInputTokens + b.CacheCreationInputTokens,
 	}
 }
 
@@ -284,6 +320,13 @@ func doHostStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bambo
 		// hop2 只调工具未成文：实时内容已透传，补工具结果 dump 收尾。
 		appendToolDump(cs, hosttool.ExecuteCalls(ctx, info, st, uses2))
 	}
+	// 用两 hop 合并后的总用量替换 hop2 最后一个 usage 事件，使客户端最终
+	// 收到的 usage chunk 反映完整消耗（否则只含 hop2，漏掉 hop1 的输出）。
+	if hop2.lastUsageEvent != nil {
+		merged := mergeHopRawUsage(hop1.rawUsage, hop2.rawUsage)
+		hop2.lastUsageEvent.Usage = &merged
+		cs.forward(*hop2.lastUsageEvent)
+	}
 	cs.finish()
 	finishHostStream(c, info, cs)
 	return usage, nil
@@ -299,6 +342,13 @@ type collectedHop struct {
 	// held 是 tee 模式 commit point 之后被遮住的事件，
 	// passthrough 决策后需原样补发（透传型客户端的 function_call）。
 	held []bamboosdk.StreamEvent
+	// rawUsage 是本 hop 上游口径的原始用量（含缓存），
+	// 供多 hop 出口把客户端可见的最终 usage 合并为总消耗。
+	rawUsage bamboosdk.Usage
+	// lastUsageEvent 是最后一个纯 usage 事件（hop2 且不带终止语义时暂存，
+	// 未实时转发），由调用方在 hop 结束后用合并 usage 替换补发，
+	// 避免客户端最终只看到最后 hop 的用量。
+	lastUsageEvent *bamboosdk.StreamEvent
 }
 
 // teeRelay 按 commit-point 规则实时透传 hop1 的 thinking/text 内容。
@@ -455,6 +505,29 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 			event.Type == bamboosdk.EventMessageDelta ||
 			event.Type == bamboosdk.EventPing {
 			extractStreamUsage(&usage, &event)
+			if event.Usage != nil {
+				trackHopRawUsage(&out.rawUsage, event.Usage)
+			}
+		} else if event.Usage != nil {
+			trackHopRawUsage(&out.rawUsage, event.Usage)
+		}
+
+		// hop2（非 tee）的最后一个纯 usage 事件延迟到 hop 结束后补发，
+		// 以便调用方把两 hop 用量合并后替换，客户端最终见到的
+		// usage chunk 反映完整消耗而非仅 hop2。
+		if !tee && event.Type == bamboosdk.EventMessageDelta && event.Usage != nil {
+			if msgDelta, ok := event.Delta.(*bamboosdk.MessageDelta); ok && msgDelta.StopReason == "" {
+				if out.lastUsageEvent != nil && live != nil {
+					if !live.forward(*out.lastUsageEvent) {
+						out.cancelled = true
+						out.usage = &usage
+						return out, nil
+					}
+				}
+				cp := event
+				out.lastUsageEvent = &cp
+				continue
+			}
 		}
 
 		if live != nil {

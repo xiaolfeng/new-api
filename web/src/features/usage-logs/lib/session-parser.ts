@@ -137,8 +137,12 @@ export function parseLogSession(log: UsageLog): ParsedLogSession {
   session.sessionId =
     getHeader(headers, 'x-session-affinity') ??
     getHeader(headers, 'x-claude-code-session-id') ??
+    getHeader(headers, 'x-grok-session-id') ??
     getHeader(headers, 'x-session-id')
-  session.parentSessionId = getHeader(headers, 'x-parent-session-id')
+  session.parentSessionId =
+    // Grok Build: X-Grok-Agent-Id 是 Agent 父会话
+    getHeader(headers, 'x-grok-agent-id') ??
+    getHeader(headers, 'x-parent-session-id')
   session.agentId = getHeader(headers, 'x-claude-code-agent-id')
   return session
 }

@@ -483,6 +483,49 @@ func TestExtractLogDetailSummariesCodexWindowIdTakesPrecedence(t *testing.T) {
 	require.Empty(t, parentSessionId)
 }
 
+func TestExtractLogDetailSummariesWithGrokBuildAgentSession(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":        "grok-build/0.2",
+			"X-Grok-Agent-Id":   "agent_grok_abc",
+			"X-Grok-Session-Id": "sess_grok_456",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Grok Build 子对话请求"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, agentId, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "Grok Build", source)
+	require.Empty(t, agentId)
+	require.Equal(t, "sess_grok_456", sessionId)
+	require.Equal(t, "agent_grok_abc", parentSessionId)
+}
+
+func TestExtractLogDetailSummariesWithGrokBuildIgnoresGenericHeaders(t *testing.T) {
+	// Grok Build 分支提前返回，X-Grok-* 独占会话标识，不走通用回退链。
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":            "grok-build/0.2",
+			"X-Grok-Agent-Id":       "agent_main",
+			"X-Grok-Session-Id":     "sess_child",
+			"X-Session-Id":          "generic_ignored",
+			"X-Claude-Code-Agent-Id": "claude_ignored",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Grok 优先级测试"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, agentId, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "Grok Build", source)
+	require.Empty(t, agentId)
+	require.Equal(t, "sess_child", sessionId)
+	require.Equal(t, "agent_main", parentSessionId)
+}
+
 func TestExtractLogDetailSummariesWithCodexTurnMetadataFallback(t *testing.T) {
 	recordBytes, err := common.Marshal(LogDetailRecord{
 		Headers: map[string]string{

@@ -136,6 +136,41 @@ describe('parseLogSession', () => {
     })
   })
 
+  it('falls back to Grok Build agent/session headers', () => {
+    const log = createLog({
+      record: JSON.stringify({
+        headers: {
+          'User-Agent': 'grok-build/0.2',
+          'X-Grok-Agent-Id': 'agent_main_abc',
+          'X-Grok-Session-Id': 'sess_child_456',
+        },
+      }),
+    })
+
+    expect(parseLogSession(log)).toEqual({
+      sessionId: 'sess_child_456',
+      parentSessionId: 'agent_main_abc',
+    })
+  })
+
+  it('gives Grok Build headers precedence over generic session headers', () => {
+    const log = createLog({
+      record: JSON.stringify({
+        headers: {
+          'User-Agent': 'grok-build/0.2',
+          'X-Grok-Agent-Id': 'agent_main',
+          'X-Grok-Session-Id': 'sess_child',
+          'X-Session-Id': 'generic_ignored',
+        },
+      }),
+    })
+
+    expect(parseLogSession(log)).toEqual({
+      sessionId: 'sess_child',
+      parentSessionId: 'agent_main',
+    })
+  })
+
   it('returns empty session when no headers or summaries exist', () => {
     expect(parseLogSession(createLog({}))).toEqual({})
   })

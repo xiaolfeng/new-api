@@ -162,10 +162,13 @@ func setupToolLogDB(t *testing.T) {
 	})
 }
 
-// fakeBambooClient 按调用次序依次回放预置的 hop 事件流，模拟上游多轮 Chat。
+// fakeBambooClient 按调用次序依次回放预置的 hop 事件流，模拟上游多轮 Chat；
+// completes 供非流式 Complete 依次回放响应。
 type fakeBambooClient struct {
-	hops [][]bamboosdk.StreamEvent
-	call int
+	hops         [][]bamboosdk.StreamEvent
+	completes    []*bamboosdk.Response
+	call         int
+	completeCall int
 }
 
 func (f *fakeBambooClient) Chat(ctx context.Context, _ []bamboosdk.BambooMessage, _ string, _ *bamboosdk.RequestConfig) (<-chan bamboosdk.StreamEvent, error) {
@@ -189,6 +192,11 @@ func (f *fakeBambooClient) Chat(ctx context.Context, _ []bamboosdk.BambooMessage
 }
 
 func (f *fakeBambooClient) Complete(context.Context, []bamboosdk.BambooMessage, string, *bamboosdk.RequestConfig) (*bamboosdk.Response, error) {
+	if f.completeCall < len(f.completes) {
+		resp := f.completes[f.completeCall]
+		f.completeCall++
+		return resp, nil
+	}
 	return nil, nil
 }
 
