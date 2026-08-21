@@ -197,6 +197,8 @@ export interface LogOtherData {
   // Authoritative total input tokens for cache-hit rate (written by backend).
   input_tokens_total?: number
   claude?: boolean
+  // 内部工具合成请求（host-tool builtin）：未请求模型，无 TPS / 缓存率。
+  host_tool_internal?: boolean
   model_ratio?: number
   completion_ratio?: number
   model_price?: number

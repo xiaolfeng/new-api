@@ -784,6 +784,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (!isDisplayableLogType(log.type)) return null;
 
         const other = parseLogOther(log.other);
+        if (other?.host_tool_internal) {
+          return <span className="text-muted-foreground/60">—</span>;
+        }
         const tps = other?.tps;
         const hasValidTps = typeof tps === "number" && tps > 0;
 
@@ -963,6 +966,9 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
         if (!isDisplayableLogType(log.type)) return null;
 
         const other = parseLogOther(log.other);
+        if (other?.host_tool_internal) {
+          return <span className="text-muted-foreground/60">—</span>;
+        }
         const summary = getCacheRateSummary(log.prompt_tokens || 0, other);
         if (summary.rate === null || summary.rate === 0) {
           return <span className="text-muted-foreground text-xs">-</span>;

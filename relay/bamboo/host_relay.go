@@ -595,6 +595,7 @@ func recordResponseBlocks(info *relaycommon.RelayInfo, blocks []bamboosdk.Conten
 }
 
 func doHostBuiltinResponses(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
+	info.HostToolInternal = true
 	st := model_setting.GetBambooSettings()
 	result := hosttool.ExecuteBuiltinRequest(c.Request.Context(), info, st, req)
 
@@ -644,6 +645,7 @@ func doHostBuiltinResponses(c *gin.Context, info *relaycommon.RelayInfo, req *ba
 }
 
 func doHostClaudeSearch(c *gin.Context, info *relaycommon.RelayInfo, req *bamboocodec.RelayRequest) (*dto.Usage, *types.NewAPIError) {
+	info.HostToolInternal = true
 	st := model_setting.GetBambooSettings()
 	result := hosttool.ExecuteBuiltinRequest(c.Request.Context(), info, st, req)
 

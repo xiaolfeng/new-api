@@ -241,6 +241,10 @@ type RelayInfo struct {
 	HostToolPlan *HostToolPlan
 	// HostToolExecuted 表示本请求已成功或失败地执行过至少一次 host 工具。
 	HostToolExecuted bool
+	// HostToolInternal 标记请求由 host 内部工具直接合成（Claude server tool
+	// helper / Responses builtin-only），未请求上游模型、不产生模型 token，
+	// 不应计入 TPS / 缓存率等模型统计。
+	HostToolInternal bool
 
 	// ImageRecognizePlan 是 Bamboo 图片预识别的改写/回包结果。
 	ImageRecognizePlan *ImageRecognizePlan
