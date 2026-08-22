@@ -263,6 +263,37 @@ func TestDoHostStreamRelayPassthroughStreamsWholeAnswer(t *testing.T) {
 	assert.NotEmpty(t, w.Body.String())
 }
 
+func TestDoHostStreamRelayResponsesPassthroughKeepsUsage(t *testing.T) {
+	codec := testCodec(t, bamboocodec.FormatResponses)
+	c, _ := newHostTestContext(t)
+	info, err := relaycommon.GenRelayInfo(c, types.RelayFormatOpenAIResponses, &dto.OpenAIResponsesRequest{}, nil)
+	require.NoError(t, err)
+	cs := newClientStream(c, codec, info, "test-model")
+	client := &fakeBambooClient{hops: [][]bamboosdk.StreamEvent{{
+		{Type: bamboosdk.EventMessageStart, Message: &bamboosdk.BambooMessage{Role: bamboosdk.RoleAssistant}, Usage: &bamboosdk.Usage{InputTokens: 10}},
+		{Type: bamboosdk.EventContentBlockStart, Index: 0, ContentBlock: bamboosdk.NewTextBlock("")},
+		{Type: bamboosdk.EventContentBlockDelta, Index: 0, Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaTextDelta, Text: "hello"}},
+		{Type: bamboosdk.EventContentBlockStop, Index: 0},
+		{Type: bamboosdk.EventPing, Usage: &bamboosdk.Usage{InputTokens: 42, OutputTokens: 18}},
+		{Type: bamboosdk.EventMessageDelta, Delta: &bamboosdk.MessageDelta{StopReason: bamboosdk.FinishReasonEndTurn}, Usage: &bamboosdk.Usage{InputTokens: 42, OutputTokens: 18}},
+		{Type: bamboosdk.EventMessageStop},
+	}}}
+
+	usage, apiErr := doHostStreamRelay(c, info, client, codec, codec.Format(), &bamboocodec.RelayRequest{
+		Messages: []bamboosdk.BambooMessage{{Role: bamboosdk.RoleUser, Content: []bamboosdk.ContentBlock{bamboosdk.NewTextBlock("hi")}}},
+		Config:   &bamboosdk.RequestConfig{Model: "test-model"},
+		IsStream: true,
+	}, cs)
+
+	require.Nil(t, apiErr)
+	require.NotNil(t, usage)
+	joined := strings.Join(cs.Frames(), "\n")
+	assert.Contains(t, joined, `"input_tokens":42`)
+	assert.Contains(t, joined, `"output_tokens":18`)
+	assert.Contains(t, joined, `"total_tokens":60`)
+	assert.NotContains(t, joined, `"total_tokens":0`)
+}
+
 // TestDoHostStreamRelayGrokPassthroughForwardsToolUse 复现"无第二轮"回归：
 // Grok Build 的 web_search 是客户端 function，走 passthrough 时必须把
 // tee 遮住的 function_call 补发给客户端，客户端才能执行搜索并发起第二轮。

@@ -38,6 +38,7 @@ type clientStream struct {
 	frames    []string
 	format    bamboocodec.FormatType
 	model     string
+	lastUsage *bamboosdk.Usage
 }
 
 func newClientStream(c *gin.Context, entryCodec bamboocodec.Codec, info *relaycommon.RelayInfo, model string) *clientStream {
@@ -143,10 +144,25 @@ func (s *clientStream) ensureStart() {
 	})
 }
 
+func (s *clientStream) rememberUsage(ev bamboosdk.StreamEvent) {
+	if s == nil || ev.Usage == nil {
+		return
+	}
+	u := ev.Usage
+	if u.InputTokens == 0 && u.OutputTokens == 0 &&
+		u.CacheReadInputTokens == 0 && u.CacheCreationInputTokens == 0 &&
+		u.ReasoningTokens == 0 {
+		return
+	}
+	cp := *u
+	s.lastUsage = &cp
+}
+
 func (s *clientStream) emit(ev bamboosdk.StreamEvent) bool {
 	if s == nil || !s.ok || s.ser == nil {
 		return false
 	}
+	s.rememberUsage(ev)
 	data, err := s.ser.Serialize(ev)
 	if err != nil || data == nil {
 		return s.ok
@@ -372,6 +388,7 @@ func (s *clientStream) finish() {
 		s.emit(bamboosdk.StreamEvent{
 			Type:  bamboosdk.EventMessageDelta,
 			Delta: &bamboosdk.MessageDelta{StopReason: bamboosdk.FinishReasonEndTurn},
+			Usage: s.lastUsage,
 		})
 	}
 	if s.started {
@@ -402,7 +419,7 @@ func (s *clientStream) emitHeld(held []bamboosdk.StreamEvent) {
 	}
 	for _, ev := range held {
 		switch ev.Type {
-		case bamboosdk.EventContentBlockStart, bamboosdk.EventContentBlockDelta, bamboosdk.EventContentBlockStop:
+		case bamboosdk.EventContentBlockStart, bamboosdk.EventContentBlockDelta, bamboosdk.EventContentBlockStop, bamboosdk.EventMessageDelta:
 			if !s.forward(ev) {
 				return
 			}

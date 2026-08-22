@@ -402,7 +402,14 @@ func (t *teeRelay) forward(cs *clientStream, ev bamboosdk.StreamEvent) bool {
 	case bamboosdk.EventMessageStart:
 		return cs.forward(ev)
 	default:
-		// message_delta / message_stop / ping：终止语义由收尾路径统一补发，不实时透传。
+		// ping / 无终止语义的 message_delta：用量先记在 clientStream，
+		// 带 StopReason 的 message_delta 在未 commit 时透传，commit 后进 held。
+		cs.rememberUsage(ev)
+		if ev.Type == bamboosdk.EventMessageDelta {
+			if md, ok := ev.Delta.(*bamboosdk.MessageDelta); ok && md.StopReason != "" {
+				return cs.forward(ev)
+			}
+		}
 		return true
 	}
 }
