@@ -101,6 +101,22 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		return nil, translateCodecError(parseErr) // 内部 errors.As 断言 *CodecError
 	}
 
+	// Gemini 的 model / stream 不在 body 里（codec 合同：relay 必须补）。
+	// Anthropic / Chat Completions 已从 body 写入时保留原值。
+	if relayReq.Config == nil {
+		relayReq.Config = &bamboosdk.RequestConfig{}
+	}
+	if relayReq.Config.Model == "" {
+		if model := info.GetUpstreamModelName(); model != "" {
+			relayReq.Config.Model = model
+		} else {
+			relayReq.Config.Model = info.GetOriginModelName()
+		}
+	}
+	if info.GetIsStream() {
+		relayReq.IsStream = true
+	}
+
 	info.BambooRelayData = extractBambooRelayData(relayReq)
 
 	var cs *clientStream
