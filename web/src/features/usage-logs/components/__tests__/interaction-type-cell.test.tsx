@@ -59,6 +59,7 @@ describe('InteractionTypeCell', () => {
       Input: 'Input',
       Output: 'Output',
       Callback: 'Callback',
+      'Single Turn': 'Single Turn',
       'Web Search': 'Web Search',
       WebFetch: 'WebFetch',
       'Image recognition': 'Image recognition',
@@ -80,6 +81,18 @@ describe('InteractionTypeCell', () => {
 
     expect(screen.getByText('Output')).toBeInTheDocument()
     expect(screen.queryByText('Web Search')).not.toBeInTheDocument()
+  })
+
+  test('renders the single turn badge from precomputed chinese value', () => {
+    render(
+      <InteractionTypeCell
+        log={createLog({
+          other: JSON.stringify({ interaction_type: '单轮' }),
+        })}
+      />
+    )
+
+    expect(screen.getByText('Single Turn')).toBeInTheDocument()
   })
 
   test('still shows a compact tool trigger when the interaction type is missing', () => {

@@ -4397,6 +4397,7 @@
     "Simple mode only returns message; status code and error type use system defaults.": "简洁模式仅返回 message；状态码和错误类型将使用系统默认值。",
     "Simple mode: prune objects by type, e.g. redacted_thinking.": "简洁模式：按 type 全量清理对象，例如 redacted_thinking。",
     "Single Key": "单密钥",
+    "Single Turn": "单轮",
     "Site & Branding": "站点与品牌",
     "Site Key": "站点密钥",
     "Site URL": "网站地址",

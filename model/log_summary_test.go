@@ -670,6 +670,17 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 			},
 			expected: "输出",
 		},
+		{
+			name: "有用户输入且纯文本输出、无工具 → 单轮",
+			requestBlocks: []OpenAIRequestBlock{
+				{Type: "text", Role: "user", Text: "你好"},
+			},
+			toolResponses: nil,
+			responseBlocks: []OpenAIResponseBlock{
+				{Type: "content", Content: "你好，有什么可以帮你？"},
+			},
+			expected: "单轮",
+		},
 	}
 
 	for _, tt := range tests {
@@ -747,6 +758,17 @@ func TestParseInteractionType(t *testing.T) {
 			},
 			expected: "回调",
 		},
+		{
+			name: "bamboo 单轮（用户输入 + 纯文本输出，无工具）",
+			requestBlocks: []BambooRequestBlock{
+				{Type: "text", Text: "介绍一下你自己"},
+			},
+			toolResponses: nil,
+			responseBlocks: []BambooResponseBlock{
+				{Type: "text", Text: "我是一个 AI 助手"},
+			},
+			expected: "单轮",
+		},
 	}
 
 	for _, tt := range tests {
@@ -783,11 +805,121 @@ func TestParseInteractionType(t *testing.T) {
 		require.Equal(t, "输入", result)
 	})
 
+	t.Run("claude 用户输入 + 纯文本输出、无工具 → 单轮", func(t *testing.T) {
+		result := inferClaudeStructuredInteractionType(
+			[]ClaudeRequestBlock{{Type: "text", Text: "写一首诗"}},
+			nil,
+			[]ClaudeResponseBlock{{Type: "text", Content: "春风拂柳岸"}},
+		)
+		require.Equal(t, "单轮", result)
+	})
+
+	t.Run("claude 用户输入 + 文本输出但带 tool_use → 仍为输入", func(t *testing.T) {
+		result := inferClaudeStructuredInteractionType(
+			[]ClaudeRequestBlock{{Type: "text", Text: "写一首诗"}},
+			nil,
+			[]ClaudeResponseBlock{
+				{Type: "text", Content: "我先查一下资料"},
+				{Type: "tool_use", ID: "1", Name: "Search"},
+			},
+		)
+		require.Equal(t, "输入", result)
+	})
+
 	t.Run("bamboo 空字段兜底", func(t *testing.T) {
 		recordBytes, err := common.Marshal(LogDetailRecord{
 			Prompt: map[string]interface{}{
 				"lastUserMessage": map[string]interface{}{
 					"content": "fallback 输入",
+				},
+			},
+		})
+		require.NoError(t, err)
+
+		_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+		require.Equal(t, "输入", interactionType)
+	})
+
+	t.Run("兜底：prompt 字符串 + completion → 单轮", func(t *testing.T) {
+		recordBytes, err := common.Marshal(LogDetailRecord{
+			Prompt: map[string]interface{}{
+				"lastUserMessage": map[string]interface{}{
+					"content": "什么是量子纠缠？",
+				},
+			},
+			Completion: "量子纠缠是……",
+		})
+		require.NoError(t, err)
+
+		_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+		require.Equal(t, "单轮", interactionType)
+	})
+
+	t.Run("兜底：用户输入 + completion + 仅工具调用记录 → 输入", func(t *testing.T) {
+		recordBytes, err := common.Marshal(LogDetailRecord{
+			Prompt: map[string]interface{}{
+				"lastUserMessage": map[string]interface{}{
+					"content": "帮我查天气",
+				},
+			},
+			Completion:  "好的",
+			ToolInvokes: []LogToolInvokeRecord{{ID: "call_1", Name: "get_weather"}},
+		})
+		require.NoError(t, err)
+
+		_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+		require.Equal(t, "输入", interactionType)
+	})
+
+	t.Run("兜底：携带工具结果且无文本输出 → 回调", func(t *testing.T) {
+		recordBytes, err := common.Marshal(LogDetailRecord{
+			Prompt: map[string]interface{}{
+				"lastUserMessage": map[string]interface{}{
+					"content": "继续",
+				},
+			},
+			OpenAIToolResponses: []OpenAIToolResponseBlock{
+				{ToolCallID: "call_1", Type: "tool", Role: "tool"},
+			},
+		})
+		require.NoError(t, err)
+
+		_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+		require.Equal(t, "回调", interactionType)
+	})
+
+	t.Run("扁平化 Responses prompt items + completion 纯文本 → 单轮", func(t *testing.T) {
+		recordBytes, err := common.Marshal(LogDetailRecord{
+			Prompt: map[string]interface{}{
+				"input": []interface{}{
+					map[string]interface{}{
+						"type": "message",
+						"role": "user",
+						"content": []interface{}{
+							map[string]interface{}{"type": "input_text", "text": "讲个笑话"},
+						},
+					},
+				},
+			},
+			Completion: "为什么程序员分不清万圣节和圣诞节……",
+		})
+		require.NoError(t, err)
+
+		_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
+		require.Equal(t, "单轮", interactionType)
+	})
+
+	t.Run("扁平化 Responses prompt items 无 completion → 输入", func(t *testing.T) {
+		recordBytes, err := common.Marshal(LogDetailRecord{
+			Prompt: map[string]interface{}{
+				"input": []interface{}{
+					map[string]interface{}{
+						"type": "message",
+						"role": "user",
+						"content": []interface{}{
+							map[string]interface{}{"type": "input_text", "text": "讲个笑话"},
+						},
+					},
 				},
 			},
 		})

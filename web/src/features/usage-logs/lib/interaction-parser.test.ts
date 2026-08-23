@@ -16,6 +16,15 @@ describe("resolveInteractionTypeFromLog", () => {
     ).toBe("callback");
   });
 
+  it("resolves chinese single turn values from other", () => {
+    expect(
+      resolveInteractionTypeFromLog({
+        other: JSON.stringify({ interaction_type: "单轮" }),
+        content: "",
+      }),
+    ).toBe("single_turn");
+  });
+
   it("falls back to content parsing", () => {
     expect(
       resolveInteractionTypeFromLog({
@@ -38,6 +47,8 @@ describe("normalizeInteractionType", () => {
     expect(normalizeInteractionType("输出")).toBe("output");
     expect(normalizeInteractionType("callback")).toBe("callback");
     expect(normalizeInteractionType("回调")).toBe("callback");
+    expect(normalizeInteractionType("single_turn")).toBe("single_turn");
+    expect(normalizeInteractionType("单轮")).toBe("single_turn");
   });
 
   it("ignores unknown values", () => {
@@ -155,13 +166,13 @@ describe("parseInteractionType", () => {
     expect(parseInteractionType(record)).toBe("callback");
   });
 
-  it("detects input from openai response blocks with reasoning", () => {
+  it("detects single turn from openai request blocks with reasoning-only output", () => {
     const record = {
       openaiRequestBlocks: [{ type: "text", role: "user", text: "Hello" }],
       openaiToolResponses: [],
       openaiResponseBlocks: [{ type: "reasoning", content: "Thinking..." }],
     };
-    expect(parseInteractionType(record)).toBe("input");
+    expect(parseInteractionType(record)).toBe("single_turn");
   });
 
   it("detects output from openai structured response blocks", () => {
@@ -333,5 +344,75 @@ describe("parseInteractionType", () => {
       ],
     };
     expect(parseInteractionType(record)).toBe("input");
+  });
+
+  it("detects claude single turn from user input plus pure text output", () => {
+    const record = {
+      claudeRequestBlocks: [{ type: "text", text: "写一首诗" }],
+      claudeToolResponses: [],
+      claudeResponseBlocks: [{ type: "text", content: "春风拂柳岸" }],
+    };
+    expect(parseInteractionType(record)).toBe("single_turn");
+  });
+
+  it("detects responses single turn from request blocks plus output_text", () => {
+    const record = {
+      responsesRequestBlocks: [
+        { type: "input_text", text: "讲个笑话", role: "user" },
+      ],
+      responsesToolResponses: [],
+      responsesResponseBlocks: [
+        { type: "output_text", content: "为什么程序员分不清万圣节和圣诞节……" },
+      ],
+    };
+    expect(parseInteractionType(record)).toBe("single_turn");
+  });
+
+  it("detects bamboo single turn from request blocks plus response text", () => {
+    const record = {
+      bambooRequestBlocks: [{ text: "介绍一下你自己" }],
+      bambooToolResponses: [],
+      bambooResponseBlocks: [{ type: "text", text: "我是一个 AI 助手" }],
+    };
+    expect(parseInteractionType(record)).toBe("single_turn");
+  });
+
+  it("detects single turn from flattened prompt items plus completion", () => {
+    const record = {
+      prompt: {
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "讲个笑话" }],
+          },
+        ],
+      },
+      completion: "为什么程序员分不清万圣节和圣诞节……",
+    };
+    expect(parseInteractionType(record)).toBe("single_turn");
+  });
+
+  it("keeps flattened prompt items as input when completion is missing", () => {
+    const record = {
+      prompt: {
+        input: [
+          {
+            type: "message",
+            role: "user",
+            content: [{ type: "input_text", text: "讲个笑话" }],
+          },
+        ],
+      },
+    };
+    expect(parseInteractionType(record)).toBe("input");
+  });
+
+  it("detects single turn from legacy prompt and completion strings", () => {
+    const record = {
+      prompt: "什么是量子纠缠？",
+      completion: "量子纠缠是……",
+    };
+    expect(parseInteractionType(record)).toBe("single_turn");
   });
 });

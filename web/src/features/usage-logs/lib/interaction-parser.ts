@@ -1,4 +1,8 @@
-export type InteractionType = "input" | "output" | "callback";
+export type InteractionType =
+  | "input"
+  | "output"
+  | "callback"
+  | "single_turn";
 
 export function resolveInteractionTypeFromLog(log: {
   other: unknown
@@ -30,6 +34,7 @@ export function normalizeInteractionType(
   if (value === "input" || value === "输入") return "input";
   if (value === "output" || value === "输出") return "output";
   if (value === "callback" || value === "回调") return "callback";
+  if (value === "single_turn" || value === "单轮") return "single_turn";
   return undefined;
 }
 
@@ -132,6 +137,7 @@ function flattenResponsesPromptInputItems(input: unknown): FlattenedItem[] {
 
 function inferResponsesInteractionType(
   items: FlattenedItem[],
+  recordSignals?: { hasTextOutput?: boolean; hasToolUse?: boolean },
 ): InteractionType | null {
   if (!items.length) return null;
 
@@ -141,7 +147,14 @@ function inferResponsesInteractionType(
   if (!meaningful.length) return null;
 
   const last = meaningful[meaningful.length - 1];
-  if (last.type === "input_text" || last.type === "text") return "input";
+  if (last.type === "input_text" || last.type === "text") {
+    if (
+      recordSignals?.hasTextOutput &&
+      !recordSignals.hasToolUse
+    )
+      return "single_turn";
+    return "input";
+  }
   if (last.type === "function_call_output") return "callback";
   if (last.type === "function_call") return "callback";
 
@@ -185,8 +198,21 @@ function inferResponsesStructuredInteractionType(
     (block) => block.type === "function_call",
   );
 
+  // Priority follows the same contract as OpenAI / Claude / Bamboo:
+  //   1. Pure Q&A turn (fresh input + text output, no tools anywhere) → 'single_turn'
+  //   2. User-typed input (no tool_result this turn) → 'input'
+  //   3. New tool call initiated → 'callback'
+  //   4. Final text answer without new tool calls → 'output'
+  //   5. Bare tool response with no text/tool_use → 'callback'
   // Tool-result turns often still carry leftover user text in request blocks
   // (Claude Code / mixed content). Do not let that force 'input'.
+  if (
+    hasRequestInput &&
+    !hasToolResponse &&
+    hasTextOutput &&
+    !hasToolUse
+  )
+    return "single_turn";
   if (hasRequestInput && !hasToolResponse) return "input";
   if (hasToolUse) return "callback";
   if (hasTextOutput) return "output";
@@ -222,6 +248,13 @@ function inferOpenAIStructuredInteractionType(
   );
   const hasToolUse = responseBlocks.some((block) => block.type === "tool_call");
 
+  if (
+    hasRequestInput &&
+    !hasToolResponse &&
+    hasTextOutput &&
+    !hasToolUse
+  )
+    return "single_turn";
   if (hasRequestInput && !hasToolResponse) return "input";
   if (hasToolUse) return "callback";
   if (hasTextOutput) return "output";
@@ -259,6 +292,13 @@ function inferClaudeStructuredInteractionType(data: {
   );
   const hasToolUse = responseBlocks.some((block) => block.type === "tool_use");
 
+  if (
+    hasRequestInput &&
+    !hasToolResponse &&
+    hasTextOutput &&
+    !hasToolUse
+  )
+    return "single_turn";
   if (hasRequestInput && !hasToolResponse) return "input";
   if (hasToolUse) return "callback";
   if (hasTextOutput) return "output";
@@ -294,10 +334,18 @@ function inferBambooStructuredInteractionType(
   );
 
   // Priority follows the same contract as OpenAI / Responses / Claude:
-  //   1. User-typed input (no tool_result this turn) → 'input'
-  //   2. New tool call initiated (tool_use) → 'callback'
-  //   3. Final text answer without new tool calls → 'output'
-  //   4. Bare tool response with no text/tool_use → 'callback'
+  //   1. Pure Q&A turn (fresh input + text output, no tools anywhere) → 'single_turn'
+  //   2. User-typed input (no tool_result this turn) → 'input'
+  //   3. New tool call initiated (tool_use) → 'callback'
+  //   4. Final text answer without new tool calls → 'output'
+  //   5. Bare tool response with no text/tool_use → 'callback'
+  if (
+    hasRequestInput &&
+    !hasToolResponse &&
+    hasTextOutput &&
+    !hasToolUse
+  )
+    return "single_turn";
   if (hasRequestInput && !hasToolResponse) return "input";
   if (hasToolUse) return "callback";
   if (hasTextOutput) return "output";
@@ -389,6 +437,44 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       promptObj.input,
     );
 
+    // Record-wide output / tool-use signals shared by the flattened Responses
+    // path and the legacy fallback below.
+    const legacyToolInvokes = Array.isArray(data.toolInvokes)
+      ? (data.toolInvokes as unknown[])
+      : [];
+    const recordHasTextOutput =
+      (typeof completion === "string" && completion.trim() !== "") ||
+      claudeResponseBlocks.some(
+        (block) =>
+          block.type === "text" &&
+          typeof block.content === "string" &&
+          block.content.trim() !== "",
+      ) ||
+      responsesResponseBlocks.some(
+        (block) =>
+          block.type === "output_text" &&
+          typeof block.content === "string" &&
+          block.content.trim() !== "",
+      ) ||
+      openAIResponseBlocks.some(
+        (block) =>
+          (block.type === "content" || block.type === "reasoning") &&
+          typeof block.content === "string" &&
+          block.content.trim() !== "",
+      ) ||
+      bambooResponseBlocks.some(
+        (block) =>
+          (block.type === "text" || block.type === "thinking") &&
+          typeof block.text === "string" &&
+          block.text.trim() !== "",
+      );
+    const recordHasToolUse =
+      claudeResponseBlocks.some((block) => block.type === "tool_use") ||
+      responsesResponseBlocks.some((block) => block.type === "function_call") ||
+      openAIResponseBlocks.some((block) => block.type === "tool_call") ||
+      bambooResponseBlocks.some((block) => block.type === "tool_use") ||
+      legacyToolInvokes.length > 0;
+
     // Try structured responses format first
     const responsesStructuredType = inferResponsesStructuredInteractionType({
       responsesRequestBlocks,
@@ -421,15 +507,15 @@ export function parseInteractionType(record: unknown): InteractionType | null {
     if (bambooStructuredType) return bambooStructuredType;
 
     // Try flattened prompt items
-    const responsesType = inferResponsesInteractionType(responsesPromptItems);
+    const responsesType = inferResponsesInteractionType(responsesPromptItems, {
+      hasTextOutput: recordHasTextOutput,
+      hasToolUse: recordHasToolUse,
+    });
     if (responsesType) return responsesType;
 
     // Fallback: analyze prompt/completion fields
     const lastUserMessage =
       (promptObj.lastUserMessage as Record<string, unknown>) ?? {};
-    const legacyToolInvokes = Array.isArray(data.toolInvokes)
-      ? (data.toolInvokes as unknown[])
-      : [];
 
     const isBambooData =
       bambooResponseBlocks.length > 0 || bambooToolResponses.length > 0;
@@ -460,35 +546,8 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       openaiToolResponses.length > 0 ||
       bambooToolResponses.length > 0;
 
-    const hasTextOutput =
-      (typeof completion === "string" && completion.trim() !== "") ||
-      claudeResponseBlocks.some(
-        (block) =>
-          block.type === "text" &&
-          typeof block.content === "string" &&
-          block.content.trim() !== "",
-      ) ||
-      responsesResponseBlocks.some(
-        (block) =>
-          block.type === "output_text" &&
-          typeof block.content === "string" &&
-          block.content.trim() !== "",
-      ) ||
-      openAIResponseBlocks.some(
-        (block) =>
-          (block.type === "content" || block.type === "reasoning") &&
-          typeof block.content === "string" &&
-          block.content.trim() !== "",
-      ) ||
-      bambooResponseBlocks.some(
-        (block) =>
-          (block.type === "text" || block.type === "thinking") &&
-          typeof block.text === "string" &&
-          block.text.trim() !== "",
-      );
-
     const hasAnyOutput =
-      hasTextOutput ||
+      recordHasTextOutput ||
       (typeof completion === "object" &&
         completion !== null &&
         ((Array.isArray(completion) && completion.length > 0) ||
@@ -499,16 +558,16 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       openAIResponseBlocks.length > 0 ||
       bambooResponseBlocks.length > 0;
 
-    const hasToolUse =
-      claudeResponseBlocks.some((block) => block.type === "tool_use") ||
-      responsesResponseBlocks.some((block) => block.type === "function_call") ||
-      openAIResponseBlocks.some((block) => block.type === "tool_call") ||
-      bambooResponseBlocks.some((block) => block.type === "tool_use") ||
-      legacyToolInvokes.length > 0;
-
+    if (
+      hasNonToolInput &&
+      !hasToolInput &&
+      recordHasTextOutput &&
+      !recordHasToolUse
+    )
+      return "single_turn";
     if (hasNonToolInput && !hasToolInput) return "input";
-    if (hasTextOutput && !hasToolUse) return "output";
-    if (hasToolInput || hasToolUse || hasAnyOutput) return "callback";
+    if (recordHasTextOutput && !recordHasToolUse) return "output";
+    if (hasToolInput || recordHasToolUse || hasAnyOutput) return "callback";
 
     return null;
   } catch {

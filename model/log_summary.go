@@ -296,6 +296,8 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 
 	if interactionType := inferResponsesInteractionType(
 		flattenResponsesPromptInputItems(detailRecord.Prompt["input"]),
+		hasAnyRecordTextOutput(detailRecord),
+		hasAnyRecordToolUse(detailRecord),
 	); interactionType != "" {
 		return interactionType
 	}
@@ -324,16 +326,8 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 		len(detailRecord.ResponsesToolResponses) > 0 ||
 		len(detailRecord.OpenAIToolResponses) > 0 ||
 		len(detailRecord.BambooToolResponses) > 0
-	hasTextOutput := strings.TrimSpace(detailRecord.Completion) != "" ||
-		hasClaudeTextResponseBlocks(detailRecord.ClaudeResponseBlocks) ||
-		hasResponsesTextOutputBlocks(detailRecord.ResponsesResponseBlocks) ||
-		hasOpenAITextResponseBlocks(detailRecord.OpenAIResponseBlocks) ||
-		hasBambooTextResponseBlocks(detailRecord.BambooResponseBlocks)
-	hasToolUse := hasClaudeToolUseBlocks(detailRecord.ClaudeResponseBlocks) ||
-		hasResponsesFunctionCallBlocks(detailRecord.ResponsesResponseBlocks) ||
-		hasOpenAIToolCallBlocks(detailRecord.OpenAIResponseBlocks) ||
-		hasBambooToolUseBlocks(detailRecord.BambooResponseBlocks) ||
-		len(detailRecord.ToolInvokes) > 0
+	hasTextOutput := hasAnyRecordTextOutput(detailRecord)
+	hasToolUse := hasAnyRecordToolUse(detailRecord)
 	hasAnyOutput := hasTextOutput ||
 		len(detailRecord.ClaudeResponseBlocks) > 0 ||
 		len(detailRecord.ResponsesResponseBlocks) > 0 ||
@@ -341,6 +335,10 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 		len(detailRecord.BambooResponseBlocks) > 0
 
 	switch {
+	case hasNonToolInput && !hasToolInput && hasTextOutput && !hasToolUse:
+		// 单轮：一次请求内完成「用户输入 → 纯文本输出」，无任何工具参与，
+		// 用于区分 Agentic 连续调用（输入/回调/输出）。
+		return "单轮"
 	case hasNonToolInput && !hasToolInput:
 		return "输入"
 	case hasTextOutput && !hasToolUse:
@@ -410,7 +408,7 @@ func flattenResponsesPromptInputItems(input interface{}) []responsesPromptInputI
 	return items
 }
 
-func inferResponsesInteractionType(items []responsesPromptInputItem) string {
+func inferResponsesInteractionType(items []responsesPromptInputItem, recordHasTextOutput bool, recordHasToolUse bool) string {
 	if len(items) == 0 {
 		return ""
 	}
@@ -418,6 +416,9 @@ func inferResponsesInteractionType(items []responsesPromptInputItem) string {
 	lastItem := items[len(items)-1]
 	switch lastItem.Type {
 	case "input_text", "text":
+		if recordHasTextOutput && !recordHasToolUse {
+			return "单轮"
+		}
 		return "输入"
 	case "function_call_output", "function_call":
 		return "回调"
@@ -450,6 +451,9 @@ func inferResponsesStructuredInteractionType(
 	hasToolUse := hasResponsesFunctionCallBlocks(responseBlocks)
 
 	switch {
+	case hasRequestInput && !hasToolResponse && hasTextOutput && !hasToolUse:
+		// 单轮：新用户输入直接换来纯文本输出，全程无工具，非 Agentic 连续调用。
+		return "单轮"
 	case hasRequestInput && !hasToolResponse:
 		return "输入"
 	case hasToolUse:
@@ -481,6 +485,8 @@ func inferOpenAIStructuredInteractionType(
 	}
 
 	switch {
+	case hasRequestInput && !hasToolResponse && hasTextOutput && !hasToolUse:
+		return "单轮"
 	case hasRequestInput && !hasToolResponse:
 		return "输入"
 	case hasToolUse:
@@ -514,6 +520,8 @@ func inferClaudeStructuredInteractionType(
 	}
 
 	switch {
+	case hasRequestInput && !hasToolResponse && hasTextOutput && !hasToolUse:
+		return "单轮"
 	case hasRequestInput && !hasToolResponse:
 		return "输入"
 	case hasToolUse:
@@ -547,6 +555,8 @@ func inferBambooStructuredInteractionType(
 	}
 
 	switch {
+	case hasRequestInput && !hasToolResponse && hasTextOutput && !hasToolUse:
+		return "单轮"
 	case hasRequestInput && !hasToolResponse:
 		return "输入"
 	case hasToolUse:
@@ -641,4 +651,22 @@ func hasOpenAIToolCallBlocks(blocks []OpenAIResponseBlock) bool {
 		}
 	}
 	return false
+}
+
+// hasAnyRecordTextOutput 判断记录整体是否包含文本输出（completion 正文或任一协议的文本块）。
+func hasAnyRecordTextOutput(record *LogDetailRecord) bool {
+	return strings.TrimSpace(record.Completion) != "" ||
+		hasClaudeTextResponseBlocks(record.ClaudeResponseBlocks) ||
+		hasResponsesTextOutputBlocks(record.ResponsesResponseBlocks) ||
+		hasOpenAITextResponseBlocks(record.OpenAIResponseBlocks) ||
+		hasBambooTextResponseBlocks(record.BambooResponseBlocks)
+}
+
+// hasAnyRecordToolUse 判断记录整体是否存在工具调用信号（响应中的工具调用或工具调用记录）。
+func hasAnyRecordToolUse(record *LogDetailRecord) bool {
+	return hasClaudeToolUseBlocks(record.ClaudeResponseBlocks) ||
+		hasResponsesFunctionCallBlocks(record.ResponsesResponseBlocks) ||
+		hasOpenAIToolCallBlocks(record.OpenAIResponseBlocks) ||
+		hasBambooToolUseBlocks(record.BambooResponseBlocks) ||
+		len(record.ToolInvokes) > 0
 }

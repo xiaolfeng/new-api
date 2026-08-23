@@ -40,6 +40,7 @@ const INTERACTION_LABEL_KEYS: Record<InteractionType, string> = {
   input: 'Input',
   output: 'Output',
   callback: 'Callback',
+  single_turn: 'Single Turn',
 }
 
 export function InteractionTypeCell(props: InteractionTypeCellProps) {
