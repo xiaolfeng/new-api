@@ -22,7 +22,7 @@ import i18next from 'i18next'
 import { beforeAll, describe, expect, test } from 'vitest'
 
 import type { UsageLog } from '../../data/schema'
-import { InteractionTypeCell } from '../interaction-type-cell'
+import { HostToolInternalDash, InteractionTypeCell } from '../interaction-type-cell'
 
 function createLog(overrides: Partial<UsageLog>): UsageLog {
   return {
@@ -67,6 +67,9 @@ describe('InteractionTypeCell', () => {
       '{{count}} calls': '{{count}} calls',
       'Image recognition hop': 'Image recognition hop',
       '{{count}} images': '{{count}} images',
+      'Internal Tool': 'Internal Tool',
+      'Gateway executed this host-tool request locally without calling the upstream model, so tokens, TPS and cache rate do not apply':
+        'Gateway executed this host-tool request locally without calling the upstream model, so tokens, TPS and cache rate do not apply',
     })
   })
 
@@ -163,5 +166,41 @@ describe('InteractionTypeCell', () => {
   test('returns nothing when there is no type and no tool activity', () => {
     const { container } = render(<InteractionTypeCell log={createLog({})} />)
     expect(container).toBeEmptyDOMElement()
+  })
+
+  test('marks gateway internal host-tool requests with a badge', () => {
+    render(
+      <InteractionTypeCell
+        log={createLog({
+          other: JSON.stringify({ host_tool_internal: true }),
+        })}
+      />
+    )
+
+    expect(screen.getByText('Internal Tool')).toBeInTheDocument()
+  })
+
+  test('does not mark regular logs as internal tools', () => {
+    render(
+      <InteractionTypeCell
+        log={createLog({
+          other: JSON.stringify({ interaction_type: 'output' }),
+        })}
+      />
+    )
+
+    expect(screen.queryByText('Internal Tool')).not.toBeInTheDocument()
+  })
+
+  test('explains why internal requests show a dash for metrics', async () => {
+    const user = userEvent.setup()
+    render(<HostToolInternalDash />)
+
+    await user.hover(screen.getByText('—'))
+    expect(
+      await screen.findByText(
+        /Gateway executed this host-tool request locally/
+      )
+    ).toBeInTheDocument()
   })
 })

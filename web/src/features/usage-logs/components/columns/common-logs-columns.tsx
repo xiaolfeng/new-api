@@ -62,7 +62,10 @@ import {
 } from "../../lib/utils";
 import type { LogOtherData } from "../../types";
 import { DetailsDialog } from "../dialogs/details-dialog";
-import { InteractionTypeCell } from "../interaction-type-cell";
+import {
+  HostToolInternalDash,
+  InteractionTypeCell,
+} from "../interaction-type-cell";
 import { LogCostDisplay } from "../log-cost-display";
 import { ModelBadge } from "../model-badge";
 import { TimingMetricsCell } from "../timing-metrics-cell";
@@ -785,7 +788,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         const other = parseLogOther(log.other);
         if (other?.host_tool_internal) {
-          return <span className="text-muted-foreground/60">—</span>;
+          return <HostToolInternalDash />;
         }
         const tps = other?.tps;
         const hasValidTps = typeof tps === "number" && tps > 0;
@@ -967,7 +970,7 @@ export function useCommonLogsColumns(isAdmin: boolean): ColumnDef<UsageLog>[] {
 
         const other = parseLogOther(log.other);
         if (other?.host_tool_internal) {
-          return <span className="text-muted-foreground/60">—</span>;
+          return <HostToolInternalDash />;
         }
         const summary = getCacheRateSummary(log.prompt_tokens || 0, other);
         if (summary.rate === null || summary.rate === 0) {

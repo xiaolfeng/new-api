@@ -18,6 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { getBadgeStyle } from '@/lib/colors'
 import { cn } from '@/lib/utils'
 
@@ -43,6 +49,48 @@ const INTERACTION_LABEL_KEYS: Record<InteractionType, string> = {
   single_turn: 'Single Turn',
 }
 
+// host-tool builtin 请求（网关本地合成，未请求上游模型）的统一解释文案，
+// 徽章与 TPS / 缓存率列的占位符共用。
+export const HOST_TOOL_INTERNAL_HINT =
+  'Gateway executed this host-tool request locally without calling the upstream model, so tokens, TPS and cache rate do not apply'
+
+function InternalToolBadge() {
+  const { t } = useTranslation()
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <span className='bg-muted text-muted-foreground inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium'>
+              {t('Internal Tool')}
+            </span>
+          }
+        />
+        <TooltipContent side='top' className='max-w-[240px] p-2'>
+          <p className='text-xs'>{t(HOST_TOOL_INTERNAL_HINT)}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
+// TPS / 缓存率列对内部工具请求显示的「—」，悬停可查看原因。
+export function HostToolInternalDash() {
+  const { t } = useTranslation()
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger
+          render={<span className='text-muted-foreground/60'>—</span>}
+        />
+        <TooltipContent side='top' className='max-w-[240px] p-2'>
+          <p className='text-xs'>{t(HOST_TOOL_INTERNAL_HINT)}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  )
+}
+
 export function InteractionTypeCell(props: InteractionTypeCellProps) {
   const { t } = useTranslation()
   if (!isDisplayableLogType(props.log.type)) return null
@@ -50,7 +98,10 @@ export function InteractionTypeCell(props: InteractionTypeCellProps) {
   const other = parseLogOther(props.log.other)
   const interactionType = resolveInteractionTypeFromLog(props.log)
   const activityTags = collectUsageActivityTags(other)
-  if (!interactionType && activityTags.length === 0) return null
+  const isInternalTool = Boolean(other?.host_tool_internal)
+  if (!interactionType && activityTags.length === 0 && !isInternalTool) {
+    return null
+  }
 
   const align = props.align ?? 'center'
   const badge = interactionType
@@ -65,6 +116,7 @@ export function InteractionTypeCell(props: InteractionTypeCellProps) {
         props.className
       )}
     >
+      {isInternalTool ? <InternalToolBadge /> : null}
       {interactionType && badge ? (
         <span
           className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-center text-xs font-medium ${badge.bg} ${badge.text}`}
