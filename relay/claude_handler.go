@@ -152,11 +152,10 @@ func ClaudeHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *typ
 				return originalClaudeRelay(c, info, request)
 			}
 			if usage != nil {
-				service.PostTextConsumeQuota(c, info, usage, []string{"bamboo relay error: " + relayErr.Error()})
-			} else {
-				// 失败且无计费信息时也补写日志（含 bamboo debug），
-				// 否则失败请求的请求体与上游请求详情完全不可追溯。
-				service.RecordBambooRelayErrorLog(c, info, relayErr)
+				// 失败但已收到部分交付：按实际用量结算（脱敏 + relay_error 标记），
+				// 并标记不可重试，避免换渠道后因计费会话幂等漏计实际消耗。
+				service.PostFailedRelayTextQuota(c, info, usage, relayErr)
+				relayErr.MarkSkipRetry()
 			}
 			return relayErr
 		}

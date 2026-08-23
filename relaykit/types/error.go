@@ -378,6 +378,18 @@ func IsSkipRetryError(err *NewAPIError) bool {
 	return err.skipRetry
 }
 
+// MarkSkipRetry 就地将错误标记为不可重试。
+//
+// 供失败路径在完成部分交付结算后调用：此时 BillingSession 已 settled，
+// 换渠道重试即使成功也会因幂等而漏计后续实际消耗；已写出的响应流
+// 也会被第二段输出拼接破坏。
+func (e *NewAPIError) MarkSkipRetry() {
+	if e == nil {
+		return
+	}
+	e.skipRetry = true
+}
+
 func ErrOptionWithSkipRetry() NewAPIErrorOptions {
 	return func(e *NewAPIError) {
 		e.skipRetry = true

@@ -72,6 +72,10 @@ const (
 	// 用于触发空响应重试逻辑
 	ContextKeyEmptyResponse ContextKey = "empty_response"
 
+	// ContextKeyRelayError 标记本次中继失败但已按部分交付用量结算。
+	// 消费日志据此写入 other["relay_error"]，供账务与前端区分「失败部分结算」与正常消费。
+	ContextKeyRelayError ContextKey = "relay_error"
+
 	// ContextKeyAuditLogged marks that the current request has already recorded
 	// a manage/operation audit log inside the handler. When set, the admin-audit
 	// fallback in authHelper (finishAdminAudit) skips its record to avoid

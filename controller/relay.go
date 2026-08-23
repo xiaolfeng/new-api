@@ -375,6 +375,12 @@ func shouldRetry(c *gin.Context, openaiErr *types.NewAPIError, retryTimes int) b
 	if openaiErr.GetErrorCode() == types.ErrorCodeEmptyResponse {
 		return true
 	}
+	// 响应已开始向客户端写出（如流式已推送内容）后禁止换渠道重试：
+	// 重试会把第二段响应拼接进同一 HTTP body；失败已按部分交付结算时，
+	// 后续尝试还会因计费会话幂等而漏计实际消耗（handler 层另行 MarkSkipRetry）。
+	if c != nil && c.Writer != nil && c.Writer.Written() {
+		return false
+	}
 	code := openaiErr.StatusCode
 	if code >= 200 && code < 300 {
 		return false
