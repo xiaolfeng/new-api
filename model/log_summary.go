@@ -335,15 +335,20 @@ func parseInteractionTypeFromDetailRecord(detailRecord *LogDetailRecord) string 
 		len(detailRecord.BambooResponseBlocks) > 0
 
 	switch {
-	case hasNonToolInput && !hasToolInput && hasTextOutput && !hasToolUse:
+	case hasToolUse:
+		// 工具回调：响应中发起了工具调用（首次发起或工具结果后的继续）。
+		// 优先于「输入」，保证 Claude Code 等 agentic 会话的工具轮次可见，
+		// 而不是被残留的请求文本掩盖成「输入」。
+		return "回调"
+	case hasNonToolInput && !hasToolInput && hasTextOutput:
 		// 单轮：一次请求内完成「用户输入 → 纯文本输出」，无任何工具参与，
 		// 用于区分 Agentic 连续调用（输入/回调/输出）。
 		return "单轮"
 	case hasNonToolInput && !hasToolInput:
 		return "输入"
-	case hasTextOutput && !hasToolUse:
+	case hasTextOutput:
 		return "输出"
-	case hasToolInput || hasToolUse || hasAnyOutput:
+	case hasToolInput || hasAnyOutput:
 		return "回调"
 	default:
 		return ""
@@ -416,7 +421,11 @@ func inferResponsesInteractionType(items []responsesPromptInputItem, recordHasTe
 	lastItem := items[len(items)-1]
 	switch lastItem.Type {
 	case "input_text", "text":
-		if recordHasTextOutput && !recordHasToolUse {
+		if recordHasToolUse {
+			// 工具回调：该轮响应发起了工具调用，不能被「输入」掩盖。
+			return "回调"
+		}
+		if recordHasTextOutput {
 			return "单轮"
 		}
 		return "输入"
@@ -451,13 +460,15 @@ func inferResponsesStructuredInteractionType(
 	hasToolUse := hasResponsesFunctionCallBlocks(responseBlocks)
 
 	switch {
-	case hasRequestInput && !hasToolResponse && hasTextOutput && !hasToolUse:
+	case hasToolUse:
+		// 工具回调：响应中发起工具调用优先于「输入」，
+		// 避免 agentic 会话的首轮工具调用被标成输入。
+		return "回调"
+	case hasRequestInput && !hasToolResponse && hasTextOutput:
 		// 单轮：新用户输入直接换来纯文本输出，全程无工具，非 Agentic 连续调用。
 		return "单轮"
 	case hasRequestInput && !hasToolResponse:
 		return "输入"
-	case hasToolUse:
-		return "回调"
 	case hasTextOutput:
 		return "输出"
 	case hasToolResponse || len(responseBlocks) > 0:
@@ -485,12 +496,14 @@ func inferOpenAIStructuredInteractionType(
 	}
 
 	switch {
-	case hasRequestInput && !hasToolResponse && hasTextOutput && !hasToolUse:
+	case hasToolUse:
+		// 工具回调：响应中发起工具调用优先于「输入」，
+		// 避免 agentic 会话的首轮工具调用被标成输入。
+		return "回调"
+	case hasRequestInput && !hasToolResponse && hasTextOutput:
 		return "单轮"
 	case hasRequestInput && !hasToolResponse:
 		return "输入"
-	case hasToolUse:
-		return "回调"
 	case hasTextOutput:
 		return "输出"
 	case hasToolResponse:
@@ -520,12 +533,14 @@ func inferClaudeStructuredInteractionType(
 	}
 
 	switch {
-	case hasRequestInput && !hasToolResponse && hasTextOutput && !hasToolUse:
+	case hasToolUse:
+		// 工具回调：响应中发起工具调用优先于「输入」，
+		// 避免 Claude Code 等 agentic 会话的首轮工具调用被标成输入。
+		return "回调"
+	case hasRequestInput && !hasToolResponse && hasTextOutput:
 		return "单轮"
 	case hasRequestInput && !hasToolResponse:
 		return "输入"
-	case hasToolUse:
-		return "回调"
 	case hasTextOutput:
 		return "输出"
 	case hasToolResponse:
@@ -555,12 +570,14 @@ func inferBambooStructuredInteractionType(
 	}
 
 	switch {
-	case hasRequestInput && !hasToolResponse && hasTextOutput && !hasToolUse:
+	case hasToolUse:
+		// 工具回调：响应中发起工具调用优先于「输入」，
+		// 避免 Claude Code 等 agentic 会话的首轮工具调用被标成输入。
+		return "回调"
+	case hasRequestInput && !hasToolResponse && hasTextOutput:
 		return "单轮"
 	case hasRequestInput && !hasToolResponse:
 		return "输入"
-	case hasToolUse:
-		return "回调"
 	case hasTextOutput:
 		return "输出"
 	case len(toolResponses) > 0:

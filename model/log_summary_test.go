@@ -131,7 +131,7 @@ func TestExtractLogDetailSummariesOpenAIToolCallIsCallback(t *testing.T) {
 	require.NoError(t, err)
 
 	_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
-	require.Equal(t, "输入", interactionType)
+	require.Equal(t, "回调", interactionType)
 }
 
 func TestAppendAdminLogSummaries(t *testing.T) {
@@ -617,7 +617,7 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 			expected: "输出",
 		},
 		{
-			name: "有用户输入且有tool use → 输入",
+			name: "有用户输入且有tool use → 回调（工具调用轮优先于输入）",
 			requestBlocks: []OpenAIRequestBlock{
 				{Type: "text", Role: "user", Text: "执行命令"},
 			},
@@ -626,7 +626,7 @@ func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 				{Type: "content", Content: "我来处理"},
 				{Type: "tool_call", ID: "call_1", Name: "exec_command"},
 			},
-			expected: "输入",
+			expected: "回调",
 		},
 		{
 			name:          "有tool use和tool response但无requestBlocks → 回调",
@@ -796,13 +796,13 @@ func TestParseInteractionType(t *testing.T) {
 		require.Equal(t, "回调", result)
 	})
 
-	t.Run("claude user turn with tool_use and no tool result → 输入", func(t *testing.T) {
+	t.Run("claude user turn with tool_use and no tool result → 回调", func(t *testing.T) {
 		result := inferClaudeStructuredInteractionType(
 			[]ClaudeRequestBlock{{Type: "text", Text: "fix the bug"}},
 			nil,
 			[]ClaudeResponseBlock{{Type: "tool_use", ID: "1", Name: "Read"}},
 		)
-		require.Equal(t, "输入", result)
+		require.Equal(t, "回调", result)
 	})
 
 	t.Run("claude 用户输入 + 纯文本输出、无工具 → 单轮", func(t *testing.T) {
@@ -814,7 +814,7 @@ func TestParseInteractionType(t *testing.T) {
 		require.Equal(t, "单轮", result)
 	})
 
-	t.Run("claude 用户输入 + 文本输出但带 tool_use → 仍为输入", func(t *testing.T) {
+	t.Run("claude 用户输入 + 文本输出但带 tool_use → 回调", func(t *testing.T) {
 		result := inferClaudeStructuredInteractionType(
 			[]ClaudeRequestBlock{{Type: "text", Text: "写一首诗"}},
 			nil,
@@ -823,7 +823,7 @@ func TestParseInteractionType(t *testing.T) {
 				{Type: "tool_use", ID: "1", Name: "Search"},
 			},
 		)
-		require.Equal(t, "输入", result)
+		require.Equal(t, "回调", result)
 	})
 
 	t.Run("bamboo 空字段兜底", func(t *testing.T) {
@@ -855,7 +855,7 @@ func TestParseInteractionType(t *testing.T) {
 		require.Equal(t, "单轮", interactionType)
 	})
 
-	t.Run("兜底：用户输入 + completion + 仅工具调用记录 → 输入", func(t *testing.T) {
+	t.Run("兜底：用户输入 + completion + 仅工具调用记录 → 回调", func(t *testing.T) {
 		recordBytes, err := common.Marshal(LogDetailRecord{
 			Prompt: map[string]interface{}{
 				"lastUserMessage": map[string]interface{}{
@@ -868,7 +868,7 @@ func TestParseInteractionType(t *testing.T) {
 		require.NoError(t, err)
 
 		_, interactionType, _, _, _ := ExtractLogDetailSummaries(string(recordBytes))
-		require.Equal(t, "输入", interactionType)
+		require.Equal(t, "回调", interactionType)
 	})
 
 	t.Run("兜底：携带工具结果且无文本输出 → 回调", func(t *testing.T) {

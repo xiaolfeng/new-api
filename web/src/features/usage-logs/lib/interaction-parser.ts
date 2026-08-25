@@ -148,11 +148,8 @@ function inferResponsesInteractionType(
 
   const last = meaningful[meaningful.length - 1];
   if (last.type === "input_text" || last.type === "text") {
-    if (
-      recordSignals?.hasTextOutput &&
-      !recordSignals.hasToolUse
-    )
-      return "single_turn";
+    if (recordSignals?.hasToolUse) return "callback";
+    if (recordSignals?.hasTextOutput) return "single_turn";
     return "input";
   }
   if (last.type === "function_call_output") return "callback";
@@ -199,22 +196,21 @@ function inferResponsesStructuredInteractionType(
   );
 
   // Priority follows the same contract as OpenAI / Claude / Bamboo:
-  //   1. Pure Q&A turn (fresh input + text output, no tools anywhere) → 'single_turn'
-  //   2. User-typed input (no tool_result this turn) → 'input'
-  //   3. New tool call initiated → 'callback'
+  //   1. Tool call initiated in response → 'callback'
+  //   2. Pure Q&A turn (fresh input + text output, no tools anywhere) → 'single_turn'
+  //   3. User-typed input (no tool_result this turn) → 'input'
   //   4. Final text answer without new tool calls → 'output'
   //   5. Bare tool response with no text/tool_use → 'callback'
   // Tool-result turns often still carry leftover user text in request blocks
   // (Claude Code / mixed content). Do not let that force 'input'.
+  if (hasToolUse) return "callback";
   if (
     hasRequestInput &&
     !hasToolResponse &&
-    hasTextOutput &&
-    !hasToolUse
+    hasTextOutput
   )
     return "single_turn";
   if (hasRequestInput && !hasToolResponse) return "input";
-  if (hasToolUse) return "callback";
   if (hasTextOutput) return "output";
   if (hasToolResponse || responseBlocks.length > 0) return "callback";
 
@@ -248,15 +244,14 @@ function inferOpenAIStructuredInteractionType(
   );
   const hasToolUse = responseBlocks.some((block) => block.type === "tool_call");
 
+  if (hasToolUse) return "callback";
   if (
     hasRequestInput &&
     !hasToolResponse &&
-    hasTextOutput &&
-    !hasToolUse
+    hasTextOutput
   )
     return "single_turn";
   if (hasRequestInput && !hasToolResponse) return "input";
-  if (hasToolUse) return "callback";
   if (hasTextOutput) return "output";
   if (hasToolResponse) return "callback";
   if (responseBlocks.length > 0) return "callback";
@@ -292,15 +287,14 @@ function inferClaudeStructuredInteractionType(data: {
   );
   const hasToolUse = responseBlocks.some((block) => block.type === "tool_use");
 
+  if (hasToolUse) return "callback";
   if (
     hasRequestInput &&
     !hasToolResponse &&
-    hasTextOutput &&
-    !hasToolUse
+    hasTextOutput
   )
     return "single_turn";
   if (hasRequestInput && !hasToolResponse) return "input";
-  if (hasToolUse) return "callback";
   if (hasTextOutput) return "output";
   if (hasToolResponse) return "callback";
   if (responseBlocks.length > 0) return "callback";
@@ -334,20 +328,19 @@ function inferBambooStructuredInteractionType(
   );
 
   // Priority follows the same contract as OpenAI / Responses / Claude:
-  //   1. Pure Q&A turn (fresh input + text output, no tools anywhere) → 'single_turn'
-  //   2. User-typed input (no tool_result this turn) → 'input'
-  //   3. New tool call initiated (tool_use) → 'callback'
+  //   1. Tool call initiated in response → 'callback'
+  //   2. Pure Q&A turn (fresh input + text output, no tools anywhere) → 'single_turn'
+  //   3. User-typed input (no tool_result this turn) → 'input'
   //   4. Final text answer without new tool calls → 'output'
   //   5. Bare tool response with no text/tool_use → 'callback'
+  if (hasToolUse) return "callback";
   if (
     hasRequestInput &&
     !hasToolResponse &&
-    hasTextOutput &&
-    !hasToolUse
+    hasTextOutput
   )
     return "single_turn";
   if (hasRequestInput && !hasToolResponse) return "input";
-  if (hasToolUse) return "callback";
   if (hasTextOutput) return "output";
   if (hasToolResponse) return "callback";
 
@@ -558,16 +551,16 @@ export function parseInteractionType(record: unknown): InteractionType | null {
       openAIResponseBlocks.length > 0 ||
       bambooResponseBlocks.length > 0;
 
+    if (recordHasToolUse) return "callback";
     if (
       hasNonToolInput &&
       !hasToolInput &&
-      recordHasTextOutput &&
-      !recordHasToolUse
+      recordHasTextOutput
     )
       return "single_turn";
     if (hasNonToolInput && !hasToolInput) return "input";
-    if (recordHasTextOutput && !recordHasToolUse) return "output";
-    if (hasToolInput || recordHasToolUse || hasAnyOutput) return "callback";
+    if (recordHasTextOutput) return "output";
+    if (hasToolInput || hasAnyOutput) return "callback";
 
     return null;
   } catch {

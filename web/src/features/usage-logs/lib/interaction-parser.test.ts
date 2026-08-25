@@ -184,7 +184,7 @@ describe("parseInteractionType", () => {
     expect(parseInteractionType(record)).toBe("output");
   });
 
-  it("prioritizes request input over openai tool calls", () => {
+  it("prioritizes tool calls over request input as callback", () => {
     const record = {
       openaiRequestBlocks: [
         { type: "text", role: "user", text: "Run command" },
@@ -195,7 +195,7 @@ describe("parseInteractionType", () => {
         { type: "tool_call", id: "call_1", name: "exec_command" },
       ],
     };
-    expect(parseInteractionType(record)).toBe("input");
+    expect(parseInteractionType(record)).toBe("callback");
   });
 
   it("detects openai tool response with text output as output", () => {
@@ -335,7 +335,7 @@ describe("parseInteractionType", () => {
     expect(parseInteractionType(record)).toBe("callback");
   });
 
-  it("keeps claude user turn as input even when the model also calls a tool", () => {
+  it("marks claude user turn as callback when the model calls a tool", () => {
     const record = {
       claudeRequestBlocks: [{ type: "text", text: "fix the bug" }],
       claudeToolResponses: [],
@@ -343,7 +343,7 @@ describe("parseInteractionType", () => {
         { type: "tool_use", id: "1", name: "Read", input: {} },
       ],
     };
-    expect(parseInteractionType(record)).toBe("input");
+    expect(parseInteractionType(record)).toBe("callback");
   });
 
   it("detects claude single turn from user input plus pure text output", () => {
