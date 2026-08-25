@@ -77,6 +77,34 @@ func TestResponsesResponseToChatCompletionsPreservesReasoningSummary(t *testing.
 	assert.Equal(t, "final", chat.Choices[0].Message.StringContent())
 }
 
+func TestResponsesResponseToChatCompletionsReadsOfficialSummarySlot(t *testing.T) {
+	resp := &dto.OpenAIResponsesResponse{
+		ID:     "resp_1",
+		Model:  "gpt-test",
+		Status: []byte(`"completed"`),
+		Output: []dto.ResponsesOutput{
+			{
+				Type: responsesOutputTypeReasoning,
+				Summary: []dto.ResponsesReasoningSummaryPart{
+					{Type: "summary_text", Text: "official summary"},
+				},
+			},
+			{
+				Type: responsesOutputTypeMessage,
+				Role: "assistant",
+				Content: []dto.ResponsesOutputContent{
+					{Type: "output_text", Text: "final"},
+				},
+			},
+		},
+	}
+
+	chat, _, err := ResponsesResponseToChatCompletionsResponse(resp, "chatcmpl_1")
+	require.NoError(t, err)
+	assert.Equal(t, "official summary", chat.Choices[0].Message.GetReasoningContent())
+	assert.Equal(t, "final", chat.Choices[0].Message.StringContent())
+}
+
 func TestResponsesFinishReasonFromIncompleteStatus(t *testing.T) {
 	tests := []struct {
 		name   string

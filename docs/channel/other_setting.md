@@ -16,6 +16,11 @@
    - 用于标识是否将思考内容`reasoning_content`转换为`<think>`标签拼接到内容中返回
    - 类型为布尔值，设置为 true 时启用思考内容转换
 
+4. bamboo_ignore_encrypted_content
+   - bamboo Responses：忽略历史 `encrypted_content`，避免跨 Key 解密失败
+   - 多 Key 渠道会自动视为开启，无需手动配置
+   - Chat Completions 往返会携带扩展字段 `thinking_signature` / `thinking_provider` / `reasoning_id`，用于同一路上游续写加密思维链；这些不是官方 OpenAI 字段
+
 --------------------------------------------------------------
 
 ## JSON 格式示例

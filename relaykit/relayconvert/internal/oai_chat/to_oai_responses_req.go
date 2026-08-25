@@ -223,6 +223,12 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 			continue
 		}
 
+		if role == "assistant" {
+			if reasoning := chatMessageToResponsesReasoningItem(msg); reasoning != nil {
+				inputItems = append(inputItems, reasoning)
+			}
+		}
+
 		item := map[string]any{
 			"role": role,
 		}
@@ -495,4 +501,19 @@ func ChatCompletionsRequestToResponsesRequest(req *dto.GeneralOpenAIRequest) (*d
 	}
 
 	return out, nil
+}
+
+func chatMessageToResponsesReasoningItem(msg dto.Message) map[string]any {
+	if !dto.NativeThinkingCredential(msg.ThinkingSignature, msg.ThinkingProvider, dto.ThinkingProviderOpenAIResponses) {
+		return nil
+	}
+	item := map[string]any{
+		"type":              "reasoning",
+		"summary":           []map[string]any{},
+		"encrypted_content": msg.ThinkingSignature,
+	}
+	if msg.ReasoningID != "" {
+		item["id"] = msg.ReasoningID
+	}
+	return item
 }

@@ -301,16 +301,29 @@ func (r *GeneralOpenAIRequest) ParseInput() []string {
 }
 
 type Message struct {
-	Role             string          `json:"role"`
-	Content          any             `json:"content"`
-	Name             *string         `json:"name,omitempty"`
-	Prefix           *bool           `json:"prefix,omitempty"`
-	ReasoningContent *string         `json:"reasoning_content,omitempty"`
-	Reasoning        *string         `json:"reasoning,omitempty"`
-	ToolCalls        json.RawMessage `json:"tool_calls,omitempty"`
-	ToolCallId       string          `json:"tool_call_id,omitempty"`
-	parsedContent    []MediaContent
+	Role              string          `json:"role"`
+	Content           any             `json:"content"`
+	Name              *string         `json:"name,omitempty"`
+	Prefix            *bool           `json:"prefix,omitempty"`
+	ReasoningContent  *string         `json:"reasoning_content,omitempty"`
+	Reasoning         *string         `json:"reasoning,omitempty"`
+	ThinkingSignature string          `json:"thinking_signature,omitempty"`
+	ThinkingProvider  string          `json:"thinking_provider,omitempty"`
+	ReasoningID       string          `json:"reasoning_id,omitempty"`
+	ToolCalls         json.RawMessage `json:"tool_calls,omitempty"`
+	ToolCallId        string          `json:"tool_call_id,omitempty"`
+	parsedContent     []MediaContent
 	//parsedStringContent *string
+}
+
+const (
+	ThinkingProviderAnthropic       = "anthropic"
+	ThinkingProviderGemini          = "gemini"
+	ThinkingProviderOpenAIResponses = "openai-responses"
+)
+
+func NativeThinkingCredential(signature, signatureProvider, target string) bool {
+	return signature != "" && signatureProvider != "" && signatureProvider == target
 }
 
 type MediaContent struct {

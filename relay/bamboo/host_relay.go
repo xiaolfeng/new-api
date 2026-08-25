@@ -431,12 +431,14 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 	collector := newBambooTimingCollector()
 
 	type streamBlockAccum struct {
-		blockType    string
-		textBuf      strings.Builder
-		thinkingBuf  strings.Builder
-		toolID       string
-		toolName     string
-		toolInputBuf strings.Builder
+		blockType         string
+		textBuf           strings.Builder
+		thinkingBuf       strings.Builder
+		thinkingSignature string
+		thinkingProvider  string
+		toolID            string
+		toolName          string
+		toolInputBuf      strings.Builder
 	}
 	streamBlocks := make(map[int]*streamBlockAccum)
 	var orderedIndices []int
@@ -476,6 +478,8 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 					accum.textBuf.WriteString(b.Text)
 				case *bamboosdk.ThinkingBlock:
 					accum.thinkingBuf.WriteString(b.Thinking)
+					accum.thinkingSignature = b.Signature
+					accum.thinkingProvider = b.SignatureProvider
 				case *bamboosdk.ToolUseBlock:
 					accum.toolID = b.ID
 					accum.toolName = b.Name
@@ -501,6 +505,14 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 					case bamboosdk.DeltaThinkingDelta:
 						accum.blockType = "thinking"
 						accum.thinkingBuf.WriteString(delta.Thinking)
+					case bamboosdk.DeltaSignature:
+						accum.blockType = "thinking"
+						if delta.Signature != "" {
+							accum.thinkingSignature = delta.Signature
+						}
+						if delta.SignatureProvider != "" {
+							accum.thinkingProvider = delta.SignatureProvider
+						}
 					case bamboosdk.DeltaInputJSON:
 						accum.toolInputBuf.WriteString(delta.PartialJSON)
 					}
@@ -566,7 +578,7 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 		}
 		switch accum.blockType {
 		case "thinking":
-			blocks = append(blocks, bamboosdk.NewThinkingBlock(accum.thinkingBuf.String(), ""))
+			blocks = append(blocks, bamboosdk.NewThinkingBlockWithProvider(accum.thinkingBuf.String(), accum.thinkingSignature, accum.thinkingProvider))
 		case "tool_use":
 			blocks = append(blocks, bamboosdk.NewToolUseBlockWithRawInput(accum.toolID, accum.toolName, accum.toolInputBuf.String()))
 		default:

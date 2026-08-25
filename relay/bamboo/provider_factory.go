@@ -208,7 +208,7 @@ func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider
 	legacyCacheKey := info.ChannelOtherSettings.IsBambooLegacyCacheKey()
 	stripThinkTags := info.ChannelOtherSettings.IsBambooStripThinkTags()
 	includeReasoningContent := info.ChannelOtherSettings.IsBambooIncludeReasoningContent()
-	ignoreEncryptedContent := info.ChannelOtherSettings.IsBambooIgnoreEncryptedContent()
+	ignoreEncryptedContent := info.ChannelOtherSettings.IsBambooIgnoreEncryptedContent() || info.ChannelIsMultiKey
 
 	upstreamFmt := resolveUpstreamFormat(info)
 	if upstreamFmt != dto.BambooUpstreamFormatAuto {

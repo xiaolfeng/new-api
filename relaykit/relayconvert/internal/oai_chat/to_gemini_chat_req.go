@@ -3,6 +3,7 @@ package oaichat
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"context"
@@ -386,6 +387,15 @@ func OpenAIChatRequestToGeminiGenerateContent(c context.Context, textRequest dto
 
 		if shouldAttachThoughtSignature && !signatureAttached && len(parts) > 0 {
 			sharedgemini.AttachFirstTextThoughtSignature(opts, parts)
+		}
+
+		if dto.NativeThinkingCredential(message.ThinkingSignature, message.ThinkingProvider, dto.ThinkingProviderGemini) {
+			thought := dto.GeminiPart{
+				Text:             message.GetReasoningContent(),
+				Thought:          true,
+				ThoughtSignature: []byte(strconv.Quote(message.ThinkingSignature)),
+			}
+			parts = append([]dto.GeminiPart{thought}, parts...)
 		}
 
 		content.Parts = parts

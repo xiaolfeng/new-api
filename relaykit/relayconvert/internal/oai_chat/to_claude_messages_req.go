@@ -336,7 +336,17 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 			if text == "" {
 				text = "..."
 			}
-			claudeMessage.Content = text
+			if thinking := chatMessageToClaudeThinking(message); thinking != nil {
+				claudeMessage.Content = []dto.ClaudeMediaMessage{
+					*thinking,
+					{
+						Type: "text",
+						Text: kitutil.GetPointer(text),
+					},
+				}
+			} else {
+				claudeMessage.Content = text
+			}
 		} else {
 			claudeMediaMessages := make([]dto.ClaudeMediaMessage, 0)
 			for _, mediaMessage := range message.ParseContent() {
@@ -391,6 +401,9 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 					})
 				}
 			}
+			if thinking := chatMessageToClaudeThinking(message); thinking != nil {
+				claudeMediaMessages = append([]dto.ClaudeMediaMessage{*thinking}, claudeMediaMessages...)
+			}
 			claudeMessage.Content = claudeMediaMessages
 		}
 		claudeMessages = append(claudeMessages, claudeMessage)
@@ -408,4 +421,16 @@ func OpenAIChatRequestToClaudeMessages(c context.Context, info convmeta.Meta, te
 		return nil, sharedclaude.ErrMissingMaxTokens
 	}
 	return &claudeRequest, nil
+}
+
+func chatMessageToClaudeThinking(message dto.Message) *dto.ClaudeMediaMessage {
+	if !dto.NativeThinkingCredential(message.ThinkingSignature, message.ThinkingProvider, dto.ThinkingProviderAnthropic) {
+		return nil
+	}
+	thinking := message.GetReasoningContent()
+	return &dto.ClaudeMediaMessage{
+		Type:      "thinking",
+		Thinking:  kitutil.GetPointer(thinking),
+		Signature: message.ThinkingSignature,
+	}
 }

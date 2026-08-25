@@ -106,6 +106,13 @@ func ResponsesResponseToChatCompletionsResponse(resp *dto.OpenAIResponsesRespons
 	if reasoning != "" {
 		msg.ReasoningContent = &reasoning
 	}
+	if sig, reasoningID := ExtractReasoningCredentialFromResponses(resp); sig != "" {
+		msg.ThinkingSignature = sig
+		msg.ThinkingProvider = dto.ThinkingProviderOpenAIResponses
+		msg.ReasoningID = reasoningID
+	} else if reasoningID != "" {
+		msg.ReasoningID = reasoningID
+	}
 	if len(toolCalls) > 0 {
 		msg.SetToolCalls(toolCalls)
 	}
@@ -219,13 +226,39 @@ func ExtractReasoningTextFromResponses(resp *dto.OpenAIResponsesResponse) string
 		if out.Type != responsesOutputTypeReasoning {
 			continue
 		}
+		itemStart := sb.Len()
 		for _, c := range out.Content {
 			if c.Text != "" {
 				sb.WriteString(c.Text)
 			}
 		}
+		if sb.Len() == itemStart {
+			for _, part := range out.Summary {
+				if part.Text != "" {
+					sb.WriteString(part.Text)
+				}
+			}
+		}
 	}
 	return sb.String()
+}
+
+func ExtractReasoningCredentialFromResponses(resp *dto.OpenAIResponsesResponse) (signature, reasoningID string) {
+	if resp == nil {
+		return "", ""
+	}
+	for _, out := range resp.Output {
+		if out.Type != responsesOutputTypeReasoning {
+			continue
+		}
+		if out.ID != "" {
+			reasoningID = out.ID
+		}
+		if out.EncryptedContent != "" {
+			signature = out.EncryptedContent
+		}
+	}
+	return signature, reasoningID
 }
 
 func responseStatusString(resp *dto.OpenAIResponsesResponse) string {

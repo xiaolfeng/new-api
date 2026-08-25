@@ -480,3 +480,33 @@ func TestResponsesRequestToChatCompletionsRequestMergesEmptyAssistantWithFunctio
 	assert.Equal(t, "fc_123", toolCalls[0].ID)
 	assert.Equal(t, "tool", got.Messages[1].Role)
 }
+
+func TestResponsesRequestToChatCompletionsMergesReasoningItem(t *testing.T) {
+	got, err := ResponsesRequestToChatCompletionsRequest(&dto.OpenAIResponsesRequest{
+		Model: "gpt-test",
+		Input: mustRawMessage(t, []map[string]any{
+			{"role": "user", "content": "hi"},
+			{
+				"type":              "reasoning",
+				"id":                "rs_1",
+				"summary":           []map[string]any{{"type": "summary_text", "text": "brief"}},
+				"encrypted_content": "enc_token",
+			},
+			{"type": "message", "role": "assistant", "content": []map[string]any{{"type": "output_text", "text": "hello"}}},
+		}),
+	})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(got.Messages), 2)
+	var assistant dto.Message
+	for _, msg := range got.Messages {
+		if msg.Role == "assistant" {
+			assistant = msg
+			break
+		}
+	}
+	assert.Equal(t, "brief", assistant.GetReasoningContent())
+	assert.Equal(t, "enc_token", assistant.ThinkingSignature)
+	assert.Equal(t, dto.ThinkingProviderOpenAIResponses, assistant.ThinkingProvider)
+	assert.Equal(t, "rs_1", assistant.ReasoningID)
+	assert.Equal(t, "hello", assistant.StringContent())
+}

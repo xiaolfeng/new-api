@@ -197,6 +197,8 @@ func responsesInputItemToChatMessages(item map[string]any, messages []dto.Messag
 		callID := strings.TrimSpace(kitutil.Interface2String(item["call_id"]))
 		content := responseToolOutputToChatContent(item["output"])
 		return append(messages, dto.Message{Role: "tool", ToolCallId: callID, Content: content}), nil
+	case "reasoning":
+		return appendReasoningToLastAssistant(messages, item), nil
 	}
 
 	role := strings.TrimSpace(kitutil.Interface2String(item["role"]))
@@ -211,7 +213,25 @@ func responsesInputItemToChatMessages(item map[string]any, messages []dto.Messag
 	if err != nil {
 		return nil, err
 	}
-	return append(messages, dto.Message{Role: role, Content: content}), nil
+	next := dto.Message{Role: role, Content: content}
+	if role == "assistant" {
+		return mergeIntoLastAssistant(messages, next), nil
+	}
+	return append(messages, next), nil
+}
+
+func mergeIntoLastAssistant(messages []dto.Message, msg dto.Message) []dto.Message {
+	if len(messages) > 0 && messages[len(messages)-1].Role == "assistant" {
+		last := &messages[len(messages)-1]
+		if last.Content == nil || last.StringContent() == "" {
+			last.Content = msg.Content
+			if len(msg.ToolCalls) > 0 {
+				last.ToolCalls = msg.ToolCalls
+			}
+			return messages
+		}
+	}
+	return append(messages, msg)
 }
 
 func responsesInputContentToChatContent(content any) (any, error) {
@@ -322,6 +342,64 @@ func responsesCustomToolCallItemToChatToolCall(item map[string]any) (dto.ToolCal
 			Arguments: responsesArgumentsString(item["input"]),
 		},
 	}, nil
+}
+
+func appendReasoningToLastAssistant(messages []dto.Message, item map[string]any) []dto.Message {
+	if len(messages) == 0 || messages[len(messages)-1].Role != "assistant" {
+		messages = append(messages, dto.Message{Role: "assistant"})
+	}
+	idx := len(messages) - 1
+	text := extractResponsesReasoningPlaintext(item)
+	if text != "" && messages[idx].GetReasoningContent() == "" {
+		messages[idx].ReasoningContent = &text
+	}
+	if enc := strings.TrimSpace(kitutil.Interface2String(item["encrypted_content"])); enc != "" {
+		messages[idx].ThinkingSignature = enc
+		messages[idx].ThinkingProvider = dto.ThinkingProviderOpenAIResponses
+	}
+	if id := strings.TrimSpace(kitutil.Interface2String(item["id"])); id != "" && messages[idx].ReasoningID == "" {
+		messages[idx].ReasoningID = id
+	}
+	return messages
+}
+
+func extractResponsesReasoningPlaintext(item map[string]any) string {
+	if item == nil {
+		return ""
+	}
+	if text := joinResponsesReasoningParts(item["content"]); text != "" {
+		return text
+	}
+	return joinResponsesReasoningParts(item["summary"])
+}
+
+func joinResponsesReasoningParts(raw any) string {
+	switch parts := raw.(type) {
+	case []any:
+		var sb strings.Builder
+		for _, part := range parts {
+			partMap, ok := part.(map[string]any)
+			if !ok {
+				continue
+			}
+			if text := strings.TrimSpace(kitutil.Interface2String(partMap["text"])); text != "" {
+				sb.WriteString(text)
+			}
+		}
+		return sb.String()
+	case []map[string]any:
+		var sb strings.Builder
+		for _, part := range parts {
+			if text := strings.TrimSpace(kitutil.Interface2String(part["text"])); text != "" {
+				sb.WriteString(text)
+			}
+		}
+		return sb.String()
+	case string:
+		return strings.TrimSpace(parts)
+	default:
+		return ""
+	}
 }
 
 func appendToolCallToLastAssistant(messages []dto.Message, toolCall dto.ToolCallRequest) []dto.Message {
