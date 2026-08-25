@@ -284,6 +284,8 @@ export const channelFormSchema = z
     bamboo_legacy_compat: z.boolean().optional(),
     bamboo_legacy_cache_key: z.boolean().optional(),
     bamboo_strip_think_tags: z.boolean().optional(),
+    bamboo_include_reasoning_content: z.boolean().optional(),
+    bamboo_ignore_encrypted_content: z.boolean().optional(),
     // Upstream model update settings (stored in settings JSON)
     upstream_model_update_check_enabled: z.boolean().optional(),
     upstream_model_update_auto_sync_enabled: z.boolean().optional(),
@@ -460,6 +462,8 @@ export const CHANNEL_FORM_DEFAULT_VALUES: ChannelFormValues = {
   bamboo_legacy_compat: false,
   bamboo_legacy_cache_key: false,
   bamboo_strip_think_tags: false,
+  bamboo_include_reasoning_content: false,
+  bamboo_ignore_encrypted_content: false,
   upstream_model_update_check_enabled: false,
   upstream_model_update_auto_sync_enabled: false,
   upstream_model_update_ignored_models: '',
@@ -537,6 +541,8 @@ export function transformChannelToFormDefaults(
   let bambooLegacyCompat = false
   let bambooLegacyCacheKey = false
   let bambooStripThinkTags = false
+  let bambooIncludeReasoningContent = false
+  let bambooIgnoreEncryptedContent = false
 
   if (channel.settings) {
     try {
@@ -581,6 +587,12 @@ export function transformChannelToFormDefaults(
       }
       if (parsed.bamboo_strip_think_tags === true) {
         bambooStripThinkTags = true
+      }
+      if (parsed.bamboo_include_reasoning_content === true) {
+        bambooIncludeReasoningContent = true
+      }
+      if (parsed.bamboo_ignore_encrypted_content === true) {
+        bambooIgnoreEncryptedContent = true
       }
     } catch (error) {
       // eslint-disable-next-line no-console
@@ -637,6 +649,8 @@ export function transformChannelToFormDefaults(
     bamboo_legacy_compat: bambooLegacyCompat,
     bamboo_legacy_cache_key: bambooLegacyCacheKey,
     bamboo_strip_think_tags: bambooStripThinkTags,
+    bamboo_include_reasoning_content: bambooIncludeReasoningContent,
+    bamboo_ignore_encrypted_content: bambooIgnoreEncryptedContent,
   }
 }
 
@@ -843,6 +857,27 @@ function buildSettingsJSON(formData: ChannelFormValues): string {
     settingsObj.bamboo_strip_think_tags = true
   } else {
     delete settingsObj.bamboo_strip_think_tags
+  }
+
+  // Bamboo Responses: include plaintext reasoning.content
+  // (only applies to responses upstream format, same relationship as Completions options)
+  if (
+    formData.bamboo_include_reasoning_content &&
+    formData.bamboo_upstream_format === 'responses'
+  ) {
+    settingsObj.bamboo_include_reasoning_content = true
+  } else {
+    delete settingsObj.bamboo_include_reasoning_content
+  }
+
+  // Bamboo Responses: drop encrypted_content for multi-key rotation / failover
+  if (
+    formData.bamboo_ignore_encrypted_content &&
+    formData.bamboo_upstream_format === 'responses'
+  ) {
+    settingsObj.bamboo_ignore_encrypted_content = true
+  } else {
+    delete settingsObj.bamboo_ignore_encrypted_content
   }
 
   return JSON.stringify(settingsObj)

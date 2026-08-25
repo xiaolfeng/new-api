@@ -7,19 +7,19 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/bamboo-services/bamboo-messages/provider"
 	bambooanthropic "github.com/bamboo-services/bamboo-messages/provider/anthropic"
 	bamboogemini "github.com/bamboo-services/bamboo-messages/provider/gemini"
 	bamboocompletions "github.com/bamboo-services/bamboo-messages/provider/openai/completions"
 	bambooresponses "github.com/bamboo-services/bamboo-messages/provider/openai/responses"
-	"github.com/bamboo-services/bamboo-messages/provider"
 
 	"github.com/QuantumNous/new-api/constant"
 	channelconstant "github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
-	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 )
 
 // resolveDegradedReason 从全局 BambooSettings 解析流式中断降级策略。
@@ -207,17 +207,19 @@ func newProvider(c *gin.Context, info *relaycommon.RelayInfo) (provider.Provider
 	legacyCompat := info.ChannelOtherSettings.IsBambooLegacyCompat()
 	legacyCacheKey := info.ChannelOtherSettings.IsBambooLegacyCacheKey()
 	stripThinkTags := info.ChannelOtherSettings.IsBambooStripThinkTags()
+	includeReasoningContent := info.ChannelOtherSettings.IsBambooIncludeReasoningContent()
+	ignoreEncryptedContent := info.ChannelOtherSettings.IsBambooIgnoreEncryptedContent()
 
 	upstreamFmt := resolveUpstreamFormat(info)
 	if upstreamFmt != dto.BambooUpstreamFormatAuto {
-		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, legacyCompat, legacyCacheKey, stripThinkTags, paramOverrideInterceptor)
+		p, apiErr := buildProviderByFormat(upstreamFmt, apiKey, baseURL, headers, legacyCompat, legacyCacheKey, stripThinkTags, includeReasoningContent, ignoreEncryptedContent, paramOverrideInterceptor)
 		if apiErr != nil {
 			return nil, "", apiErr
 		}
 		return p, upstreamRelayFormat, nil
 	}
 
-	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers, legacyCompat, legacyCacheKey, stripThinkTags, paramOverrideInterceptor)
+	p, apiErr := buildProviderByApiType(info.ApiType, apiKey, baseURL, headers, legacyCompat, legacyCacheKey, stripThinkTags, includeReasoningContent, ignoreEncryptedContent, paramOverrideInterceptor)
 	if apiErr != nil {
 		return nil, "", apiErr
 	}
@@ -254,6 +256,7 @@ func buildParamOverrideInterceptor(info *relaycommon.RelayInfo) provider.Request
 // option 不会被触发，构造行为与升级前一致。
 func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL string,
 	headers map[string]string, legacyCompat bool, legacyCacheKey bool, stripThinkTags bool,
+	includeReasoningContent bool, ignoreEncryptedContent bool,
 	interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
 
 	switch fmt {
@@ -262,7 +265,7 @@ func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL str
 	case dto.BambooUpstreamFormatGemini:
 		return newGeminiProvider(apiKey, baseURL, headers, interceptor), nil
 	case dto.BambooUpstreamFormatResponses:
-		return newResponsesProvider(apiKey, baseURL, headers, interceptor), nil
+		return newResponsesProvider(apiKey, baseURL, headers, includeReasoningContent, ignoreEncryptedContent, interceptor), nil
 	case dto.BambooUpstreamFormatOpenAI:
 		return buildCompletionsProvider(apiKey, baseURL, headers, legacyCompat, legacyCacheKey, stripThinkTags, interceptor), nil
 	default:
@@ -273,7 +276,9 @@ func buildProviderByFormat(fmt dto.BambooUpstreamFormatType, apiKey, baseURL str
 // buildProviderByApiType 按渠道 ApiType 自动推断上游协议（原 newProvider switch 逻辑）。
 // auto 模式下 legacyCompat 由调用方从 ChannelOtherSettings.BambooLegacyCompat 读取。
 func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[string]string,
-	legacyCompat bool, legacyCacheKey bool, stripThinkTags bool, interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
+	legacyCompat bool, legacyCacheKey bool, stripThinkTags bool,
+	includeReasoningContent bool, ignoreEncryptedContent bool,
+	interceptor provider.RequestInterceptor) (provider.Provider, *types.NewAPIError) {
 	switch apiType {
 	case constant.APITypeAnthropic:
 		return newAnthropicProvider(apiKey, baseURL, headers, legacyCompat, interceptor), nil
@@ -282,7 +287,7 @@ func buildProviderByApiType(apiType int, apiKey, baseURL string, headers map[str
 		return newGeminiProvider(apiKey, baseURL, headers, interceptor), nil
 
 	case constant.APITypeCodex:
-		return newResponsesProvider(apiKey, baseURL, headers, interceptor), nil
+		return newResponsesProvider(apiKey, baseURL, headers, includeReasoningContent, ignoreEncryptedContent, interceptor), nil
 
 	case constant.APITypeOpenAI, constant.APITypeXai,
 		constant.APITypeDeepSeek, constant.APITypeMoonshot,
@@ -336,12 +341,15 @@ func newGeminiProvider(apiKey, baseURL string, headers map[string]string, interc
 	return bamboogemini.NewProviderWithOptions(opts...)
 }
 
-func newResponsesProvider(apiKey, baseURL string, headers map[string]string, interceptor provider.RequestInterceptor) provider.Provider {
+func newResponsesProvider(apiKey, baseURL string, headers map[string]string,
+	includeReasoningContent bool, ignoreEncryptedContent bool, interceptor provider.RequestInterceptor) provider.Provider {
 	baseURL = ensureOpenAIBaseURL(baseURL)
 	opts := []bambooresponses.Option{
 		bambooresponses.WithAPIKey(apiKey),
 		bambooresponses.WithBaseURL(baseURL),
 		bambooresponses.WithDegradedReason(resolveDegradedReason()),
+		bambooresponses.WithIncludeReasoningContent(includeReasoningContent),
+		bambooresponses.WithIgnoreEncryptedContent(ignoreEncryptedContent),
 	}
 	for k, v := range headers {
 		opts = append(opts, bambooresponses.WithHeader(k, v))

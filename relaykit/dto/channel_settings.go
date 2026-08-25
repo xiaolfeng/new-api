@@ -94,6 +94,8 @@ type ChannelOtherSettings struct {
 	BambooLegacyCompat                    *bool                 `json:"bamboo_legacy_compat,omitempty"`                       // bamboo 传统模式：使用 max_tokens 旧字段名而非 max_completion_tokens，不发送 reasoning_effort / parallel_tool_calls
 	BambooLegacyCacheKey                  *bool                 `json:"bamboo_legacy_cache_key,omitempty"`                    // bamboo Legacy 模式下是否发送 prompt_cache_key（如 Kimi/Moonshot 支持，GLM 不支持）
 	BambooStripThinkTags                  *bool                 `json:"bamboo_strip_think_tags,omitempty"`                    // bamboo 内联 think 标签剥离：将 content 中 XML 风格 think 标签包裹的推理内容转为 thinking 事件
+	BambooIncludeReasoningContent         *bool                 `json:"bamboo_include_reasoning_content,omitempty"`           // bamboo Responses：是否在 input reasoning item 中携带明文 content（默认关闭，遵守 OpenAI content.maxItems=0）
+	BambooIgnoreEncryptedContent          *bool                 `json:"bamboo_ignore_encrypted_content,omitempty"`            // bamboo Responses：是否忽略 encrypted_content（多 Key 轮询/故障转移时防止跨 Key 解密失败）
 	UpstreamModelUpdateCheckEnabled       bool                  `json:"upstream_model_update_check_enabled,omitempty"`        // 是否检测上游模型更新
 	UpstreamModelUpdateAutoSyncEnabled    bool                  `json:"upstream_model_update_auto_sync_enabled,omitempty"`    // 是否自动同步上游模型更新
 	UpstreamModelUpdateLastCheckTime      int64                 `json:"upstream_model_update_last_check_time,omitempty"`      // 上次检测时间
@@ -129,6 +131,20 @@ func (s *ChannelOtherSettings) IsBambooStripThinkTags() bool {
 		return false
 	}
 	return *s.BambooStripThinkTags
+}
+
+func (s *ChannelOtherSettings) IsBambooIncludeReasoningContent() bool {
+	if s == nil || s.BambooIncludeReasoningContent == nil {
+		return false
+	}
+	return *s.BambooIncludeReasoningContent
+}
+
+func (s *ChannelOtherSettings) IsBambooIgnoreEncryptedContent() bool {
+	if s == nil || s.BambooIgnoreEncryptedContent == nil {
+		return false
+	}
+	return *s.BambooIgnoreEncryptedContent
 }
 
 const (

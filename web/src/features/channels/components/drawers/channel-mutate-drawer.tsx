@@ -4370,6 +4370,95 @@ export function ChannelMutateDrawer({
                                     )}
                                   />
                                 )}
+                                {form.watch('bamboo_upstream_format') ===
+                                  'responses' && (
+                                  <>
+                                    <FormField
+                                      control={form.control}
+                                      name='bamboo_include_reasoning_content'
+                                      render={({ field }) => (
+                                        <FormItem className='space-y-2'>
+                                          <div className='space-y-0.5'>
+                                            <FormLabel>
+                                              {t('Include Reasoning Content')}
+                                            </FormLabel>
+                                            <FormDescription>
+                                              {t(
+                                                'When enabled, sends plaintext reasoning.content in Responses input items. Enable for third-party Open Responses (Grok, vLLM, SGLang). Keep off for official OpenAI.'
+                                              )}
+                                            </FormDescription>
+                                          </div>
+                                          <Select
+                                            value={
+                                              field.value ? 'true' : 'false'
+                                            }
+                                            onValueChange={(v) =>
+                                              field.onChange(v === 'true')
+                                            }
+                                          >
+                                            <FormControl>
+                                              <SelectTrigger className='w-full'>
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                              <SelectItem value='false'>
+                                                {t(
+                                                  'Off (Official OpenAI schema)'
+                                                )}
+                                              </SelectItem>
+                                              <SelectItem value='true'>
+                                                {t(
+                                                  'On (Send plaintext reasoning)'
+                                                )}
+                                              </SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        </FormItem>
+                                      )}
+                                    />
+                                    <FormField
+                                      control={form.control}
+                                      name='bamboo_ignore_encrypted_content'
+                                      render={({ field }) => (
+                                        <FormItem className='space-y-2'>
+                                          <div className='space-y-0.5'>
+                                            <FormLabel>
+                                              {t('Ignore Encrypted Content')}
+                                            </FormLabel>
+                                            <FormDescription>
+                                              {t(
+                                                'When enabled, drops encrypted_content from Responses reasoning items. Use for multi-key rotation or failover where ciphertext from one key cannot be decrypted by another.'
+                                              )}
+                                            </FormDescription>
+                                          </div>
+                                          <Select
+                                            value={
+                                              field.value ? 'true' : 'false'
+                                            }
+                                            onValueChange={(v) =>
+                                              field.onChange(v === 'true')
+                                            }
+                                          >
+                                            <FormControl>
+                                              <SelectTrigger className='w-full'>
+                                                <SelectValue />
+                                              </SelectTrigger>
+                                            </FormControl>
+                                            <SelectContent>
+                                              <SelectItem value='false'>
+                                                {t('Off (Keep ciphertext)')}
+                                              </SelectItem>
+                                              <SelectItem value='true'>
+                                                {t('On (Drop ciphertext)')}
+                                              </SelectItem>
+                                            </SelectContent>
+                                          </Select>
+                                        </FormItem>
+                                      )}
+                                    />
+                                  </>
+                                )}
                               </div>
                             )}
 

@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/QuantumNous/new-api/constant"
-	"github.com/QuantumNous/new-api/relaykit/dto"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
@@ -476,4 +476,44 @@ func TestNewProvider_BambooLegacyCacheKey_Nil(t *testing.T) {
 		t.Fatalf("newProvider returned error: %v (type: %T, msg: %q)", err, err, err.Error())
 	}
 	assert.NotNil(t, p)
+}
+
+func TestNewResponsesProvider_ReasoningSwitches(t *testing.T) {
+	p := newResponsesProvider("test-key", "https://api.example.com", nil, true, true, nil)
+	assert.NotNil(t, p)
+
+	p = newResponsesProvider("test-key", "https://api.example.com", nil, false, false, nil)
+	assert.NotNil(t, p)
+}
+
+func TestNewProvider_BambooResponsesReasoningSwitches(t *testing.T) {
+	boolPtr := func(b bool) *bool { return &b }
+
+	tests := []struct {
+		name      string
+		apiType   int
+		upstream  string
+		include   *bool
+		ignoreEnc *bool
+	}{
+		{"nil defaults on Codex", constant.APITypeCodex, "", nil, nil},
+		{"include true on Codex", constant.APITypeCodex, "", boolPtr(true), nil},
+		{"ignore true on Codex", constant.APITypeCodex, "", nil, boolPtr(true)},
+		{"both true via responses format", constant.APITypeOpenAI, "responses", boolPtr(true), boolPtr(true)},
+		{"both false via responses format", constant.APITypeOpenAI, "responses", boolPtr(false), boolPtr(false)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := makeInfo(tt.apiType)
+			info.ChannelOtherSettings.BambooIncludeReasoningContent = tt.include
+			info.ChannelOtherSettings.BambooIgnoreEncryptedContent = tt.ignoreEnc
+			info.ChannelOtherSettings.BambooUpstreamFormat = tt.upstream
+
+			p, _, err := newProvider(nil, info)
+			if err != nil {
+				t.Fatalf("newProvider returned error: %v (type: %T, msg: %q)", err, err, err.Error())
+			}
+			assert.NotNil(t, p)
+		})
+	}
 }
