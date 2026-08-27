@@ -56,7 +56,15 @@ type clientOwnedHostTool struct {
 
 var clientOwnedHostTools = []clientOwnedHostTool{
 	{profile: common.ClientProfileClaudeCode, canonical: CanonicalWebSearch},
-	{profile: common.ClientProfileGrokBuild, canonical: CanonicalWebSearch},
+}
+
+// agentLocalSearchLoopClients 是自带搜索主循环、但没有可用本地搜索代理的 Agent 客户端：
+// 回抛 web_search 会被其本地主循环当函数再次执行（如 Grok Build 硬编码直连
+// cli-chat-proxy.grok.com），非官方网络环境必然超时并重试成死循环。这类客户端由网关
+// 代跑（A-thin），且 hop2 后抑制回抛，直接交付最终答案。
+var agentLocalSearchLoopClients = []common.ClientProfile{
+	common.ClientProfileGrokBuild,
+	common.ClientProfileCodex,
 }
 
 // clientOwnedTool 查所有权表。EnableClientStrictEgress 关闭时全部视为网关所有。
@@ -88,11 +96,22 @@ func passthroughClientOwnedTools(info *relaycommon.RelayInfo, uses []toolUseCall
 }
 
 // SuppressHostToolEcho 报告某条网关代跑结果是否不应向客户端回抛 tool_call。
-// 命中所有权表的搜索工具已由客户端本地执行，hop2 后若再抛同名调用，客户端
-// 主循环会再次触发搜索；网关所有的 fetch 等工具照常回抛。
+// ① 命中客户端所有权表的工具（如 Claude Code 的 WebSearch）——回抛会双跑；
+// ② agentLocalSearchLoopClients 表内的 Agent 客户端——回抛会被其本地主循环直连官方代理重试。
 func SuppressHostToolEcho(info *relaycommon.RelayInfo, r ExecResult) bool {
 	if r.Kind != "search" {
 		return false
+	}
+	if info == nil {
+		return false
+	}
+	if !model_setting.GetBambooSettings().ClientStrictEgressEnabled() {
+		return false
+	}
+	for _, profile := range agentLocalSearchLoopClients {
+		if info.ClientProfile == profile {
+			return true
+		}
 	}
 	return clientOwnedTool(info, CanonicalFromName(r.OriginalName))
 }

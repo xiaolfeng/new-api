@@ -294,15 +294,15 @@ func TestDoHostStreamRelayResponsesPassthroughKeepsUsage(t *testing.T) {
 	assert.NotContains(t, joined, `"total_tokens":0`)
 }
 
-// TestDoHostStreamRelayGrokPassthroughForwardsToolUse 复现"无第二轮"回归：
-// Grok Build 的 web_search 是客户端 function，走 passthrough 时必须把
-// tee 遮住的 function_call 补发给客户端，客户端才能执行搜索并发起第二轮。
-func TestDoHostStreamRelayGrokPassthroughForwardsToolUse(t *testing.T) {
+// TestDoHostStreamRelayClaudePassthroughForwardsToolUse 复现"无第二轮"回归：
+// Claude Code 的 WebSearch 是客户端本地工具，走 passthrough 时必须把
+// tee 遮住的 tool_use 补发给客户端，客户端才能发起 helper 并进行第二轮。
+func TestDoHostStreamRelayClaudePassthroughForwardsToolUse(t *testing.T) {
 	codec := testCodec(t, bamboocodec.FormatAnthropic)
 	c, _ := newHostTestContext(t)
 	info, err := relaycommon.GenRelayInfo(c, types.RelayFormatClaude, &dto.BaseRequest{}, nil)
 	require.NoError(t, err)
-	info.ClientProfile = common.ClientProfileGrokBuild
+	info.ClientProfile = common.ClientProfileClaudeCode
 	info.HostToolPlan = &relaycommon.HostToolPlan{
 		Enabled: true,
 		Mode:    "loop",
@@ -333,7 +333,7 @@ func TestDoHostStreamRelayGrokPassthroughForwardsToolUse(t *testing.T) {
 	joined := strings.Join(cs.Frames(), "\n")
 	// 思考实时透传。
 	assert.Contains(t, joined, "need latest")
-	// Grok search 是透传型工具：function_call（web_search）必须补发给客户端。
+	// Claude Code 的 WebSearch 是客户端 helper 工具：function_call（web_search）必须补发给客户端。
 	assert.Contains(t, joined, "web_search")
 	assert.Contains(t, joined, "latest news")
 	// 客户端据此发起第二轮，流以正常终止帧收尾。

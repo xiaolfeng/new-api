@@ -59,7 +59,7 @@ type ToolLogQuery struct {
 }
 
 func RecordToolLogs(logs []*ToolLog) {
-	if len(logs) == 0 {
+	if len(logs) == 0 || LOG_DB == nil {
 		return
 	}
 	now := common.GetTimestamp()
