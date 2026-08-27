@@ -18,21 +18,19 @@ import (
 )
 
 func ShouldNormalizeResponses(info *relaycommon.RelayInfo) bool {
-	return grokStrictEnabled(info) && info.RelayFormat == types.RelayFormatOpenAIResponses
+	return agentStrictEgressEnabled(info) && info.RelayFormat == types.RelayFormatOpenAIResponses
 }
 
-func grokStrictEnabled(info *relaycommon.RelayInfo) bool {
-	if info == nil {
-		return false
-	}
-	if !model_setting.GetBambooSettings().GrokStrictEgressEnabled() {
+// agentStrictEgressEnabled 报告是否启用具名 Agent 客户端的 Responses 写边界补洞。
+func agentStrictEgressEnabled(info *relaycommon.RelayInfo) bool {
+	if info == nil || !model_setting.GetBambooSettings().ClientStrictEgressEnabled() {
 		return false
 	}
 	return info.ClientProfile == common.ClientProfileGrokBuild
 }
 
-func grokStrictMutate(info *relaycommon.RelayInfo) bool {
-	if !grokStrictEnabled(info) {
+func agentStrictMutate(info *relaycommon.RelayInfo) bool {
+	if !agentStrictEgressEnabled(info) {
 		return false
 	}
 	switch info.RelayFormat {
@@ -102,7 +100,7 @@ func normalizeResponsesJSON(info *relaycommon.RelayInfo, raw []byte, parentEvent
 	if info.RelayFormat == types.RelayFormatOpenAIResponses {
 		observeMissedUA(info, root, parentEvent)
 	}
-	if !grokStrictMutate(info) {
+	if !agentStrictMutate(info) {
 		return raw
 	}
 	st := &responsesWalkState{info: info, eventType: parentEvent}
@@ -222,7 +220,7 @@ func fillResponseEnvelope(node map[string]any, st *responsesWalkState) {
 		st.mutated = true
 		if !st.info.EgressFilledCreated {
 			st.info.EgressFilledCreated = true
-			logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s grok-strict filled created", st.info.RequestId))
+			logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s client strict egress filled created", st.info.RequestId))
 		}
 	}
 	// 只给真正的 response 信封回填 created_at。事件根只要 created，避免多一个未知字段。
@@ -359,7 +357,7 @@ func fillFunctionCall(node map[string]any, st *responsesWalkState) {
 	if strings.TrimSpace(name) == "" {
 		node["name"] = "unknown"
 		st.mutated = true
-		logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s grok-strict filled empty function_call name", st.info.RequestId))
+		logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s client strict egress filled empty function_call name", st.info.RequestId))
 	}
 
 	status, _ := node["status"].(string)
@@ -425,7 +423,7 @@ func observeMissedUA(info *relaycommon.RelayInfo, root map[string]any, parentEve
 	}
 	if responsesLooksIncomplete(root, parentEvent) {
 		info.EgressMissedUAWarned = true
-		logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s suspected missed grok ua: incomplete responses function_call/created", info.RequestId))
+		logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s suspected missed agent-cli ua: incomplete responses function_call/created", info.RequestId))
 	}
 }
 
@@ -493,7 +491,7 @@ func markFilledArgs(info *relaycommon.RelayInfo) {
 		return
 	}
 	info.EgressFilledArgs = true
-	logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s grok-strict filled arguments", info.RequestId))
+	logger.LogWarn(context.Background(), fmt.Sprintf("request_id=%s client strict egress filled arguments", info.RequestId))
 }
 
 func eventTypeOfFrame(frame []byte) string {

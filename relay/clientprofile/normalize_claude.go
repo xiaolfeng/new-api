@@ -18,7 +18,7 @@ func shouldNormalizeClaude(info *relaycommon.RelayInfo) bool {
 	if info == nil {
 		return false
 	}
-	if !model_setting.GetBambooSettings().ClaudeStrictEgressEnabled() {
+	if !model_setting.GetBambooSettings().ClientStrictEgressEnabled() {
 		return false
 	}
 	if info.ClientProfile != common.ClientProfileClaudeCode {

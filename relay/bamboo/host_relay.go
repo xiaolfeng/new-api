@@ -123,10 +123,10 @@ func prependHostToolCalls(resp *bamboosdk.Response, info *relaycommon.RelayInfo,
 	if resp == nil || len(results) == 0 {
 		return
 	}
-	grok := info != nil && info.ClientProfile == common.ClientProfileGrokBuild
 	calls := make([]bamboosdk.ContentBlock, 0, len(results))
 	for i, r := range results {
-		if grok && r.Kind == "search" {
+		// 客户端所有的搜索工具不回抛，防客户端主循环双跑（见 hosttool 所有权表）。
+		if hosttool.SuppressHostToolEcho(info, r) {
 			continue
 		}
 		id := r.CallID
@@ -639,11 +639,9 @@ func emitHostToolCalls(cs *clientStream, info *relaycommon.RelayInfo, results []
 	if cs == nil {
 		return
 	}
-	grok := info != nil && info.ClientProfile == common.ClientProfileGrokBuild
 	for i, r := range results {
-		if grok && r.Kind == "search" {
-			// 主路径已对 grok search 透传；若仍走到 hop2，禁止再抛
-			// function_call name=web_search，否则客户端 helper 会再搜一轮。
+		if hosttool.SuppressHostToolEcho(info, r) {
+			// 所有权在客户端的搜索不回抛；否则客户端 helper 会再搜一轮。
 			continue
 		}
 		id := r.CallID

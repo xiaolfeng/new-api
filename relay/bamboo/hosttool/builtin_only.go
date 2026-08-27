@@ -14,9 +14,9 @@ import (
 	"github.com/QuantumNous/new-api/setting/model_setting"
 )
 
-// IsResponsesBuiltinOnly reports Grok/Codex helper requests that only declare
-// Responses built-in search/fetch tools. Those must short-circuit to a
-// synthesized web_search_call instead of A-thin hop2.
+// IsResponsesBuiltinOnly reports Responses helper requests that declare only
+// built-in search/fetch tools. Those must short-circuit to a synthesized
+// web_search_call instead of A-thin hop2.
 func IsResponsesBuiltinOnly(entryFormat types.RelayFormat, entryBytes []byte, plan *relaycommon.HostToolPlan, req *bamboocodec.RelayRequest) bool {
 	if entryFormat != types.RelayFormatOpenAIResponses {
 		return false
@@ -90,7 +90,7 @@ func planOrEmpty(info *relaycommon.RelayInfo) *relaycommon.HostToolPlan {
 }
 
 func classifyBuiltinInput(plan *relaycommon.HostToolPlan, req *bamboocodec.RelayRequest) builtinInput {
-	text := stripClaudeSearchHelperPrefix(lastUserText(req))
+	text := stripServerHelperSearchPrefix(lastUserText(req))
 	searchName := builtinToolName(plan, CanonicalWebSearch)
 	fetchName := builtinToolName(plan, CanonicalWebFetch)
 	onlyFetch := fetchName != "" && searchName == ""
@@ -111,15 +111,17 @@ func classifyBuiltinInput(plan *relaycommon.HostToolPlan, req *bamboocodec.Relay
 	return builtinInput{Kind: "search", Query: text, Name: searchName}
 }
 
-const claudeSearchHelperPrefix = "perform a web search for the query:"
+// serverHelperSearchPrefix 是客户端搜索 helper 在 user 文本里附加的固定指令前缀，
+// 提取真实查询时需要剥掉。
+const serverHelperSearchPrefix = "perform a web search for the query:"
 
-func stripClaudeSearchHelperPrefix(s string) string {
+func stripServerHelperSearchPrefix(s string) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
 		return s
 	}
-	if strings.HasPrefix(strings.ToLower(s), claudeSearchHelperPrefix) {
-		return strings.TrimSpace(s[len(claudeSearchHelperPrefix):])
+	if strings.HasPrefix(strings.ToLower(s), serverHelperSearchPrefix) {
+		return strings.TrimSpace(s[len(serverHelperSearchPrefix):])
 	}
 	return s
 }

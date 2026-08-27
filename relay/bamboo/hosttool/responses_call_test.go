@@ -10,7 +10,7 @@ import (
 )
 
 func TestMarshalBuiltinCompleteSearch(t *testing.T) {
-	body, err := MarshalBuiltinComplete("grok-4.6", "req1", 1, ExecResult{
+	body, err := MarshalBuiltinComplete("test-model", "req1", 1, ExecResult{
 		Kind:  "search",
 		OK:    true,
 		Query: "tokyo weather",
@@ -45,7 +45,7 @@ func TestMarshalBuiltinCompleteSearch(t *testing.T) {
 }
 
 func TestMarshalBuiltinCompleteFetchNoSearchBillShape(t *testing.T) {
-	body, err := MarshalBuiltinComplete("grok-4.6", "req1", 1, ExecResult{
+	body, err := MarshalBuiltinComplete("test-model", "req1", 1, ExecResult{
 		Kind:    "fetch",
 		OK:      true,
 		URL:     "https://example.com",
@@ -61,7 +61,7 @@ func TestMarshalBuiltinCompleteFetchNoSearchBillShape(t *testing.T) {
 }
 
 func TestMarshalBuiltinCompleteBackendOff(t *testing.T) {
-	body, err := MarshalBuiltinComplete("grok-4.6", "req1", 1, ExecResult{
+	body, err := MarshalBuiltinComplete("test-model", "req1", 1, ExecResult{
 		Kind:      "search",
 		OK:        false,
 		Query:     "q",
@@ -83,8 +83,8 @@ func TestMarshalBuiltinCompleteBackendOff(t *testing.T) {
 	assert.Contains(t, text, "No search results found.")
 }
 
-func TestFormatGrokSearchOutputCitations(t *testing.T) {
-	text, anns := formatGrokSearchOutput(ExecResult{
+func TestFormatSearchCitations(t *testing.T) {
+	text, anns := formatSearchCitations(ExecResult{
 		OK: true,
 		Hits: []SearchHit{
 			{Title: "GitHub", URL: "https://github.com/XiaoLFeng"},
@@ -102,7 +102,7 @@ func TestFormatGrokSearchOutputCitations(t *testing.T) {
 }
 
 func TestBuiltinStreamFramesOrder(t *testing.T) {
-	frames, err := BuiltinStreamFrames("grok-4.6", "req1", 1, ExecResult{
+	frames, err := BuiltinStreamFrames("test-model", "req1", 1, ExecResult{
 		Kind:  "search",
 		OK:    true,
 		Query: "q",

@@ -17,7 +17,7 @@ import (
 func TestIsResponsesBuiltinOnlyWebSearchOnly(t *testing.T) {
 	tools, err := common.Marshal([]map[string]any{{"type": "web_search"}})
 	require.NoError(t, err)
-	raw, err := common.Marshal(dto.OpenAIResponsesRequest{Model: "grok-4.6", Tools: tools})
+	raw, err := common.Marshal(dto.OpenAIResponsesRequest{Model: "test-model", Tools: tools})
 	require.NoError(t, err)
 	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{
 		Tools: []bamboosdk.Tool{{Name: "web_search"}},
@@ -51,7 +51,7 @@ func TestIsResponsesBuiltinOnlyRejectsXSearch(t *testing.T) {
 		{"type": "x_search"},
 	})
 	require.NoError(t, err)
-	raw, err := common.Marshal(dto.OpenAIResponsesRequest{Model: "grok-4.6", Tools: tools})
+	raw, err := common.Marshal(dto.OpenAIResponsesRequest{Model: "test-model", Tools: tools})
 	require.NoError(t, err)
 	plan := &relaycommon.HostToolPlan{
 		Enabled: true,

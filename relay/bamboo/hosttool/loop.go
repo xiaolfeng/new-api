@@ -29,10 +29,7 @@ func DecideAction(plan *relaycommon.HostToolPlan, uses []toolUseCall) Action {
 }
 
 func DecideActionForClient(plan *relaycommon.HostToolPlan, uses []toolUseCall, info *relaycommon.RelayInfo) Action {
-	if shouldPassthroughClaudeClientTools(info, uses) {
-		return ActionPassthrough
-	}
-	if shouldPassthroughGrokClientSearch(info, uses) {
+	if passthroughClientOwnedTools(info, uses) {
 		return ActionPassthrough
 	}
 	if len(uses) == 0 {
@@ -47,43 +44,57 @@ func DecideActionForClient(plan *relaycommon.HostToolPlan, uses []toolUseCall, i
 	return ActionHop2
 }
 
-func shouldPassthroughClaudeClientTools(info *relaycommon.RelayInfo, uses []toolUseCall) bool {
-	if info == nil || info.ClientProfile != common.ClientProfileClaudeCode {
+// clientOwnedHostTool 是「客户端工具所有权」表：这些 Agent 客户端自带工具主循环，
+// 收到网关代跑后抛回的同名 tool_call 会再执行一轮，形成无限搜索循环。命中该表的
+// canonical 工具一律透传首个 tool_call 由客户端本地执行，echo 阶段也不再回抛。
+// 规则只允许维护在本表；决策（DecideActionForClient）与回抛抑制
+// （SuppressHostToolEcho）必须查表，禁止按模型名或客户端散写 if 分支。
+type clientOwnedHostTool struct {
+	profile   common.ClientProfile
+	canonical string // CanonicalWebSearch / CanonicalWebFetch
+}
+
+var clientOwnedHostTools = []clientOwnedHostTool{
+	{profile: common.ClientProfileClaudeCode, canonical: CanonicalWebSearch},
+	{profile: common.ClientProfileGrokBuild, canonical: CanonicalWebSearch},
+}
+
+// clientOwnedTool 查所有权表。EnableClientStrictEgress 关闭时全部视为网关所有。
+func clientOwnedTool(info *relaycommon.RelayInfo, canonical string) bool {
+	if info == nil || canonical == "" {
 		return false
 	}
-	if !model_setting.GetBambooSettings().ClaudeStrictEgressEnabled() {
+	if !model_setting.GetBambooSettings().ClientStrictEgressEnabled() {
 		return false
 	}
+	for _, entry := range clientOwnedHostTools {
+		if entry.profile == info.ClientProfile && entry.canonical == canonical {
+			return true
+		}
+	}
+	return false
+}
+
+func passthroughClientOwnedTools(info *relaycommon.RelayInfo, uses []toolUseCall) bool {
 	if len(uses) == 0 {
 		return false
 	}
 	for _, use := range uses {
-		// WebSearch helper 会再打一枪 web_search_*；WebFetch 在 2.1.x 仍是本地 axios，
-		// 必须由网关 A-thin 代跑，否则永远走不到 NewAPI。
-		if use.Name != "WebSearch" {
+		if !clientOwnedTool(info, CanonicalFromName(use.Name)) {
 			return false
 		}
 	}
 	return true
 }
 
-func shouldPassthroughGrokClientSearch(info *relaycommon.RelayInfo, uses []toolUseCall) bool {
-	if info == nil || info.ClientProfile != common.ClientProfileGrokBuild {
+// SuppressHostToolEcho 报告某条网关代跑结果是否不应向客户端回抛 tool_call。
+// 命中所有权表的搜索工具已由客户端本地执行，hop2 后若再抛同名调用，客户端
+// 主循环会再次触发搜索；网关所有的 fetch 等工具照常回抛。
+func SuppressHostToolEcho(info *relaycommon.RelayInfo, r ExecResult) bool {
+	if r.Kind != "search" {
 		return false
 	}
-	if len(uses) == 0 {
-		return false
-	}
-	for _, use := range uses {
-		// Grok Build 的 web_search 是客户端 function：主循环看见 function_call
-		// 就会跑 WebSearchTool，再 POST /v1/responses helper（只声明 type=web_search）。
-		// 和 Claude WebSearch 一样必须透传；A-thin hop2 后再抛同名 tool_call 会无限搜。
-		// web_fetch 仍是本地 HTTP，继续交给网关代跑。
-		if CanonicalFromName(use.Name) != CanonicalWebSearch {
-			return false
-		}
-	}
-	return true
+	return clientOwnedTool(info, CanonicalFromName(r.OriginalName))
 }
 
 func BuildHop2Request(req *bamboocodec.RelayRequest, hop1 []bamboosdk.ContentBlock, results []ExecResult, uses []toolUseCall) *bamboocodec.RelayRequest {

@@ -77,10 +77,12 @@ type BambooSettings struct {
 	// ImageRecognizeFailOpen 重试耗尽后仍失败时，剥图降级继续主流程而不是失败整个请求。默认 true。
 	ImageRecognizeFailOpen bool `json:"image_recognize_fail_open"`
 
-	// EnableGrokStrictEgress 仅门控 grok_build + Responses 写边界。缺键 / nil = true。
-	EnableGrokStrictEgress *bool `json:"enable_grok_strict_egress"`
-	// EnableClaudeStrictEgress 仅门控 claude_code + Messages 写边界与 helper 合成。缺键 / nil = true。
-	EnableClaudeStrictEgress *bool `json:"enable_claude_strict_egress"`
+	// EnableClientStrictEgress 门控「具名 Agent 客户端」两类适配的总开关，缺键 / nil = true：
+	// ① 写边界补洞：出口 Responses/Messages 协议字段回填（relay/clientprofile）；
+	// ② host-tool 客户端所有权：带本地工具主循环的客户端对特定 canonical 工具
+	//    透传首个 tool_call（relay/bamboo/hosttool 所有权表），防止双跑死循环。
+	// 默认开。关闭时所有客户端统一走纯工具绑定路径（网关代跑 + 标准回抛）。
+	EnableClientStrictEgress *bool `json:"enable_client_strict_egress"`
 	// EnableClientReturnProfiles 打开具名 profile 的 ReturnKind 矩阵。缺键 / nil = false。
 	// 关它不关任一侧 strict。PR1 只落地字段，不消费。
 	EnableClientReturnProfiles *bool `json:"enable_client_return_profiles"`
@@ -116,8 +118,7 @@ var defaultBambooSettings = BambooSettings{
 	ImageRecognizeMaxOutputRunes: 4096,
 	ImageRecognizeRetryTimes:     1,
 	ImageRecognizeFailOpen:       true,
-	EnableGrokStrictEgress:       boolPtr(true),
-	EnableClaudeStrictEgress:     boolPtr(true),
+	EnableClientStrictEgress:     boolPtr(true),
 	EnableClientReturnProfiles:   boolPtr(false),
 	HostToolClientProfiles:       map[string]string{},
 }
@@ -126,11 +127,8 @@ func boolPtr(v bool) *bool { return &v }
 
 func cloneBambooBools(src BambooSettings) BambooSettings {
 	out := src
-	if src.EnableGrokStrictEgress != nil {
-		out.EnableGrokStrictEgress = boolPtr(*src.EnableGrokStrictEgress)
-	}
-	if src.EnableClaudeStrictEgress != nil {
-		out.EnableClaudeStrictEgress = boolPtr(*src.EnableClaudeStrictEgress)
+	if src.EnableClientStrictEgress != nil {
+		out.EnableClientStrictEgress = boolPtr(*src.EnableClientStrictEgress)
 	}
 	if src.EnableClientReturnProfiles != nil {
 		out.EnableClientReturnProfiles = boolPtr(*src.EnableClientReturnProfiles)
@@ -144,7 +142,7 @@ func cloneBambooBools(src BambooSettings) BambooSettings {
 	return out
 }
 
-// 全局实例。三个 *bool 必须与 default 各 new 一次，禁止共享指针。
+// 全局实例。各 *bool 必须与 default 各 new 一次，禁止共享指针。
 var bambooSettings = cloneBambooBools(defaultBambooSettings)
 
 func init() {
@@ -157,18 +155,11 @@ func GetBambooSettings() *BambooSettings {
 	return &bambooSettings
 }
 
-func (s *BambooSettings) GrokStrictEgressEnabled() bool {
-	if s == nil || s.EnableGrokStrictEgress == nil {
+func (s *BambooSettings) ClientStrictEgressEnabled() bool {
+	if s == nil || s.EnableClientStrictEgress == nil {
 		return true
 	}
-	return *s.EnableGrokStrictEgress
-}
-
-func (s *BambooSettings) ClaudeStrictEgressEnabled() bool {
-	if s == nil || s.EnableClaudeStrictEgress == nil {
-		return true
-	}
-	return *s.EnableClaudeStrictEgress
+	return *s.EnableClientStrictEgress
 }
 
 func (s *BambooSettings) ClientReturnProfilesEnabled() bool {

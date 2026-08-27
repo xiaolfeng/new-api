@@ -102,7 +102,7 @@ func TestInspectResponsesFiltersAllowWins(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	reqDTO := dto.OpenAIResponsesRequest{
-		Model: "grok-4.6",
+		Model: "test-model",
 		Tools: tools,
 	}
 	raw, err := common.Marshal(reqDTO)
@@ -124,7 +124,7 @@ func TestInspectResponsesFiltersExcluded(t *testing.T) {
 		},
 	}})
 	require.NoError(t, err)
-	reqDTO := dto.OpenAIResponsesRequest{Model: "grok-4.6", Tools: tools}
+	reqDTO := dto.OpenAIResponsesRequest{Model: "test-model", Tools: tools}
 	raw, err := common.Marshal(reqDTO)
 	require.NoError(t, err)
 	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}

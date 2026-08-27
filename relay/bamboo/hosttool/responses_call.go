@@ -113,8 +113,10 @@ func builtinCallID(requestID string) string {
 	return "ws_" + requestID
 }
 
-func grokSearchMessageItem(requestID string, result ExecResult) map[string]any {
-	text, anns := formatGrokSearchOutput(result)
+// buildSearchMessageItem 把搜索命中合成标准 Responses message 输出项：
+// output_text 正文带 url_citation 标注，与 OpenAI 官方 web_search 的引用形状一致。
+func buildSearchMessageItem(requestID string, result ExecResult) map[string]any {
+	text, anns := formatSearchCitations(result)
 	return map[string]any{
 		"type":   "message",
 		"id":     "msg_search_" + strings.TrimPrefix(builtinResponseID(requestID), "resp_"),
@@ -130,7 +132,9 @@ func grokSearchMessageItem(requestID string, result ExecResult) map[string]any {
 	}
 }
 
-func formatGrokSearchOutput(result ExecResult) (string, []any) {
+// formatSearchCitations 把命中渲染为 Markdown 有序列表，并用 start/end_index
+// 对齐每条 url_citation 标注在正文中的位置。
+func formatSearchCitations(result ExecResult) (string, []any) {
 	hits := resolvedHits(result)
 	if !result.OK || len(hits) == 0 {
 		return "No search results found.", []any{}
@@ -170,7 +174,7 @@ func formatGrokSearchOutput(result ExecResult) (string, []any) {
 
 func MarshalBuiltinComplete(model, requestID string, createdAt int64, result ExecResult) ([]byte, error) {
 	call := buildWebSearchCall(builtinCallID(requestID), result)
-	msg := grokSearchMessageItem(requestID, result)
+	msg := buildSearchMessageItem(requestID, result)
 	body := responsesObject{
 		ID:        builtinResponseID(requestID),
 		Object:    "response",
@@ -259,7 +263,7 @@ func BuiltinStreamFrames(model, requestID string, createdAt int64, result ExecRe
 	}
 	frames = append(frames, frame)
 
-	msg := grokSearchMessageItem(requestID, result)
+	msg := buildSearchMessageItem(requestID, result)
 	frame, err = next("response.output_item.added", map[string]any{
 		"output_index": 1,
 		"item":         msg,
