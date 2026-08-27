@@ -112,9 +112,54 @@ func scanEntryBytes(entryFormat types.RelayFormat, entryBytes []byte) []relaycom
 	case types.RelayFormatOpenAIResponses:
 		out = append(out, scanToolObjects(asMapSlice(root["tools"]), true)...)
 	case types.RelayFormatGemini:
-		for _, tool := range asMapSlice(root["tools"]) {
-			out = append(out, scanToolObjects(asMapSlice(tool["functionDeclarations"]), false)...)
+		for _, tool := range geminiToolObjects(root["tools"]) {
+			out = append(out, scanGeminiServerSearch(tool)...)
+			decls := asMapSlice(tool["functionDeclarations"])
+			if len(decls) == 0 {
+				decls = asMapSlice(tool["function_declarations"])
+			}
+			out = append(out, scanToolObjects(decls, false)...)
 		}
+	}
+	return out
+}
+
+var geminiServerSearchKeys = []string{
+	"googleSearch",
+	"google_search",
+	"googleSearchRetrieval",
+	"google_search_retrieval",
+}
+
+func geminiToolObjects(v any) []map[string]any {
+	if m, ok := v.(map[string]any); ok {
+		return []map[string]any{m}
+	}
+	return asMapSlice(v)
+}
+
+func scanGeminiServerSearch(tool map[string]any) []relaycommon.HostToolDecl {
+	if tool == nil {
+		return nil
+	}
+	var out []relaycommon.HostToolDecl
+	for _, key := range geminiServerSearchKeys {
+		raw, ok := tool[key]
+		if !ok || raw == nil {
+			continue
+		}
+		var allowed, blocked []string
+		if obj, isObj := raw.(map[string]any); isObj {
+			allowed, blocked = parseDomainFilters(obj)
+		}
+		out = append(out, relaycommon.HostToolDecl{
+			OriginalName:   key,
+			Canonical:      CanonicalWebSearch,
+			Source:         sourceServerType,
+			BillingName:    billingWebSearch,
+			AllowedDomains: allowed,
+			BlockedDomains: blocked,
+		})
 	}
 	return out
 }
@@ -297,13 +342,19 @@ func parseDomainFilters(obj map[string]any) (allowed, blocked []string) {
 	filters, _ := obj["filters"].(map[string]any)
 	allowed = firstStringSlice(
 		asStringSlice(obj["allowed_domains"]),
+		asStringSlice(obj["allowedDomains"]),
 		asStringSlice(nestedSlice(filters, "allowed_domains")),
+		asStringSlice(nestedSlice(filters, "allowedDomains")),
 	)
 	blocked = firstStringSlice(
 		asStringSlice(obj["blocked_domains"]),
+		asStringSlice(obj["blockedDomains"]),
 		asStringSlice(obj["excluded_domains"]),
+		asStringSlice(obj["excludeDomains"]),
+		asStringSlice(obj["excludedDomains"]),
 		asStringSlice(nestedSlice(filters, "excluded_domains")),
 		asStringSlice(nestedSlice(filters, "blocked_domains")),
+		asStringSlice(nestedSlice(filters, "excludeDomains")),
 	)
 	if len(allowed) > 0 {
 		return allowed, nil

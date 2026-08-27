@@ -158,3 +158,198 @@ func TestInspectDedupCanonical(t *testing.T) {
 	require.Len(t, relayReq.Config.Tools, 1)
 	assert.Equal(t, "WebSearch", relayReq.Config.Tools[0].Name)
 }
+
+func geminiUserContents(text string) []dto.GeminiChatContent {
+	return []dto.GeminiChatContent{{
+		Role:  "user",
+		Parts: []dto.GeminiPart{{Text: text}},
+	}}
+}
+
+func TestInspectGeminiGoogleSearchRemash(t *testing.T) {
+	reqDTO := dto.GeminiChatRequest{Contents: geminiUserContents("查一下最新比赛")}
+	reqDTO.SetTools([]dto.GeminiChatTool{{
+		GoogleSearch: map[string]string{},
+	}})
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.True(t, plan.Enabled)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, CanonicalWebSearch, plan.Decls[0].Canonical)
+	assert.Equal(t, "googleSearch", plan.Decls[0].OriginalName)
+	assert.Equal(t, sourceServerType, plan.Decls[0].Source)
+	assert.Equal(t, billingWebSearch, plan.Decls[0].BillingName)
+	require.Len(t, relayReq.Config.Tools, 1)
+	assert.Equal(t, "googleSearch", relayReq.Config.Tools[0].Name)
+	assert.NotEmpty(t, relayReq.Config.Tools[0].Description)
+	assert.Contains(t, string(relayReq.Config.Tools[0].InputSchema), `"query"`)
+}
+
+func TestInspectGeminiGoogleSearchRetrieval(t *testing.T) {
+	reqDTO := dto.GeminiChatRequest{Contents: geminiUserContents("latest news")}
+	reqDTO.SetTools([]dto.GeminiChatTool{{
+		GoogleSearchRetrieval: map[string]any{
+			"dynamicRetrievalConfig": map[string]any{
+				"mode":             "MODE_DYNAMIC",
+				"dynamicThreshold": 0.3,
+			},
+		},
+	}})
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.True(t, plan.Enabled)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, "googleSearchRetrieval", plan.Decls[0].OriginalName)
+	assert.Equal(t, CanonicalWebSearch, plan.Decls[0].Canonical)
+	require.Len(t, relayReq.Config.Tools, 1)
+	assert.Equal(t, "googleSearchRetrieval", relayReq.Config.Tools[0].Name)
+}
+
+func TestInspectGeminiGoogleSearchSnakeCase(t *testing.T) {
+	raw := []byte(`{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"tools":[{"google_search":{}}]}`)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.True(t, plan.Enabled)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, "google_search", plan.Decls[0].OriginalName)
+	require.Len(t, relayReq.Config.Tools, 1)
+	assert.Equal(t, "google_search", relayReq.Config.Tools[0].Name)
+}
+
+func TestInspectGeminiGoogleSearchRetrievalSnakeCase(t *testing.T) {
+	raw := []byte(`{"tools":[{"google_search_retrieval":{"dynamicRetrievalConfig":{"mode":"MODE_DYNAMIC"}}}]}`)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.True(t, plan.Enabled)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, "google_search_retrieval", plan.Decls[0].OriginalName)
+}
+
+func TestInspectGeminiToolsAsSingleObject(t *testing.T) {
+	raw := []byte(`{"contents":[{"role":"user","parts":[{"text":"hi"}]}],"tools":{"googleSearch":{}}}`)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.True(t, plan.Enabled)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, "googleSearch", plan.Decls[0].OriginalName)
+}
+
+func TestInspectGeminiGoogleSearchNull(t *testing.T) {
+	raw := []byte(`{"tools":[{"googleSearch":null}]}`)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	assert.False(t, plan.Enabled)
+	assert.Empty(t, relayReq.Config.Tools)
+}
+
+func TestInspectGeminiGoogleSearchExcludeDomains(t *testing.T) {
+	reqDTO := dto.GeminiChatRequest{Contents: geminiUserContents("docs")}
+	reqDTO.SetTools([]dto.GeminiChatTool{{
+		GoogleSearch: map[string]any{
+			"excludeDomains": []string{"pinterest.com"},
+		},
+	}})
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, []string{"pinterest.com"}, plan.Decls[0].BlockedDomains)
+	assert.Empty(t, plan.Decls[0].AllowedDomains)
+}
+
+func TestInspectGeminiDedupGoogleSearchAndWebSearchDecl(t *testing.T) {
+	reqDTO := dto.GeminiChatRequest{Contents: geminiUserContents("hi")}
+	reqDTO.SetTools([]dto.GeminiChatTool{{
+		GoogleSearch: map[string]string{},
+		FunctionDeclarations: []map[string]any{
+			{"name": "web_search"},
+		},
+	}})
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, "googleSearch", plan.Decls[0].OriginalName)
+	assert.Contains(t, plan.Stripped, "web_search")
+	require.Len(t, relayReq.Config.Tools, 1)
+	assert.Equal(t, "googleSearch", relayReq.Config.Tools[0].Name)
+}
+
+func TestInspectGeminiGoogleSearchKeepsCustomFunction(t *testing.T) {
+	reqDTO := dto.GeminiChatRequest{Contents: geminiUserContents("hi")}
+	reqDTO.SetTools([]dto.GeminiChatTool{{
+		GoogleSearch: map[string]string{},
+		FunctionDeclarations: []map[string]any{
+			{"name": "get_weather", "description": "weather"},
+		},
+	}})
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{
+		Tools: []bamboosdk.Tool{{Name: "get_weather", Description: "weather"}},
+	}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.True(t, plan.Enabled)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, "googleSearch", plan.Decls[0].OriginalName)
+	names := make([]string, 0, len(relayReq.Config.Tools))
+	for _, tool := range relayReq.Config.Tools {
+		names = append(names, tool.Name)
+	}
+	assert.Contains(t, names, "googleSearch")
+	assert.Contains(t, names, "get_weather")
+}
+
+func TestInspectGeminiGoogleSearchDisabled(t *testing.T) {
+	st := *model_setting.GetBambooSettings()
+	st.EnableHostTools = false
+	reqDTO := dto.GeminiChatRequest{Contents: geminiUserContents("hi")}
+	reqDTO.SetTools([]dto.GeminiChatTool{{GoogleSearch: map[string]string{}}})
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatGemini, raw, relayReq, &st)
+	require.NoError(t, err)
+	assert.False(t, plan.Enabled)
+	assert.Empty(t, relayReq.Config.Tools)
+}
+
+func TestInspectOpenAIGoogleSearchFunctionName(t *testing.T) {
+	reqDTO := dto.GeneralOpenAIRequest{
+		Model: "gpt-4o",
+		Tools: []dto.ToolCallRequest{{
+			Type: "function",
+			Function: dto.FunctionRequest{
+				Name:        "googleSearch",
+				Description: "Search the web",
+			},
+		}},
+	}
+	raw, err := common.Marshal(reqDTO)
+	require.NoError(t, err)
+	relayReq := &bamboocodec.RelayRequest{Config: &bamboosdk.RequestConfig{}}
+	plan, err := InspectAndRewrite(types.RelayFormatOpenAI, raw, relayReq, enabledSettings())
+	require.NoError(t, err)
+	require.True(t, plan.Enabled)
+	require.Len(t, plan.Decls, 1)
+	assert.Equal(t, "googleSearch", plan.Decls[0].OriginalName)
+	assert.Equal(t, CanonicalWebSearch, plan.Decls[0].Canonical)
+	require.Len(t, relayReq.Config.Tools, 1)
+	assert.Equal(t, "googleSearch", relayReq.Config.Tools[0].Name)
+	assert.Contains(t, string(relayReq.Config.Tools[0].InputSchema), `"query"`)
+}

@@ -28,7 +28,9 @@ func normalizeName(name string) string {
 
 func CanonicalFromName(name string) string {
 	switch normalizeName(name) {
-	case "websearch", "web_search", "web-search", "web_search_preview", "websearchpreview":
+	case "websearch", "web_search", "web-search", "web_search_preview", "websearchpreview",
+		"googlesearch", "google_search", "google-search",
+		"googlesearchretrieval", "google_search_retrieval", "google-search-retrieval":
 		return CanonicalWebSearch
 	case "webfetch", "web_fetch", "web-fetch", "open_page", "openpage", "open-page",
 		"open_page_with_find", "openpagewithfind", "open-page-with-find":
@@ -43,7 +45,7 @@ func CanonicalFromType(typ string) string {
 	if t == "" {
 		return ""
 	}
-	if strings.HasPrefix(t, "web_search") {
+	if strings.HasPrefix(t, "web_search") || strings.HasPrefix(t, "google_search") || strings.HasPrefix(t, "googlesearch") {
 		return CanonicalWebSearch
 	}
 	if strings.HasPrefix(t, "web_fetch") {

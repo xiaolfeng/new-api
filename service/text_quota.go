@@ -180,7 +180,7 @@ func calculateTextToolCallSurcharge(ctx *gin.Context, relayInfo *relaycommon.Rel
 		summary.ModelName,
 	)
 
-	if ctx.GetBool("gemini_google_search_call") {
+	if ctx.GetBool("gemini_google_search_call") && !relayInfo.HostToolExecuted {
 		items = collectToolSurchargeItem(items, dto.BuildInToolGoogleSearch, 1, summary.ModelName)
 	}
 

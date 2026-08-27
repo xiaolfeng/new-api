@@ -958,6 +958,46 @@ func TestCalculateTextToolCallSurchargeGeminiGoogleSearch(t *testing.T) {
 	assert.Equal(t, 14.0, summary.ToolSurchargeItems[0].Price)
 }
 
+func TestCalculateTextToolCallSurchargeHostToolExecutedIgnoresGeminiGoogleSearch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("gemini_google_search_call", true)
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName:  "gemini-2.5-flash",
+		HostToolExecuted: true,
+	}
+	summary := &textQuotaSummary{ModelName: "gemini-2.5-flash", GroupRatio: 1}
+
+	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
+	assert.True(t, surcharge.IsZero(), "got %s", surcharge)
+	assert.Empty(t, summary.ToolSurchargeItems)
+}
+
+func TestCalculateTextToolCallSurchargeHostToolWebSearchNotGeminiGoogleSearch(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ctx.Set("gemini_google_search_call", true)
+
+	relayInfo := &relaycommon.RelayInfo{
+		OriginModelName:  "gemini-2.5-flash",
+		HostToolExecuted: true,
+		ResponsesUsageInfo: &relaycommon.ResponsesUsageInfo{
+			BuiltInTools: map[string]*relaycommon.BuildInToolInfo{
+				dto.BuildInToolWebSearch: {CallCount: 1},
+			},
+		},
+	}
+	summary := &textQuotaSummary{ModelName: "gemini-2.5-flash", GroupRatio: 1}
+
+	surcharge := calculateTextToolCallSurcharge(ctx, relayInfo, summary)
+	expected := decimal.NewFromFloat(10.0 / 1000).Mul(decimal.NewFromFloat(common.QuotaPerUnit))
+	assert.True(t, expected.Equal(surcharge), "got %s want %s", surcharge, expected)
+	require.Len(t, summary.ToolSurchargeItems, 1)
+	assert.Equal(t, dto.BuildInToolWebSearch, summary.ToolSurchargeItems[0].Name)
+	assert.Equal(t, 1, summary.ToolSurchargeItems[0].Count)
+}
+
 func TestCalculateTextToolCallSurchargeImageGenerationDefaultPrice(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
