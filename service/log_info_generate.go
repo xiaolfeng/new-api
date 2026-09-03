@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/logger"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/pkg/billingexpr"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -292,6 +293,21 @@ func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other map[string]inter
 		streamInfo["errors"] = messages
 	}
 	other["stream_status"] = streamInfo
+}
+
+func BuildTokenRecordTiming(relayInfo *relaycommon.RelayInfo) model.TokenRecordTiming {
+	if relayInfo == nil || relayInfo.BambooTiming == nil {
+		return model.TokenRecordTiming{}
+	}
+	bt := relayInfo.BambooTiming
+	return model.TokenRecordTiming{
+		ThinkingTokens:     bt.Tokens.ThinkingTokens,
+		ThinkingDurationMs: bt.Stats.ThinkingDuration.Milliseconds(),
+		OutputTokens:       bt.Tokens.OutputTokens,
+		OutputDurationMs:   bt.Stats.ContentDuration.Milliseconds(),
+		ToolTokens:         bt.Tokens.ToolTokens,
+		ToolDurationMs:     bt.Stats.ToolDuration.Milliseconds(),
+	}
 }
 
 func appendBambooTiming(relayInfo *relaycommon.RelayInfo, other map[string]interface{}) {

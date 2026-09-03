@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/glebarez/sqlite"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"gorm.io/gorm"
 )
@@ -39,8 +40,8 @@ func TestRecordTokenRecordAccumulatesWithinSameHour(t *testing.T) {
 
 	baseTimestamp := int64(1711454400)
 
-	require.NoError(t, RecordTokenRecord("gpt-5", 10, 20, 5, baseTimestamp))
-	require.NoError(t, RecordTokenRecord("gpt-5", 3, 7, 2, baseTimestamp+300))
+	require.NoError(t, RecordTokenRecord("gpt-5", 10, 20, 5, TokenRecordTiming{}, baseTimestamp))
+	require.NoError(t, RecordTokenRecord("gpt-5", 3, 7, 2, TokenRecordTiming{}, baseTimestamp+300))
 
 	var records []TokenRecord
 	require.NoError(t, LOG_DB.Find(&records).Error)
@@ -59,13 +60,53 @@ func TestRecordTokenRecordAccumulatesWithinSameHour(t *testing.T) {
 	require.EqualValues(t, baseTimestamp+300, record.LastUsedAt)
 }
 
+func TestRecordTokenRecordAggregatesPhaseTPS(t *testing.T) {
+	setupTokenRecordTestDB(t)
+
+	baseTimestamp := int64(1711454400)
+	require.NoError(t, RecordTokenRecord("gpt-5", 10, 20, 5, TokenRecordTiming{
+		ThinkingTokens:     10,
+		ThinkingDurationMs: 500,
+		OutputTokens:       20,
+		OutputDurationMs:   1000,
+		ToolTokens:         5,
+		ToolDurationMs:     250,
+	}, baseTimestamp))
+	require.NoError(t, RecordTokenRecord("gpt-5", 3, 7, 2, TokenRecordTiming{
+		ThinkingTokens:     20,
+		ThinkingDurationMs: 500,
+		OutputTokens:       10,
+		OutputDurationMs:   1000,
+	}, baseTimestamp+300))
+
+	snapshot, err := GetRecentTokenRecordSnapshot(baseTimestamp+600, 1)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Items, 1)
+
+	cell := snapshot.Items[0].Cells[0]
+	assert.EqualValues(t, 30, cell.ThinkingTokens)
+	assert.EqualValues(t, 1000, cell.ThinkingDurationMs)
+	assert.Equal(t, 30.0, cell.AvgThinkingTPS)
+	assert.EqualValues(t, 30, cell.OutputTokens)
+	assert.EqualValues(t, 2000, cell.OutputDurationMs)
+	assert.Equal(t, 15.0, cell.AvgOutputTPS)
+	assert.EqualValues(t, 5, cell.ToolTokens)
+	assert.EqualValues(t, 250, cell.ToolDurationMs)
+	assert.Equal(t, 20.0, cell.AvgToolTPS)
+
+	summary := snapshot.Items[0].Summary
+	assert.Equal(t, cell.AvgThinkingTPS, summary.AvgThinkingTPS)
+	assert.Equal(t, cell.AvgOutputTPS, summary.AvgOutputTPS)
+	assert.Equal(t, cell.AvgToolTPS, summary.AvgToolTPS)
+}
+
 func TestRecordTokenRecordCreatesNewHourBucket(t *testing.T) {
 	setupTokenRecordTestDB(t)
 
 	baseTimestamp := int64(1711454400)
 
-	require.NoError(t, RecordTokenRecord("gpt-5", 10, 0, 1, baseTimestamp))
-	require.NoError(t, RecordTokenRecord("gpt-5", 20, 5, 2, baseTimestamp+3600))
+	require.NoError(t, RecordTokenRecord("gpt-5", 10, 0, 1, TokenRecordTiming{}, baseTimestamp))
+	require.NoError(t, RecordTokenRecord("gpt-5", 20, 5, 2, TokenRecordTiming{}, baseTimestamp+3600))
 
 	var records []TokenRecord
 	require.NoError(t, LOG_DB.Order("bucket_start_at asc").Find(&records).Error)
@@ -80,9 +121,9 @@ func TestGetRecentTokenRecordSnapshotBackfillsHours(t *testing.T) {
 	currentBucketStartAt := int64(1711454400)
 	firstBucketStartAt := currentBucketStartAt - 23*3600
 
-	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 100, 50, 10, firstBucketStartAt+120))
-	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 40, 10, 5, currentBucketStartAt+120))
-	require.NoError(t, RecordTokenRecord("gpt-5", 70, 30, 0, currentBucketStartAt+300))
+	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 100, 50, 10, TokenRecordTiming{}, firstBucketStartAt+120))
+	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 40, 10, 5, TokenRecordTiming{}, currentBucketStartAt+120))
+	require.NoError(t, RecordTokenRecord("gpt-5", 70, 30, 0, TokenRecordTiming{}, currentBucketStartAt+300))
 
 	snapshot, err := GetRecentTokenRecordSnapshot(currentBucketStartAt+900, 24)
 	require.NoError(t, err)

@@ -2,11 +2,13 @@ package service
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 )
@@ -87,4 +89,31 @@ func TestAppendClientProfileAdminInfo(t *testing.T) {
 	assert.Equal(t, "generic", empty["client_profile"])
 	assert.NotContains(t, empty, "client_profile_hit")
 	assert.NotContains(t, empty, "return_profile")
+}
+
+func TestBuildTokenRecordTiming(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		BambooTiming: &relaycommon.BambooTimingResult{
+			Stats: relaycommon.BambooTimingStats{
+				ThinkingDuration: 1500 * time.Millisecond,
+				ContentDuration:  2 * time.Second,
+				ToolDuration:     750 * time.Millisecond,
+			},
+			Tokens: relaycommon.BambooTokenCounts{
+				ThinkingTokens: 30,
+				OutputTokens:   40,
+				ToolTokens:     15,
+			},
+		},
+	}
+
+	require.Equal(t, model.TokenRecordTiming{
+		ThinkingTokens:     30,
+		ThinkingDurationMs: 1500,
+		OutputTokens:       40,
+		OutputDurationMs:   2000,
+		ToolTokens:         15,
+		ToolDurationMs:     750,
+	}, BuildTokenRecordTiming(info))
+	require.Equal(t, model.TokenRecordTiming{}, BuildTokenRecordTiming(nil))
 }

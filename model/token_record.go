@@ -14,21 +14,27 @@ import (
 )
 
 type TokenRecord struct {
-	Id               int    `json:"id"`
-	BucketStartAt    int64  `json:"bucket_start_at" gorm:"bigint;uniqueIndex:idx_token_record_bucket_model,priority:1;index:idx_token_record_bucket_start,priority:1"`
-	BucketEndAt      int64  `json:"bucket_end_at" gorm:"bigint"`
-	ModelName        string `json:"model_name" gorm:"size:255;default:'';uniqueIndex:idx_token_record_bucket_model,priority:2;index:idx_token_record_model_name"`
-	RequestCount     int64  `json:"request_count" gorm:"default:0"`
-	PromptTokens     int64  `json:"prompt_tokens" gorm:"default:0"`
-	CompletionTokens int64  `json:"completion_tokens" gorm:"default:0"`
-	TotalTokens      int64  `json:"total_tokens" gorm:"default:0"`
-	TotalUseTime     int64  `json:"total_use_time" gorm:"default:0"`
-	FailedCount      int64  `json:"failed_count" gorm:"default:0"`
-	FailedDetail     string `json:"failed_detail" gorm:"type:text"` // JSON: {"429":2,"500":1}
-	FirstUsedAt      int64  `json:"first_used_at" gorm:"bigint"`
-	LastUsedAt       int64  `json:"last_used_at" gorm:"bigint"`
-	CreatedAt        int64  `json:"created_at" gorm:"bigint"`
-	UpdatedAt        int64  `json:"updated_at" gorm:"bigint"`
+	Id                 int    `json:"id"`
+	BucketStartAt      int64  `json:"bucket_start_at" gorm:"bigint;uniqueIndex:idx_token_record_bucket_model,priority:1;index:idx_token_record_bucket_start,priority:1"`
+	BucketEndAt        int64  `json:"bucket_end_at" gorm:"bigint"`
+	ModelName          string `json:"model_name" gorm:"size:255;default:'';uniqueIndex:idx_token_record_bucket_model,priority:2;index:idx_token_record_model_name"`
+	RequestCount       int64  `json:"request_count" gorm:"default:0"`
+	PromptTokens       int64  `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens   int64  `json:"completion_tokens" gorm:"default:0"`
+	TotalTokens        int64  `json:"total_tokens" gorm:"default:0"`
+	TotalUseTime       int64  `json:"total_use_time" gorm:"default:0"`
+	ThinkingTokens     int64  `json:"thinking_tokens" gorm:"default:0"`
+	ThinkingDurationMs int64  `json:"thinking_duration_ms" gorm:"default:0"`
+	OutputTokens       int64  `json:"output_tokens" gorm:"default:0"`
+	OutputDurationMs   int64  `json:"output_duration_ms" gorm:"default:0"`
+	ToolTokens         int64  `json:"tool_tokens" gorm:"default:0"`
+	ToolDurationMs     int64  `json:"tool_duration_ms" gorm:"default:0"`
+	FailedCount        int64  `json:"failed_count" gorm:"default:0"`
+	FailedDetail       string `json:"failed_detail" gorm:"type:text"` // JSON: {"429":2,"500":1}
+	FirstUsedAt        int64  `json:"first_used_at" gorm:"bigint"`
+	LastUsedAt         int64  `json:"last_used_at" gorm:"bigint"`
+	CreatedAt          int64  `json:"created_at" gorm:"bigint"`
+	UpdatedAt          int64  `json:"updated_at" gorm:"bigint"`
 }
 
 func (TokenRecord) TableName() string {
@@ -43,29 +49,47 @@ type TokenRecordHourMeta struct {
 }
 
 type TokenRecordHourCell struct {
-	BucketStartAt    int64            `json:"bucket_start_at"`
-	BucketEndAt      int64            `json:"bucket_end_at"`
-	RequestCount     int64            `json:"request_count"`
-	PromptTokens     int64            `json:"prompt_tokens"`
-	CompletionTokens int64            `json:"completion_tokens"`
-	TotalTokens      int64            `json:"total_tokens"`
-	TotalUseTime     int64            `json:"total_use_time"`
-	AvgTPS           float64          `json:"avg_tps"`
-	FailedCount      int64            `json:"failed_count"`
-	FailedDetail     map[string]int64 `json:"failed_detail"`
-	IsCurrent        bool             `json:"is_current"`
+	BucketStartAt      int64            `json:"bucket_start_at"`
+	BucketEndAt        int64            `json:"bucket_end_at"`
+	RequestCount       int64            `json:"request_count"`
+	PromptTokens       int64            `json:"prompt_tokens"`
+	CompletionTokens   int64            `json:"completion_tokens"`
+	TotalTokens        int64            `json:"total_tokens"`
+	TotalUseTime       int64            `json:"total_use_time"`
+	AvgTPS             float64          `json:"avg_tps"`
+	ThinkingTokens     int64            `json:"thinking_tokens"`
+	ThinkingDurationMs int64            `json:"thinking_duration_ms"`
+	AvgThinkingTPS     float64          `json:"avg_thinking_tps"`
+	OutputTokens       int64            `json:"output_tokens"`
+	OutputDurationMs   int64            `json:"output_duration_ms"`
+	AvgOutputTPS       float64          `json:"avg_output_tps"`
+	ToolTokens         int64            `json:"tool_tokens"`
+	ToolDurationMs     int64            `json:"tool_duration_ms"`
+	AvgToolTPS         float64          `json:"avg_tool_tps"`
+	FailedCount        int64            `json:"failed_count"`
+	FailedDetail       map[string]int64 `json:"failed_detail"`
+	IsCurrent          bool             `json:"is_current"`
 }
 
 type TokenRecordSummary struct {
-	RequestCount     int64            `json:"request_count"`
-	PromptTokens     int64            `json:"prompt_tokens"`
-	CompletionTokens int64            `json:"completion_tokens"`
-	TotalTokens      int64            `json:"total_tokens"`
-	TotalUseTime     int64            `json:"total_use_time"`
-	AvgTPS           float64          `json:"avg_tps"`
-	FailedCount      int64            `json:"failed_count"`
-	FailedRate       float64          `json:"failed_rate"`
-	FailedDetail     map[string]int64 `json:"failed_detail"`
+	RequestCount       int64            `json:"request_count"`
+	PromptTokens       int64            `json:"prompt_tokens"`
+	CompletionTokens   int64            `json:"completion_tokens"`
+	TotalTokens        int64            `json:"total_tokens"`
+	TotalUseTime       int64            `json:"total_use_time"`
+	AvgTPS             float64          `json:"avg_tps"`
+	ThinkingTokens     int64            `json:"thinking_tokens"`
+	ThinkingDurationMs int64            `json:"thinking_duration_ms"`
+	AvgThinkingTPS     float64          `json:"avg_thinking_tps"`
+	OutputTokens       int64            `json:"output_tokens"`
+	OutputDurationMs   int64            `json:"output_duration_ms"`
+	AvgOutputTPS       float64          `json:"avg_output_tps"`
+	ToolTokens         int64            `json:"tool_tokens"`
+	ToolDurationMs     int64            `json:"tool_duration_ms"`
+	AvgToolTPS         float64          `json:"avg_tool_tps"`
+	FailedCount        int64            `json:"failed_count"`
+	FailedRate         float64          `json:"failed_rate"`
+	FailedDetail       map[string]int64 `json:"failed_detail"`
 }
 
 type TokenRecordRecentItem struct {
@@ -119,16 +143,55 @@ func calcTokenRecordAvgTPS(outputTokens int64, totalUseTime int64) float64 {
 	return math.Round((float64(outputTokens)/float64(totalUseTime))*100) / 100
 }
 
+type TokenRecordTiming struct {
+	ThinkingTokens     int64
+	ThinkingDurationMs int64
+	OutputTokens       int64
+	OutputDurationMs   int64
+	ToolTokens         int64
+	ToolDurationMs     int64
+}
+
+func calcTokenRecordPhaseTPS(tokens int64, durationMs int64) float64 {
+	if tokens <= 0 || durationMs <= 0 {
+		return 0
+	}
+	return math.Round((float64(tokens)/(float64(durationMs)/1000))*100) / 100
+}
+
+func sanitizeTokenRecordTiming(timing TokenRecordTiming) TokenRecordTiming {
+	if timing.ThinkingTokens < 0 {
+		timing.ThinkingTokens = 0
+	}
+	if timing.ThinkingDurationMs < 0 {
+		timing.ThinkingDurationMs = 0
+	}
+	if timing.OutputTokens < 0 {
+		timing.OutputTokens = 0
+	}
+	if timing.OutputDurationMs < 0 {
+		timing.OutputDurationMs = 0
+	}
+	if timing.ToolTokens < 0 {
+		timing.ToolTokens = 0
+	}
+	if timing.ToolDurationMs < 0 {
+		timing.ToolDurationMs = 0
+	}
+	return timing
+}
+
 func buildTokenRecordIncrementExpr(column string, delta interface{}) clause.Expr {
 	return gorm.Expr("? + ?", clause.Column{Table: "token_record", Name: column}, delta)
 }
 
-func RecordTokenRecord(modelName string, promptTokens int, completionTokens int, useTimeSeconds int, createdAt int64) error {
+func RecordTokenRecord(modelName string, promptTokens int, completionTokens int, useTimeSeconds int, timing TokenRecordTiming, createdAt int64) error {
 	if LOG_DB == nil {
 		return errors.New("log db is not initialized")
 	}
 
 	modelName = normalizeTokenRecordModelName(modelName)
+	timing = sanitizeTokenRecordTiming(timing)
 	bucketStartAt, bucketEndAt := getTokenRecordHourBucket(createdAt)
 	inputTokens := int64(promptTokens)
 	outputTokens := int64(completionTokens)
@@ -145,12 +208,18 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 		PromptTokens:     inputTokens,
 		CompletionTokens: outputTokens,
 		// model-log 看板中的 total_tokens 口径为“输出 Token”
-		TotalTokens:      outputTokens,
-		TotalUseTime:     totalUseTime,
-		FirstUsedAt:      createdAt,
-		LastUsedAt:       createdAt,
-		CreatedAt:        createdAt,
-		UpdatedAt:        createdAt,
+		TotalTokens:        outputTokens,
+		TotalUseTime:       totalUseTime,
+		ThinkingTokens:     timing.ThinkingTokens,
+		ThinkingDurationMs: timing.ThinkingDurationMs,
+		OutputTokens:       timing.OutputTokens,
+		OutputDurationMs:   timing.OutputDurationMs,
+		ToolTokens:         timing.ToolTokens,
+		ToolDurationMs:     timing.ToolDurationMs,
+		FirstUsedAt:        createdAt,
+		LastUsedAt:         createdAt,
+		CreatedAt:          createdAt,
+		UpdatedAt:          createdAt,
 	}
 
 	return LOG_DB.Clauses(clause.OnConflict{
@@ -159,14 +228,20 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 			{Name: "model_name"},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"bucket_end_at":     bucketEndAt,
-			"request_count":     buildTokenRecordIncrementExpr("request_count", 1),
-			"prompt_tokens":     buildTokenRecordIncrementExpr("prompt_tokens", inputTokens),
-			"completion_tokens": buildTokenRecordIncrementExpr("completion_tokens", outputTokens),
-			"total_tokens":      buildTokenRecordIncrementExpr("total_tokens", outputTokens),
-			"total_use_time":    buildTokenRecordIncrementExpr("total_use_time", totalUseTime),
-			"last_used_at":      createdAt,
-			"updated_at":        createdAt,
+			"bucket_end_at":        bucketEndAt,
+			"request_count":        buildTokenRecordIncrementExpr("request_count", 1),
+			"prompt_tokens":        buildTokenRecordIncrementExpr("prompt_tokens", inputTokens),
+			"completion_tokens":    buildTokenRecordIncrementExpr("completion_tokens", outputTokens),
+			"total_tokens":         buildTokenRecordIncrementExpr("total_tokens", outputTokens),
+			"total_use_time":       buildTokenRecordIncrementExpr("total_use_time", totalUseTime),
+			"thinking_tokens":      buildTokenRecordIncrementExpr("thinking_tokens", timing.ThinkingTokens),
+			"thinking_duration_ms": buildTokenRecordIncrementExpr("thinking_duration_ms", timing.ThinkingDurationMs),
+			"output_tokens":        buildTokenRecordIncrementExpr("output_tokens", timing.OutputTokens),
+			"output_duration_ms":   buildTokenRecordIncrementExpr("output_duration_ms", timing.OutputDurationMs),
+			"tool_tokens":          buildTokenRecordIncrementExpr("tool_tokens", timing.ToolTokens),
+			"tool_duration_ms":     buildTokenRecordIncrementExpr("tool_duration_ms", timing.ToolDurationMs),
+			"last_used_at":         createdAt,
+			"updated_at":           createdAt,
 		}),
 	}).Create(&record).Error
 }
@@ -329,17 +404,26 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRec
 		}
 
 		item.Cells[hourIndex] = TokenRecordHourCell{
-			BucketStartAt:    record.BucketStartAt,
-			BucketEndAt:      record.BucketEndAt,
-			RequestCount:     record.RequestCount,
-			PromptTokens:     record.PromptTokens,
-			CompletionTokens: record.CompletionTokens,
-			TotalTokens:      record.TotalTokens,
-			TotalUseTime:     record.TotalUseTime,
-			AvgTPS:           calcTokenRecordAvgTPS(record.CompletionTokens, record.TotalUseTime),
-			FailedCount:      record.FailedCount,
-			FailedDetail:     parseFailedDetail(record.FailedDetail),
-			IsCurrent:        hoursList[hourIndex].IsCurrent,
+			BucketStartAt:      record.BucketStartAt,
+			BucketEndAt:        record.BucketEndAt,
+			RequestCount:       record.RequestCount,
+			PromptTokens:       record.PromptTokens,
+			CompletionTokens:   record.CompletionTokens,
+			TotalTokens:        record.TotalTokens,
+			TotalUseTime:       record.TotalUseTime,
+			AvgTPS:             calcTokenRecordAvgTPS(record.CompletionTokens, record.TotalUseTime),
+			ThinkingTokens:     record.ThinkingTokens,
+			ThinkingDurationMs: record.ThinkingDurationMs,
+			AvgThinkingTPS:     calcTokenRecordPhaseTPS(record.ThinkingTokens, record.ThinkingDurationMs),
+			OutputTokens:       record.OutputTokens,
+			OutputDurationMs:   record.OutputDurationMs,
+			AvgOutputTPS:       calcTokenRecordPhaseTPS(record.OutputTokens, record.OutputDurationMs),
+			ToolTokens:         record.ToolTokens,
+			ToolDurationMs:     record.ToolDurationMs,
+			AvgToolTPS:         calcTokenRecordPhaseTPS(record.ToolTokens, record.ToolDurationMs),
+			FailedCount:        record.FailedCount,
+			FailedDetail:       parseFailedDetail(record.FailedDetail),
+			IsCurrent:          hoursList[hourIndex].IsCurrent,
 		}
 
 		item.Summary.RequestCount += record.RequestCount
@@ -347,6 +431,12 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRec
 		item.Summary.CompletionTokens += record.CompletionTokens
 		item.Summary.TotalTokens += record.TotalTokens
 		item.Summary.TotalUseTime += record.TotalUseTime
+		item.Summary.ThinkingTokens += record.ThinkingTokens
+		item.Summary.ThinkingDurationMs += record.ThinkingDurationMs
+		item.Summary.OutputTokens += record.OutputTokens
+		item.Summary.OutputDurationMs += record.OutputDurationMs
+		item.Summary.ToolTokens += record.ToolTokens
+		item.Summary.ToolDurationMs += record.ToolDurationMs
 		item.Summary.FailedCount += record.FailedCount
 		item.Summary.FailedDetail = mergeFailedDetailMaps(item.Summary.FailedDetail, parseFailedDetail(record.FailedDetail))
 	}
@@ -354,6 +444,9 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRec
 	items := make([]TokenRecordRecentItem, 0, len(itemsMap))
 	for _, item := range itemsMap {
 		item.Summary.AvgTPS = calcTokenRecordAvgTPS(item.Summary.CompletionTokens, item.Summary.TotalUseTime)
+		item.Summary.AvgThinkingTPS = calcTokenRecordPhaseTPS(item.Summary.ThinkingTokens, item.Summary.ThinkingDurationMs)
+		item.Summary.AvgOutputTPS = calcTokenRecordPhaseTPS(item.Summary.OutputTokens, item.Summary.OutputDurationMs)
+		item.Summary.AvgToolTPS = calcTokenRecordPhaseTPS(item.Summary.ToolTokens, item.Summary.ToolDurationMs)
 		item.Summary.FailedRate = calcFailedRate(item.Summary.FailedCount, item.Summary.RequestCount)
 		items = append(items, *item)
 	}

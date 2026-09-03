@@ -42,8 +42,16 @@ func TestRecordConsumeLogUsesUpstreamModelForTokenRecord(t *testing.T) {
 		Content:          "test",
 		TokenId:          2002,
 		UseTimeSeconds:   5,
-		IsStream:         false,
-		Group:            "default",
+		TokenTiming: TokenRecordTiming{
+			ThinkingTokens:     12,
+			ThinkingDurationMs: 600,
+			OutputTokens:       24,
+			OutputDurationMs:   1200,
+			ToolTokens:         4,
+			ToolDurationMs:     200,
+		},
+		IsStream: false,
+		Group:    "default",
 		Other: map[string]interface{}{
 			"is_model_mapped":     true,
 			"upstream_model_name": upstreamModel,
@@ -61,6 +69,12 @@ func TestRecordConsumeLogUsesUpstreamModelForTokenRecord(t *testing.T) {
 	require.Equal(t, upstreamModel, records[0].ModelName)
 	require.EqualValues(t, 1, records[0].RequestCount)
 	require.EqualValues(t, 80, records[0].TotalTokens)
+	require.EqualValues(t, 12, records[0].ThinkingTokens)
+	require.EqualValues(t, 600, records[0].ThinkingDurationMs)
+	require.EqualValues(t, 24, records[0].OutputTokens)
+	require.EqualValues(t, 1200, records[0].OutputDurationMs)
+	require.EqualValues(t, 4, records[0].ToolTokens)
+	require.EqualValues(t, 200, records[0].ToolDurationMs)
 }
 
 // TestRecordConsumeLogInternalSkipsTokenRecord 验证内部工具合成请求

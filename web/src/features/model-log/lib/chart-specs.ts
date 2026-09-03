@@ -1,6 +1,29 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import type { ISpec } from '@visactor/vchart'
 
-import type { TokenRecordRecentItem, ChartDataPoint } from '../types'
+import type {
+  ChartDataPoint,
+  EstimatedTpsChartDataPoint,
+  EstimatedTpsPhase,
+  TokenRecordRecentItem,
+} from '../types'
 
 function formatTimeLabel(bucketStartAt: number): string {
   const date = new Date(bucketStartAt * 1000)
@@ -15,11 +38,11 @@ export function transformChartData(
   selectedModels: Set<string>
 ): {
   outputTokenData: ChartDataPoint[]
-  tpsData: ChartDataPoint[]
+  averageTpsData: ChartDataPoint[]
   failureRateData: ChartDataPoint[]
 } {
   const outputTokenData: ChartDataPoint[] = []
-  const tpsData: ChartDataPoint[] = []
+  const averageTpsData: ChartDataPoint[] = []
   const failureRateData: ChartDataPoint[] = []
 
   for (const item of items) {
@@ -31,7 +54,7 @@ export function transformChartData(
 
       outputTokenData.push({ ...base, Value: cell.completion_tokens || 0 })
 
-      tpsData.push({
+      averageTpsData.push({
         ...base,
         Value: Number(Number(cell.avg_tps || 0).toFixed(2)),
       })
@@ -45,7 +68,80 @@ export function transformChartData(
     }
   }
 
-  return { outputTokenData, tpsData, failureRateData }
+  return { outputTokenData, averageTpsData, failureRateData }
+}
+
+type PhaseLabels = Record<EstimatedTpsPhase, string>
+
+const ESTIMATED_PHASES: Array<{
+  phase: EstimatedTpsPhase
+  tokensField: 'thinking_tokens' | 'output_tokens' | 'tool_tokens'
+  durationField:
+    | 'thinking_duration_ms'
+    | 'output_duration_ms'
+    | 'tool_duration_ms'
+}> = [
+  {
+    phase: 'thinking',
+    tokensField: 'thinking_tokens',
+    durationField: 'thinking_duration_ms',
+  },
+  {
+    phase: 'output',
+    tokensField: 'output_tokens',
+    durationField: 'output_duration_ms',
+  },
+  {
+    phase: 'tool',
+    tokensField: 'tool_tokens',
+    durationField: 'tool_duration_ms',
+  },
+]
+
+export function transformEstimatedTpsData(
+  items: TokenRecordRecentItem[],
+  selectedModels: Set<string>,
+  labels: PhaseLabels
+): EstimatedTpsChartDataPoint[] {
+  const buckets = new Map<
+    number,
+    Record<EstimatedTpsPhase, { tokens: number; durationMs: number }>
+  >()
+
+  for (const item of items) {
+    if (!selectedModels.has(item.model_name)) continue
+
+    for (const cell of item.cells ?? []) {
+      const aggregate = buckets.get(cell.bucket_start_at) ?? {
+        thinking: { tokens: 0, durationMs: 0 },
+        output: { tokens: 0, durationMs: 0 },
+        tool: { tokens: 0, durationMs: 0 },
+      }
+      for (const { phase, tokensField, durationField } of ESTIMATED_PHASES) {
+        aggregate[phase].tokens += Number(cell[tokensField] || 0)
+        aggregate[phase].durationMs += Number(cell[durationField] || 0)
+      }
+      buckets.set(cell.bucket_start_at, aggregate)
+    }
+  }
+
+  const data: EstimatedTpsChartDataPoint[] = []
+  for (const [bucketStartAt, aggregate] of [...buckets.entries()].sort(
+    ([left], [right]) => left - right
+  )) {
+    for (const { phase } of ESTIMATED_PHASES) {
+      const { tokens, durationMs } = aggregate[phase]
+      if (tokens <= 0 || durationMs <= 0) continue
+      data.push({
+        Time: formatTimeLabel(bucketStartAt),
+        Model: labels[phase],
+        Phase: phase,
+        Value: Number((tokens / (durationMs / 1000)).toFixed(2)),
+      })
+    }
+  }
+
+  return data
 }
 
 export function buildLineChartSpec(

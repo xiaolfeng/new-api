@@ -417,6 +417,7 @@ type RecordConsumeLogParams struct {
 	Record           string                 `json:"record"` // 消费日志详细记录
 	FullLog          string                 `json:"full_log"`
 	Tps              float64                `json:"tps"` // Tokens Per Second
+	TokenTiming      TokenRecordTiming      `json:"-"`
 	// Internal 标记内部工具合成请求（如 host-tool builtin），
 	// 不写入 TokenRecord 模型日志统计。
 	Internal bool `json:"internal"`
@@ -487,7 +488,7 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	}
 	tokenRecordModelName := resolveTokenRecordModelName(params.ModelName, params.Other)
 	if !params.Internal {
-		err = RecordTokenRecord(tokenRecordModelName, params.PromptTokens, params.CompletionTokens, params.UseTimeSeconds, createdAt)
+		err = RecordTokenRecord(tokenRecordModelName, params.PromptTokens, params.CompletionTokens, params.UseTimeSeconds, params.TokenTiming, createdAt)
 		if err != nil {
 			logger.LogError(c, "failed to record token record: "+err.Error())
 		}

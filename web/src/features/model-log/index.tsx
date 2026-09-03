@@ -1,3 +1,21 @@
+/*
+Copyright (C) 2023-2026 QuantumNous
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License, or (at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+For commercial licensing, please contact support@quantumnous.com
+*/
 import { ArrowDown, ArrowUp, RefreshCw, BarChart3 } from 'lucide-react'
 import { useState, useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -16,11 +34,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 
 import { ModelFilter } from './components/model-filter'
-import { ModelLogCharts, getChartColors } from './components/model-log-charts'
+import { ModelLogCharts } from './components/model-log-charts'
 import { SummaryCards } from './components/summary-cards'
 import { TokenHeatmap } from './components/token-heatmap'
 import { SORT_OPTIONS } from './constants'
 import { useModelLogData } from './hooks/use-model-log-data'
+import { getChartColors } from './lib/chart-colors'
 import type { SortField, TokenRecordRecentItem } from './types'
 
 const TIME_RANGE_OPTIONS = [
@@ -67,12 +86,14 @@ function sortItems(
   return sorted
 }
 
+const SUMMARY_SKELETON_KEYS = ['requests', 'input', 'output', 'models']
+
 function SummaryCardsSkeleton() {
   return (
     <div className='grid grid-cols-2 gap-3 lg:grid-cols-4'>
-      {Array.from({ length: 4 }).map((_, i) => (
+      {SUMMARY_SKELETON_KEYS.map((key) => (
         <div
-          key={i}
+          key={key}
           className='rounded-xl border bg-sky-50/70 p-3.5 dark:bg-sky-950/25'
         >
           <Skeleton className='h-3 w-20' />
@@ -165,6 +186,45 @@ export function ModelLogPage() {
     }
   }
 
+  let summaryContent = null
+  if (loading) {
+    summaryContent = <SummaryCardsSkeleton />
+  } else if (summary) {
+    summaryContent = <SummaryCards summary={summary} />
+  }
+
+  let modelContent
+  if (loading) {
+    modelContent = (
+      <div className='flex justify-center py-16'>
+        <RefreshCw className='text-muted-foreground size-8 animate-spin' />
+      </div>
+    )
+  } else if (items.length === 0) {
+    modelContent = (
+      <div className='text-muted-foreground flex justify-center py-16 text-sm'>
+        {t('No model log data in the selected time range')}
+      </div>
+    )
+  } else {
+    modelContent = (
+      <div className='space-y-3'>
+        <ModelFilter
+          models={modelNames}
+          selectedModels={effectiveSelected}
+          onToggleModel={handleToggleModel}
+          onSelectAll={handleSelectAll}
+          onDeselectAll={handleDeselectAll}
+          modelColorMap={modelColorMap}
+        />
+        <ModelLogCharts
+          sortedItems={sortedItems}
+          selectedModels={effectiveSelected}
+        />
+      </div>
+    )
+  }
+
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
@@ -255,11 +315,7 @@ export function ModelLogPage() {
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='space-y-4'>
-          {loading ? (
-            <SummaryCardsSkeleton />
-          ) : summary ? (
-            <SummaryCards summary={summary} />
-          ) : null}
+          {summaryContent}
 
           {!loading && (
             <div className='mt-4'>
@@ -267,30 +323,7 @@ export function ModelLogPage() {
             </div>
           )}
 
-          {loading ? (
-            <div className='flex justify-center py-16'>
-              <RefreshCw className='text-muted-foreground size-8 animate-spin' />
-            </div>
-          ) : items.length === 0 ? (
-            <div className='text-muted-foreground flex justify-center py-16 text-sm'>
-              {t('No model log data in the selected time range')}
-            </div>
-          ) : (
-            <div className='space-y-3'>
-              <ModelFilter
-                models={modelNames}
-                selectedModels={effectiveSelected}
-                onToggleModel={handleToggleModel}
-                onSelectAll={handleSelectAll}
-                onDeselectAll={handleDeselectAll}
-                modelColorMap={modelColorMap}
-              />
-              <ModelLogCharts
-                sortedItems={sortedItems}
-                selectedModels={effectiveSelected}
-              />
-            </div>
-          )}
+          {modelContent}
         </div>
       </SectionPageLayout.Content>
     </SectionPageLayout>

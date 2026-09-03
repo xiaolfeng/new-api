@@ -585,6 +585,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Record:           record,
 		FullLog:          fullLog,
 		Tps:              tpsValue,
+		TokenTiming:      BuildTokenRecordTiming(relayInfo),
 		Internal:         relayInfo.HostToolInternal,
 	})
 	gopool.Go(func() {
