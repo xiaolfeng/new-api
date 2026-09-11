@@ -99,3 +99,29 @@ func TestClientStreamEmitsOpenAIToolCall(t *testing.T) {
 	assert.Contains(t, joined, `"model":"test-model"`)
 	assert.Regexp(t, `"created":\d+`, joined)
 }
+
+func TestClientStreamFinish_ToolUseStopReasonWhenToolBlockEmitted(t *testing.T) {
+	cs := testClientStream(t, bamboocodec.FormatAnthropic)
+	cs.forward(bamboosdk.StreamEvent{
+		Type:         bamboosdk.EventContentBlockStart,
+		Index:        0,
+		ContentBlock: bamboosdk.NewToolUseBlock("call_1", "bash", nil),
+	})
+	cs.finish()
+	joined := strings.Join(cs.Frames(), "")
+	assert.Contains(t, joined, `"stop_reason":"tool_use"`)
+	assert.NotContains(t, joined, `"stop_reason":"end_turn"`)
+}
+
+func TestClientStreamFinish_EndTurnStopReasonWhenNoToolBlock(t *testing.T) {
+	cs := testClientStream(t, bamboocodec.FormatAnthropic)
+	cs.forward(bamboosdk.StreamEvent{
+		Type:         bamboosdk.EventContentBlockStart,
+		Index:        0,
+		ContentBlock: bamboosdk.NewTextBlock("hello"),
+	})
+	cs.finish()
+	joined := strings.Join(cs.Frames(), "")
+	assert.Contains(t, joined, `"stop_reason":"end_turn"`)
+	assert.NotContains(t, joined, `"stop_reason":"tool_use"`)
+}

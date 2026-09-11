@@ -32,10 +32,11 @@ type clientStream struct {
 	finished  bool
 	ok        bool
 	prefixN   int
-	openIdx   int
-	hasOpen   bool
-	sawDelta  bool
-	frames    []string
+	openIdx    int
+	hasOpen    bool
+	sawDelta   bool
+	sawToolUse bool
+	frames     []string
 	format    bamboocodec.FormatType
 	model     string
 	lastUsage *bamboosdk.Usage
@@ -365,7 +366,14 @@ func (s *clientStream) forward(ev bamboosdk.StreamEvent) bool {
 		return s.emit(ev)
 	case bamboosdk.EventMessageStop:
 		return s.ok
-	case bamboosdk.EventContentBlockStart, bamboosdk.EventContentBlockDelta, bamboosdk.EventContentBlockStop:
+	case bamboosdk.EventContentBlockStart:
+		s.ensureStart()
+		if ev.ContentBlock != nil && ev.ContentBlock.BlockType() == bamboosdk.ContentBlockToolUse {
+			s.sawToolUse = true
+		}
+		ev.Index += s.prefixN
+		return s.emit(ev)
+	case bamboosdk.EventContentBlockDelta, bamboosdk.EventContentBlockStop:
 		s.ensureStart()
 		ev.Index += s.prefixN
 		return s.emit(ev)
@@ -385,9 +393,13 @@ func (s *clientStream) finish() {
 	}
 	s.finished = true
 	if s.started && !s.sawDelta {
+		stopReason := bamboosdk.FinishReasonEndTurn
+		if s.sawToolUse {
+			stopReason = bamboosdk.FinishReasonToolUse
+		}
 		s.emit(bamboosdk.StreamEvent{
 			Type:  bamboosdk.EventMessageDelta,
-			Delta: &bamboosdk.MessageDelta{StopReason: bamboosdk.FinishReasonEndTurn},
+			Delta: &bamboosdk.MessageDelta{StopReason: stopReason},
 			Usage: s.lastUsage,
 		})
 	}
