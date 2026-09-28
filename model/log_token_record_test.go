@@ -52,10 +52,12 @@ func TestRecordConsumeLogUsesUpstreamModelForTokenRecord(t *testing.T) {
 		},
 		IsStream: false,
 		Group:    "default",
-		Other: map[string]interface{}{
-			"is_model_mapped":     true,
-			"upstream_model_name": upstreamModel,
-		},
+		Other: func() *LogOther {
+			o := NewLogOther()
+			o.SetPublic("is_model_mapped", true)
+			o.SetPublic("upstream_model_name", upstreamModel)
+			return o
+		}(),
 	})
 
 	var logs []Log
@@ -112,9 +114,11 @@ func TestRecordConsumeLogInternalSkipsTokenRecord(t *testing.T) {
 		IsStream:         false,
 		Group:            "default",
 		Internal:         true,
-		Other: map[string]interface{}{
-			"host_tool_internal": true,
-		},
+		Other: func() *LogOther {
+			o := NewLogOther()
+			o.SetPublic("host_tool_internal", true)
+			return o
+		}(),
 	})
 
 	var logs []Log

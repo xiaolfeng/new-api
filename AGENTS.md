@@ -1,14 +1,19 @@
 # 项目知识库
 
 **生成日期:** 2026-08-22
-**提交:** b7401c636
 **分支:** newapi-xlf-v2
 
 ## 概述
 
 new-api 是用 Go 构建的 AI API 网关。它把 40+ 上游供应商（OpenAI、Claude、Gemini、Azure、AWS Bedrock 等）聚合到统一 API 之后，并提供用户管理、计费、限流与管理控制台。前端为单仓 React 19 应用（`web/`）。
 
-技术栈：Go 1.25、Gin、GORM v2；前端 React 19、TypeScript、Rsbuild、Base UI、Tailwind、Bun；数据库同时支持 SQLite / MySQL / PostgreSQL；缓存为 Redis + 内存；鉴权含 JWT、WebAuthn/Passkeys、OAuth。
+技术栈：
+- **后端**：Go 1.25.1+、Gin Web 框架、GORM v2 ORM
+- **前端**：React 19、TypeScript、Rsbuild 2、TanStack Router/Query/Table、Zustand、Base UI、Tailwind CSS 4、Bun
+- **数据库**：同时支持 SQLite / MySQL >= 5.7.8 / PostgreSQL >= 9.6；独立日志库额外支持 ClickHouse
+- **缓存**：Redis (go-redis) + 内存缓存
+- **鉴权**：Session、API 令牌、JWT、WebAuthn/Passkeys、TOTP、OAuth/OIDC；`service/authz/` 基于 Casbin 做资源级授权
+- **扩展**：基于 Sobek 的 JavaScript 任务插件（`plugins/tasks/`，通过 `pkg/jsplugin/` 运行）；Electron 桌面端封装
 
 ## 目录结构
 
@@ -31,7 +36,8 @@ new-api/
 ├── common/              # JSON 封装、配额换算、Redis、env
 ├── i18n/                # 后端 i18n（en / zh-CN / zh-TW）
 ├── oauth/               # OAuth 供应商
-├── pkg/                 # billingexpr、cachex、ionet、naming、perf_metrics
+├── pkg/                 # billingexpr、cachex、ionet、naming、perf_metrics、jsplugin
+├── plugins/tasks/       # 异步任务插件源码
 ├── logger/              # 日志初始化
 ├── web/                 # 前端（见 web/AGENTS.md）
 ├── docs/ / bin/ / electron/
@@ -96,12 +102,19 @@ new-api/
 
 ## 约定
 
-### 代码质量
+### 代码质量与现代 Go 规范
 
 - 新代码保持直接可读：早返回、清晰分支、有意义的局部变量，避免深层嵌套。
 - 尽量少写嵌套函数；只在回调 API 需要，或闭包明显更简单时使用。
 - 不要为「只有一个调用方、且不表达稳定业务概念」的逻辑抽包级辅助函数，应内联。单独函数适用于可复用行为、框架回调、导出 API、测试夹具，或值得直接单测的复杂业务。
 - 若保留单次使用的辅助函数，名称必须描述稳定领域概念，而不是为缩短调用方而拆出的机械步骤。
+- 优先采用现代 Go 规范：参数与返回值类型使用 `any` 替换 `interface{}`；切片遍历优先 `for i := range items`；单次切割优先 `strings.Cut` / `strings.CutPrefix` / `strings.CutSuffix`；元素查找优先 `slices.Contains`；map 浅拷贝使用 `maps.Copy`；极简边界使用内置 `min`/`max`；循环内高频拼接使用 `strings.Builder`。
+
+### 身份验证安全（OWASP 强制）
+
+- 所有涉及身份验证、会话、凭证更新的代码必须严格符合 OWASP ASVS 及相关安全备忘单规范。
+- 密码存储、重置、MFA、WebAuthn、OAuth 及会话流必须在服务端强制执行校验，严禁用前端检查代替服务端断言。
+- 审计日志中严禁记录明文密码、验证码、恢复码、私钥或可用的 Session 令牌。
 
 ### relaykit 独立
 
@@ -140,7 +153,7 @@ new-api/
 
 ### 计费
 
-- 改阶梯 / 动态计费前必须先读 `pkg/billingexpr/expr.md`。
+- 改阶梯 / 动态计费前必须先读 `pkg/billingexpr/expr.md` 和 `.agents/rules/billing.md`。
 - 配额代码不得因溢出或未校验输入产生负向扣费（变成充值）。用户可控乘数（图像 `n`、视频 `seconds`、分辨率 / 质量比、批量）必须在进入 quota 计算前设上限，超范围用 400 拒绝。已有边界：`dto.MaxImageN`、`relaycommon.MaxTaskDurationSeconds`、`relay/helper/valid_request.go` 的 `maxTokensLimit`。同一概念不要再发明一套上限。新协议从第一天就在校验器里限制 max-tokens 与 count。
 - 注意绕过路径：`Extra["parameters"]`、task `metadata`、multipart。适配器从这些路径读乘数时必须套用同一上限或本地钳制。
 - 媒体元数据时长（转写、TTS、上游扣次如 Kling `FinalUnitDeduction`）也是不可信输入，转 token 前要饱和。
@@ -149,13 +162,12 @@ new-api/
 - 乘数走 `types.PriceData.AddOtherRatio`，禁止直接写 `OtherRatios`。
 - 预扣与结算都必须安全：饱和的超大配额必须因额度不足失败，不能静默回绕。新计费路径要沿「校验 → EstimateBilling/OtherRatios → 换算 → 预扣 → 结算 / 退款」核对不变量。
 - `*uint` 可接受巨大正 JSON 数字（例如回绕后的负数）；仅 `>= 0` 不够，必须有上限。
-- 回归测试放在所保护的边界旁。参考 `relay/helper/openai_image_request_test.go`、`relay/common/relay_utils_test.go`、`common/quota_math_test.go`。
 
 ### 后端测试
 
 - 测试必须保护真实行为、API 契约、计费不变量、数据兼容或回归路径。不要为覆盖率、为证明代码能跑、或为锁死无用户可见契约的实现细节而加测试。
 - 禁止用随机输入、大循环、sleep、计时比较、只断言日志的假 fuzz / 压测。
-- 禁止用不同名字重复测同一分支且不增加不变量；禁止把错误的供应商语义写进生产代码；禁止断言私有常量、select 字段列表、辅助函数内部或文件布局。
+- 不要为同一小功能跨层分散编写多个测试文件，优先在一个合适的测试文件中进行回归断言。
 - 优先确定性表驱动测试。需要 DB / context / 用户组 / 配置 / 缓存时，在夹具里显式初始化。
 - 新建或大幅重写的 Go 测试用 `github.com/stretchr/testify/require` 做 setup 与致命断言，用 `assert` 做非致命检查。
 - 清理测试时保留有意义的回归覆盖；若删除的测试间接覆盖了真实契约，换成更小、直接断言该契约的测试。
@@ -163,7 +175,9 @@ new-api/
 ### 前端
 
 - 包管理与脚本用 bun，工作目录是 `web/`。
+- **优先复用现有 UI 组件**：编写或修改前端前先在 `web/src/components/` 查找已有的通用与业务组件，避免重复造轮子。
 - 用户文案必须 i18n：扁平 JSON，键为英文源文案；组件内 `useTranslation()` + `t('English key')`。
+- **数字格式化与 Intl 本地化**：普通数值使用 `@/lib/format`，金额使用 `@/lib/currency`；传入 `Intl.*` 或日期时间格式化的语言代号必须经 `@/i18n/languages` 中的 `toIntlLocale` 转换。
 - 详细约定见 [web 知识库](./web/AGENTS.md)。
 
 ### 项目治理

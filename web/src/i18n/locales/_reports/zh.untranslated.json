@@ -1,8 +1,5 @@
 {
-  "Anthropic Messages": "Anthropic Messages",
-  "footer.columns.related.links.midjourney": "Midjourney-Proxy",
-  "Google Gemini": "Google Gemini",
-  "Midjourney": "Midjourney",
-  "MidjourneyPlus": "MidjourneyPlus",
-  "OpenAI Responses": "OpenAI Responses"
+  "Doubao": "Doubao",
+  "Responses WebSocket": "Responses WebSocket",
+  "SGLang": "SGLang"
 }

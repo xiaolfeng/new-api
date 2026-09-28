@@ -99,11 +99,18 @@ func TestShouldRetry(t *testing.T) {
 			want:       false,
 		},
 		{
-			name:       "empty response retries even if written",
-			ctx:        newWrittenShouldRetryTestContext,
+			name:       "empty response retries when not written",
+			ctx:        newShouldRetryTestContext,
 			err:        emptyResponseErr,
 			retryTimes: 1,
 			want:       true,
+		},
+		{
+			name:       "empty response stops retry if already written",
+			ctx:        newWrittenShouldRetryTestContext,
+			err:        emptyResponseErr,
+			retryTimes: 1,
+			want:       false,
 		},
 	}
 

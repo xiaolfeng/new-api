@@ -78,7 +78,7 @@ func ChatCompletionsStreamToResponsesHandler(
 		respObj := &dto.OpenAIResponsesResponse{
 			ID:        responseID,
 			Object:    "response",
-			CreatedAt: int(createdAt),
+			CreatedAt: dto.IntValue(createdAt),
 			Model:     model,
 			Status:    json.RawMessage(`"` + status + `"`),
 			Output:    []dto.ResponsesOutput{},
@@ -137,7 +137,7 @@ func ChatCompletionsStreamToResponsesHandler(
 			Type:         "response.reasoning_summary_text.done",
 			OutputIndex:  &oi,
 			SummaryIndex: &si,
-			Text:         text,
+			Text:         &text,
 		}) {
 			return false
 		}
@@ -220,7 +220,7 @@ func ChatCompletionsStreamToResponsesHandler(
 			Type:         "response.output_text.done",
 			OutputIndex:  &oi,
 			ContentIndex: &ci,
-			Text:         text,
+			Text:         &text,
 		}) {
 			return false
 		}
@@ -272,7 +272,7 @@ func ChatCompletionsStreamToResponsesHandler(
 			Type:        "response.function_call_arguments.done",
 			OutputIndex: &oi,
 			ItemID:      itemID,
-			Arguments:   args,
+			Arguments:   &args,
 		}) {
 			return false
 		}
@@ -308,7 +308,7 @@ func ChatCompletionsStreamToResponsesHandler(
 		respObj := &dto.OpenAIResponsesResponse{
 			ID:        responseID,
 			Object:    "response",
-			CreatedAt: int(createdAt),
+			CreatedAt: dto.IntValue(createdAt),
 			Model:     model,
 			Status:    json.RawMessage(`"` + status + `"`),
 			Output:    []dto.ResponsesOutput{},

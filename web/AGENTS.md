@@ -28,6 +28,8 @@ web/
 
 ## 导航指南
 
+优先复用项目已有组件与能力；项目内无合适实现时，再评估已安装依赖及成熟开源库。仅在复用、组合或合理扩展仍无法满足需求时自行实现，并说明具体能力缺口。
+
 | 任务 | 位置 | 说明 |
 |------|------|------|
 | 加一个页面 | `src/features/<feature>/` + `src/routes/` | feature 放 UI / api / hooks；route 只做接线 |
@@ -42,19 +44,28 @@ web/
 ## 约定
 
 - **包管理只用 bun**：`bun install` / `bun add` / `bun run <script>`。不要用 npm / yarn / pnpm。
-- **i18n**：用户可见文案必须 `useTranslation()` + `t('English key')`。非 React 环境可用 `import { t } from 'i18next'`，但不会随语言切换重渲染。子组件即使父级已调用 hook 也要自己取 `t`。`SUCCESS_MESSAGES` / `ERROR_MESSAGES` 的值只是 i18n 键，展示时必须再包一层 `t()`。状态 label 用 `labelKey`（或统一的 `label` 键），同一 feature 内不要混用。
-- **TypeScript**：避免 `any`；类型导入用 `import type`。改 TS/TSX 后必须 `bun run typecheck`（`tsgo -b`）到零错误。提交前对改动文件跑 lint，修掉全部 error。
+- **优先复用已有组件**：
+  | 场景 | 优先检查的项目入口 |
+  | --- | --- |
+  | 通用弹窗布局 | `@/components/dialog` |
+  | 删除、危险操作及普通确认 | `@/components/confirm-dialog` |
+  | 复制按钮与剪贴板交互 | `@/components/copy-button`、`@/hooks/use-copy-to-clipboard` |
+  | 空状态、加载状态、错误状态 | `@/components/empty-state`、`@/components/loading-state`、`@/components/error-state` |
+  | 表格、分页、工具栏及列表布局 | `@/components/data-table` |
+  | 基础控件 | `@/components/ui/` |
+- **i18n 与文案**：用户可见文案必须 `useTranslation()` + `t('English key')`。`SUCCESS_MESSAGES` / `ERROR_MESSAGES` 的值只是 i18n 键，展示时必须再包一层 `t()`。状态 label 用 `labelKey`（或统一的 `label` 键），同一 feature 内不要混用。
+- **数字格式化与 Intl 本地化**：
+  - 普通数字使用 `@/lib/format` 的 `formatNumber` / `formatCompactNumber`；金额与额度使用 `@/lib/currency`。
+  - `zhCN` / `zhTW` 是项目的界面语言码，在进入 `Intl.*` 或日期时间格式化前必须经 `@/i18n/languages` 的 `toIntlLocale()` 转换。
+- **TypeScript**：避免 `any`；类型导入用 `import type`。改 TS/TSX 后必须 `bun run typecheck` 到零错误。
 - **组件**：函数组件 + Hooks；props 非必要不解构，直接 `props.xxx`。禁止两层及以上嵌套三元。单文件约 200 行考虑拆分。
 - **状态**：Zustand store 放 `src/stores/`，组件用选择器订阅。持久化在 store 内读写 localStorage。
-- **请求**：`useQuery` / `useMutation`，`queryKey` 用层级数组；变更后 `invalidateQueries`。服务端错误走 `handleServerError`。axios 实例带 `withCredentials: true`。
+- **请求**：`useQuery` / `useMutation`，`queryKey` 用层级数组；变更后 `invalidateQueries`。服务端错误统一走 `handleServerError`。axios 实例带 `withCredentials: true`。
 - **表单**：React Hook Form + Zod，schema 放 feature 的 `lib/`，`z.infer` 导出类型。
 - **路由**：`createFileRoute`；search 用 Zod + `validateSearch`；鉴权与重定向放 `beforeLoad`。导航用 `useNavigate` / `Link`，不要直接改 `window.location`。
 - **样式**：Tailwind + `cn()`；移动优先；主题用 CSS 变量与 `dark:`。自定义 CSS 集中在 `src/styles/`。
-- **文件组织**：feature 内含 `components/`、`lib/`、`hooks/`，以及按需的 `api.ts`、`types.ts`、`constants.ts`。通用组件在 `src/components/`，工具在 `src/lib/`。组件文件 PascalCase，工具 kebab-case。
-- **测试**：Vitest + React Testing Library。测试放模块专属 `__tests__/`，按职责命名（`layout.test.ts`）。测用户可见行为，不测内部 state。Bug 先写失败用例再修。布局 / 焦点 / 键盘 / 空态 / 错误态变更必须补回归。提交前至少跑受影响测试 + typecheck + 相关 lint。
-- **可访问性**：语义化 HTML、键盘可达、对比度 WCAG 2.1 AA。装饰图标 `aria-hidden="true"`。
-- **安全**：不在前端存密钥；慎用 `dangerouslySetInnerHTML`；前后端都要校验。
-- **品牌**：不得删除或替换 new-api / QuantumNous 相关署名与标识（copyright 脚本会检查）。
+- **测试**：Vitest + React Testing Library。测试放模块专属 `__tests__/`，按职责命名。测用户可见行为，不测内部 state。修改交互/布局/边界必须补回归。
+- **品牌受保护**：不得删除或替换 new-api / QuantumNous 相关署名与标识。
 
 ## 反模式
 
@@ -65,17 +76,3 @@ web/
 - ❌ 测试与实现平铺在同一目录，或用大段 class 快照 / `sleep` 冒充测试。
 - ❌ mock 被测模块自身，或为覆盖率写 smoke 测试。
 - ❌ 改完 TS 不跑 typecheck，或留下 lint error。
-
-## 调试路径
-
-1. 页面空白 / 路由 404 → `src/routes/` 文件名与 `routeTree.gen.ts` 是否同步（dev 会生成）。
-2. 登录后仍跳转登录页 → `routes/_authenticated` 的 `beforeLoad` 与 `stores` 里的 auth。
-3. 接口 401 / CSRF → axios `withCredentials`、cookie、后端 CORS。
-4. 文案未翻译 → 对应 locale 是否缺键；`bun run i18n:sync` 报告。
-5. 表格行为异常 → 先看 `components/data-table/`，再看 feature 列定义。
-6. Playground 流式中断 → `features/playground/hooks/use-stream-request.ts`。
-7. 类型失败 → `bun run typecheck`；lint → `bun run lint`。
-
-## 引用
-
-无子级 `AGENTS.md`。后端约定见根 [`AGENTS.md`](../AGENTS.md)。

@@ -32,6 +32,7 @@ const defaultSiteSettings: SiteSettings = {
   About: '',
   HomePageContent: '',
   ServerAddress: '',
+  TaskPublicAddress: '',
   'theme.frontend': 'default',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',

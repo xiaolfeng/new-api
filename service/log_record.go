@@ -1044,8 +1044,8 @@ func buildResponsesResponseBlocksFromSSE(responseBody string) []model.ResponsesR
 				state.Block.ID = strings.TrimSpace(streamResp.ItemID)
 				state.Block.Type = "output_text"
 			})
-			if state != nil {
-				mergeResponsesText(&state.Content, streamResp.Text)
+			if state != nil && streamResp.Text != nil {
+				mergeResponsesText(&state.Content, *streamResp.Text)
 			}
 		case "response.output_item.added", "response.output_item.done":
 			if streamResp.Item == nil {
@@ -1106,9 +1106,9 @@ func buildResponsesResponseBlocksFromSSE(responseBody string) []model.ResponsesR
 				state.Block.Type = "function_call"
 				state.Block.CallID = strings.TrimSpace(streamResp.ItemID)
 			})
-			if state != nil {
+			if state != nil && streamResp.Arguments != nil {
 				// arguments 以流式 delta 累积为准，done 的完整值仅在无累积时兜底。
-				mergeResponsesArgumentsOnce(&state.ArgumentsRaw, streamResp.Arguments)
+				mergeResponsesArgumentsOnce(&state.ArgumentsRaw, *streamResp.Arguments)
 			}
 		}
 	}

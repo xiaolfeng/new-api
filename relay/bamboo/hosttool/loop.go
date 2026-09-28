@@ -14,6 +14,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
 )
 
 type Action string
@@ -236,7 +237,7 @@ func isWalletTrusted(c *gin.Context, info *relaycommon.RelayInfo) bool {
 	if info.ForcePreConsume {
 		return false
 	}
-	trust := common.GetTrustQuota()
+	trust := int(operation_setting.GetQuotaSetting().TrustQuotaUSD * common.QuotaPerUnit)
 	if trust <= 0 {
 		return false
 	}

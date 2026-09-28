@@ -69,6 +69,7 @@ interface TimingMetricsCellProps {
    * indicator used elsewhere on the mobile card.
    */
   indicator?: 'bar' | 'dot'
+  compact?: boolean
   /**
    * Optional per-phase breakdown (thinking / output / tool) sourced from
    * `other.bamboo_timing`. When any segment is present the cell is wrapped in
@@ -110,7 +111,13 @@ export function TimingMetricsCell(props: TimingMetricsCellProps) {
     thinkingMs != null || contentMs != null || toolMs != null
 
   const labels = (
-    <div className='flex min-h-8 min-w-0 flex-col justify-center gap-0.5 text-xs leading-tight'>
+    <div
+      className={cn(
+        'flex min-h-8 min-w-0 flex-col justify-center gap-0.5 text-xs leading-tight',
+        props.compact &&
+          'min-h-0 flex-row flex-wrap items-center gap-x-2.5 gap-y-1'
+      )}
+    >
       {showFirstToken && (
         <div className='flex items-baseline gap-1.5'>
           {indicator === 'dot' && (
@@ -248,6 +255,11 @@ function PhaseTimingTooltipContent({
 
 interface StreamTpsCellProps {
   isStream: boolean
+  compact?: boolean
+  /** Task logs are asynchronous jobs; stream vs non-stream does not apply. */
+  isTask?: boolean
+  /** The task request returned its result inline, so it is a synchronous call. */
+  isSyncTask?: boolean
   tokensPerSecond?: number | null
   streamStatus?: LogOtherData['stream_status']
   className?: string
@@ -261,12 +273,16 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
     props.tokensPerSecond != null
       ? `${Math.round(props.tokensPerSecond)} t/s`
       : '—'
-  const streamLabel = props.isStream ? t('Stream') : t('Non-stream')
+  let streamLabel = props.isStream ? t('Stream') : t('Non-stream')
+  if (props.isTask) {
+    streamLabel = props.isSyncTask ? t('Sync') : t('Async')
+  }
 
   return (
     <div
       className={cn(
         'flex shrink-0 flex-col items-start justify-center gap-0.5 text-xs leading-tight',
+        props.compact && 'flex-row flex-wrap items-center gap-1.5',
         props.className
       )}
     >
@@ -300,9 +316,12 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
           </TooltipProvider>
         )}
       </span>
-      <span className='text-muted-foreground/60 px-0.5 tabular-nums'>
-        {tpsLabel}
-      </span>
+      {(!props.compact ||
+        (props.isStream && props.tokensPerSecond != null)) && (
+        <span className='text-muted-foreground/60 px-0.5 tabular-nums'>
+          {tpsLabel}
+        </span>
+      )}
     </div>
   )
 }

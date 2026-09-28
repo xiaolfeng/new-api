@@ -16,110 +16,108 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { flexRender, type Cell, type Table } from "@tanstack/react-table";
-import { Database } from "lucide-react";
-import { useTranslation } from "react-i18next";
+import { flexRender, type Cell, type Table } from '@tanstack/react-table'
+import { Database } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
-import {
-  dotColorMap,
-  textColorMap,
-  type StatusVariant,
-} from "@/components/status-badge";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Empty,
   EmptyDescription,
   EmptyHeader,
   EmptyMedia,
   EmptyTitle,
-} from "@/components/ui/empty";
-import { Skeleton } from "@/components/ui/skeleton";
-import { getUserAvatarFallback, getUserAvatarStyle } from "@/lib/avatar";
-import { formatTimestampToDate } from "@/lib/format";
-import { cn } from "@/lib/utils";
+} from '@/components/ui/empty'
+import { Skeleton } from '@/components/ui/skeleton'
+import { cn } from '@/lib/utils'
 
-import { LOG_TYPE_ENUM } from "../constants";
-import type { UsageLog } from "../data/schema";
-import { collectUsageActivityTags, parseLogOther } from "../lib/format";
-import { resolveInteractionTypeFromLog } from "../lib/interaction-parser";
-import {
-  getLogTypeConfig,
-  isDisplayableLogType,
-  isTimingLogType,
-} from "../lib/utils";
-import type { LogCategory } from "../types";
-import { InteractionTypeCell } from "./interaction-type-cell";
-import { TimingMetricsCell } from "./timing-metrics-cell";
-import { useUsageLogsContext } from "./usage-logs-provider";
+import { LOG_TYPE_ENUM } from '../constants'
+import type { UsageLog } from '../data/schema'
+import { TASK_MOBILE_SUMMARY_FIELDS } from '../lib/task-mobile-layout'
+import type { LogCategory } from '../types'
+import { CommonLogMobileCard } from './common-log-mobile-card'
 
 const logTypeRowTint: Record<number, string> = {
   [LOG_TYPE_ENUM.ERROR]:
-    "bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/50 dark:border-rose-900/30",
+    'bg-rose-50/40 dark:bg-rose-950/20 border-rose-200/50 dark:border-rose-900/30',
   [LOG_TYPE_ENUM.REFUND]:
-    "bg-blue-50/30 dark:bg-blue-950/15 border-blue-200/50 dark:border-blue-900/30",
-};
-
-interface UsageLogsMobileListProps<TData> {
-  table: Table<TData>;
-  isLoading?: boolean;
-  emptyTitle?: string;
-  emptyDescription?: string;
-  logCategory: LogCategory;
+    'bg-blue-50/30 dark:bg-blue-950/15 border-blue-200/50 dark:border-blue-900/30',
 }
 
-function UsageLogsMobileSkeleton() {
+interface UsageLogsMobileListProps<TData> {
+  table: Table<TData>
+  isLoading?: boolean
+  emptyTitle?: string
+  emptyDescription?: string
+  logCategory: LogCategory
+}
+
+function UsageLogsMobileSkeleton(props: { separate: boolean }) {
+  const { t } = useTranslation()
   return (
-    <div className="border-border/50 bg-card overflow-hidden rounded-lg border">
+    <div
+      role='status'
+      aria-label={t('Loading')}
+      aria-busy='true'
+      className={
+        props.separate
+          ? 'min-w-0 space-y-3'
+          : 'border-border/50 bg-card overflow-hidden rounded-lg border'
+      }
+    >
       {[1, 2, 3].map((i) => (
         <div
           key={i}
-          className="border-border/40 space-y-2.5 border-b p-3 last:border-b-0"
+          className={
+            props.separate
+              ? 'border-border/60 bg-card space-y-3 rounded-xl border p-3.5'
+              : 'border-border/40 space-y-2.5 border-b p-3 last:border-b-0'
+          }
         >
-          <div className="flex items-center justify-between gap-3">
-            <Skeleton className="h-5 w-40 rounded-md" />
-            <Skeleton className="h-5 w-16 rounded-md" />
+          <div className='flex items-center justify-between gap-3'>
+            <Skeleton className='h-5 w-40 rounded-md' />
+            <Skeleton className='h-5 w-16 rounded-md' />
           </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+          <div className='grid grid-cols-2 gap-x-4 gap-y-2'>
             {[1, 2, 3, 4, 5, 6].map((j) => (
-              <div key={j} className="min-w-0 space-y-1">
-                <Skeleton className="h-3 w-10 rounded" />
-                <Skeleton className="h-4 w-full rounded" />
+              <div key={j} className='min-w-0 space-y-1'>
+                <Skeleton className='h-3 w-10 rounded' />
+                <Skeleton className='h-4 w-full rounded' />
               </div>
             ))}
           </div>
         </div>
       ))}
     </div>
-  );
+  )
 }
 
 function CompactCell<TData>({
   cell,
-  fallback = "-",
+  fallback = '-',
   className,
   primaryOnly = false,
 }: {
-  cell?: Cell<TData, unknown>;
-  fallback?: string;
-  className?: string;
-  primaryOnly?: boolean;
+  cell?: Cell<TData, unknown>
+  fallback?: string
+  className?: string
+  primaryOnly?: boolean
 }) {
   return (
     <div
       className={cn(
-        "min-w-0 overflow-hidden leading-tight [&_button]:max-w-full [&_span]:max-w-full",
+        'min-w-0 overflow-hidden leading-tight [&_button]:max-w-full [&_span]:max-w-full',
         primaryOnly &&
-          "[&_.flex-col]:min-w-0 [&_.flex-col>*:not(:first-child)]:hidden",
-        className,
+          '[&_.flex-col]:min-w-0 [&_.flex-col>*:not(:first-child)]:hidden',
+        className
       )}
     >
       {cell ? (
         flexRender(cell.column.columnDef.cell, cell.getContext())
       ) : (
-        <span className="text-muted-foreground/50">{fallback}</span>
+        <span className='text-muted-foreground/50'>{fallback}</span>
       )}
     </div>
-  );
+  )
 }
 
 function SummaryField<TData>({
@@ -129,20 +127,20 @@ function SummaryField<TData>({
   valueClassName,
   primaryOnly = false,
 }: {
-  label?: string;
-  cell?: Cell<TData, unknown>;
-  className?: string;
-  valueClassName?: string;
-  primaryOnly?: boolean;
+  label?: string
+  cell?: Cell<TData, unknown>
+  className?: string
+  valueClassName?: string
+  primaryOnly?: boolean
 }) {
-  if (!cell) return null;
+  if (!cell) return null
 
   return (
     <div
-      className={cn("bg-muted/20 min-w-0 rounded-md px-2 py-1.5", className)}
+      className={cn('bg-muted/20 min-w-0 rounded-md px-2 py-1.5', className)}
     >
-      {label != null && label !== "" && (
-        <div className="text-muted-foreground mb-1 text-[11px] leading-none font-medium select-none">
+      {label != null && label !== '' && (
+        <div className='text-muted-foreground mb-1 text-[11px] leading-none font-medium select-none'>
           {label}
         </div>
       )}
@@ -152,314 +150,90 @@ function SummaryField<TData>({
         className={valueClassName}
       />
     </div>
-  );
-}
-
-function MobileLogTimeStatus({
-  createdAt,
-  type,
-}: {
-  createdAt: unknown;
-  type: unknown;
-}) {
-  const { t } = useTranslation();
-  const timestamp = typeof createdAt === "number" ? createdAt : undefined;
-  const logType = typeof type === "number" ? type : undefined;
-  const config = getLogTypeConfig(logType ?? LOG_TYPE_ENUM.UNKNOWN);
-  const variant = config.color as StatusVariant;
-
-  return (
-    <div className="space-y-1">
-      <div className="font-mono text-xs leading-tight tabular-nums">
-        {formatTimestampToDate(timestamp)}
-      </div>
-      <div
-        className={cn(
-          "inline-flex items-center gap-1 text-xs leading-none font-medium",
-          textColorMap[variant],
-        )}
-      >
-        <span
-          className={cn("size-1.5 shrink-0 rounded-full", dotColorMap[variant])}
-          aria-hidden="true"
-        />
-        <span>{t(config.label)}</span>
-      </div>
-    </div>
-  );
-}
-
-/** Mobile-only Tokens block: prompt / completion only. Cache rate is its own field. */
-function MobileTokensField({ log }: { log: UsageLog }) {
-  if (!isDisplayableLogType(log.type)) return null;
-
-  const promptTokens = log.prompt_tokens || 0;
-  const completionTokens = log.completion_tokens || 0;
-  if (promptTokens === 0 && completionTokens === 0) {
-    return (
-      <div className="bg-muted/20 min-w-0 rounded-md px-2 py-1.5">
-        <span className="text-muted-foreground text-xs">-</span>
-      </div>
-    );
-  }
-
-  return (
-    <div className="bg-muted/20 min-w-0 rounded-md px-2 py-1.5">
-      <span className="font-mono text-xs font-medium tabular-nums">
-        {promptTokens.toLocaleString()} / {completionTokens.toLocaleString()}
-      </span>
-    </div>
-  );
-}
-
-/** Mobile-only User block: own layout so avatar/name always line up on the same baseline. */
-function MobileUserField({ log }: { log: UsageLog }) {
-  const { sensitiveVisible, setSelectedUserId, setUserInfoDialogOpen } =
-    useUsageLogsContext();
-
-  if (!log.username) return null;
-
-  return (
-    <button
-      type="button"
-      className="bg-muted/20 flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-left"
-      onClick={(e) => {
-        e.stopPropagation();
-        setSelectedUserId(log.user_id);
-        setUserInfoDialogOpen(true);
-      }}
-    >
-      <Avatar className="ring-border/60 size-6 shrink-0 ring-1">
-        <AvatarFallback
-          className={cn(
-            "text-[11px] font-semibold",
-            !sensitiveVisible && "bg-muted text-muted-foreground",
-          )}
-          style={
-            sensitiveVisible ? getUserAvatarStyle(log.username) : undefined
-          }
-        >
-          {sensitiveVisible ? getUserAvatarFallback(log.username) : "•"}
-        </AvatarFallback>
-      </Avatar>
-      <span className="text-foreground min-w-0 truncate text-sm">
-        {sensitiveVisible ? log.username : "••••"}
-      </span>
-    </button>
-  );
-}
-
-/** Merge first-token / duration with bamboo thinking/content/tool TPS. */
-function MobileStreamTimingField<TData>({
-  log,
-  tpsCell,
-}: {
-  log: UsageLog;
-  tpsCell?: Cell<TData, unknown>;
-}) {
-  if (!isTimingLogType(log.type)) return null;
-
-  const other = parseLogOther(log.other);
-  const useTime = log.use_time || 0;
-
-  return (
-    <div className="bg-muted/20 flex min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5">
-      <TimingMetricsCell
-        useTimeSec={useTime}
-        completionTokens={log.completion_tokens}
-        frtMs={other?.frt}
-        isStream={log.is_stream}
-        indicator="dot"
-        className="min-w-0 flex-1"
-        phaseTiming={
-          other?.bamboo_timing
-            ? {
-                thinkingMs:
-                  typeof other.bamboo_timing.thinking_ms === "number" &&
-                  other.bamboo_timing.thinking_ms > 0
-                    ? other.bamboo_timing.thinking_ms
-                    : null,
-                contentMs:
-                  typeof other.bamboo_timing.content_ms === "number" &&
-                  other.bamboo_timing.content_ms > 0
-                    ? other.bamboo_timing.content_ms
-                    : null,
-                toolMs:
-                  typeof other.bamboo_timing.tool_ms === "number" &&
-                  other.bamboo_timing.tool_ms > 0
-                    ? other.bamboo_timing.tool_ms
-                    : null,
-              }
-            : undefined
-        }
-      />
-      {tpsCell && (
-        <div className="shrink-0">
-          {flexRender(tpsCell.column.columnDef.cell, tpsCell.getContext())}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function MobileInteractionField({ log }: { log: UsageLog }) {
-  const { t } = useTranslation();
-  if (!isDisplayableLogType(log.type)) return null;
-
-  const other = parseLogOther(log.other);
-  const hasType = Boolean(resolveInteractionTypeFromLog(log));
-  const hasTags = collectUsageActivityTags(other).length > 0;
-  if (!hasType && !hasTags) return null;
-
-  return (
-    <div className="bg-muted/20 col-span-2 min-w-0 rounded-md px-2 py-1.5">
-      <div className="text-muted-foreground mb-1 text-[11px] leading-none font-medium select-none">
-        {t("Interaction")}
-      </div>
-      <InteractionTypeCell log={log} align="start" />
-    </div>
-  );
-}
-
-function CommonLogsCard<TData>({
-  cells,
-}: {
-  cells: Map<string, Cell<TData, unknown>>;
-}) {
-  const { t } = useTranslation();
-
-  const modelCell = cells.get("model_name");
-  const quotaCell = cells.get("quota");
-  const rowData = cells.get("created_at")?.row.original as UsageLog | undefined;
-
-  return (
-    <div className="space-y-2.5">
-      <div className="flex min-w-0 items-center justify-between gap-3">
-        <CompactCell cell={modelCell} className="flex-1" />
-        <CompactCell
-          cell={quotaCell}
-          className="shrink-0 text-right [&_.flex-col]:items-end"
-        />
-      </div>
-
-      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)] gap-1.5">
-        <div className="bg-muted/20 min-w-0 rounded-md px-2 py-1.5">
-          <MobileLogTimeStatus
-            createdAt={rowData?.created_at}
-            type={rowData?.type}
-          />
-        </div>
-        <SummaryField
-          cell={cells.get("channel")}
-          valueClassName="[&_.flex-col]:max-w-none"
-        />
-        {rowData && cells.has("user") ? (
-          <MobileUserField log={rowData} />
-        ) : (
-          <SummaryField cell={cells.get("user")} />
-        )}
-        <SummaryField
-          cell={cells.get("token_name")}
-          valueClassName="[&_.flex-col]:max-w-none [&_.flex-col>*:not(:first-child)]:text-[11px] [&_.flex-col>*:not(:first-child)]:leading-none"
-        />
-        {rowData ? (
-          <MobileStreamTimingField log={rowData} tpsCell={cells.get("tps")} />
-        ) : (
-          <SummaryField cell={cells.get("use_time")} />
-        )}
-        {rowData ? (
-          <MobileTokensField log={rowData} />
-        ) : (
-          <SummaryField cell={cells.get("prompt_tokens")} />
-        )}
-        <SummaryField cell={cells.get("cache_rate")} />
-        {rowData ? <MobileInteractionField log={rowData} /> : null}
-        <SummaryField
-          label={t("Details")}
-          cell={cells.get("content")}
-          className="col-span-2 bg-transparent px-0 py-0"
-        />
-      </div>
-    </div>
-  );
+  )
 }
 
 function TaskLogsCard<TData>({
   cells,
 }: {
-  cells: Map<string, Cell<TData, unknown>>;
+  cells: Map<string, Cell<TData, unknown>>
 }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
 
-  const taskIdCell = cells.get("task_id");
-  const statusCell = cells.get("status");
-  const submitTimeCell = cells.get("submit_time");
+  const taskIdCell = cells.get('task_id')
+  const statusCell = cells.get('status')
 
   return (
-    <div className="space-y-2.5">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <CompactCell cell={taskIdCell} className="flex-1" />
-        <CompactCell cell={statusCell} className="shrink-0 text-right" />
+    <div className='space-y-2.5'>
+      <div className='flex min-w-0 items-start justify-between gap-3'>
+        <CompactCell cell={taskIdCell} className='flex-1' />
+        <CompactCell cell={statusCell} className='shrink-0 text-right' />
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5">
-        <SummaryField label={t("Submit Time")} cell={submitTimeCell} />
-        <SummaryField label={t("User")} cell={cells.get("user")} primaryOnly />
+      <div className='grid grid-cols-2 gap-1.5'>
+        {TASK_MOBILE_SUMMARY_FIELDS.map((field) => (
+          <SummaryField
+            key={field.id}
+            label={t(field.label)}
+            cell={cells.get(field.id)}
+            primaryOnly={field.primaryOnly}
+          />
+        ))}
         <SummaryField
-          label={t("Result")}
-          cell={cells.get("fail_reason")}
-          className="col-span-2 bg-transparent px-0 py-0"
+          label={t('Details')}
+          cell={cells.get('fail_reason')}
+          className='col-span-2 bg-transparent px-0 py-0'
         />
       </div>
     </div>
-  );
+  )
 }
 
 function DrawingLogsCard<TData>({
   cells,
 }: {
-  cells: Map<string, Cell<TData, unknown>>;
+  cells: Map<string, Cell<TData, unknown>>
 }) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
 
-  const actionCell = cells.get("action");
-  const codeCell = cells.get("code");
-  const submitTimeCell = cells.get("submit_time");
+  const actionCell = cells.get('action')
+  const codeCell = cells.get('code')
+  const submitTimeCell = cells.get('submit_time')
 
   return (
-    <div className="space-y-2.5">
-      <div className="flex min-w-0 items-start justify-between gap-3">
-        <CompactCell cell={actionCell} className="flex-1" />
-        <CompactCell cell={codeCell} className="shrink-0 text-right" />
+    <div className='space-y-2.5'>
+      <div className='flex min-w-0 items-start justify-between gap-3'>
+        <CompactCell cell={actionCell} className='flex-1' />
+        <CompactCell cell={codeCell} className='shrink-0 text-right' />
       </div>
 
-      <div className="grid grid-cols-2 gap-1.5">
-        <SummaryField label={t("Submit Time")} cell={submitTimeCell} />
+      <div className='grid grid-cols-2 gap-1.5'>
+        <SummaryField label={t('Submit Time')} cell={submitTimeCell} />
         <SummaryField
-          label={t("Channel")}
-          cell={cells.get("channel")}
+          label={t('Channel')}
+          cell={cells.get('channel')}
           primaryOnly
         />
-        <SummaryField label={t("Task ID")} cell={cells.get("mj_id")} />
+        <SummaryField label={t('Task ID')} cell={cells.get('mj_id')} />
         <SummaryField
-          label={t("Duration")}
-          cell={cells.get("duration")}
+          label={t('Duration')}
+          cell={cells.get('duration')}
           primaryOnly
         />
-        <SummaryField label={t("Image")} cell={cells.get("image_url")} />
+        <SummaryField label={t('Image')} cell={cells.get('image_url')} />
         <SummaryField
-          label={t("Prompt")}
-          cell={cells.get("prompt")}
+          label={t('Prompt')}
+          cell={cells.get('prompt')}
           primaryOnly
         />
         <SummaryField
-          label={t("Fail Reason")}
-          cell={cells.get("fail_reason")}
-          className="col-span-2 bg-transparent px-0 py-0"
+          label={t('Fail Reason')}
+          cell={cells.get('fail_reason')}
+          className='col-span-2 bg-transparent px-0 py-0'
         />
       </div>
     </div>
-  );
+  )
 }
 
 export function UsageLogsMobileList<TData>({
@@ -469,63 +243,74 @@ export function UsageLogsMobileList<TData>({
   emptyDescription,
   logCategory,
 }: UsageLogsMobileListProps<TData>) {
-  const { t } = useTranslation();
+  const { t } = useTranslation()
 
-  const resolvedEmptyTitle = emptyTitle ?? t("No Logs Found");
+  const resolvedEmptyTitle = emptyTitle ?? t('No Logs Found')
   const resolvedEmptyDescription =
     emptyDescription ??
-    t(
-      "No usage logs available. Logs will appear here once API calls are made.",
-    );
+    t('No usage logs available. Logs will appear here once API calls are made.')
 
   if (isLoading) {
-    return <UsageLogsMobileSkeleton />;
+    return <UsageLogsMobileSkeleton separate={logCategory === 'common'} />
   }
 
-  const rows = table.getRowModel().rows;
+  const rows = table.getRowModel().rows
 
   if (!rows || rows.length === 0) {
     return (
-      <div className="rounded-lg border p-6">
-        <Empty className="border-none p-0">
+      <div className='rounded-lg border p-6'>
+        <Empty className='border-none p-0'>
           <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Database className="size-6" />
+            <EmptyMedia variant='icon'>
+              <Database className='size-6' />
             </EmptyMedia>
             <EmptyTitle>{resolvedEmptyTitle}</EmptyTitle>
             <EmptyDescription>{resolvedEmptyDescription}</EmptyDescription>
           </EmptyHeader>
         </Empty>
       </div>
-    );
+    )
   }
 
   return (
-    <div className="border-border/50 bg-card overflow-hidden rounded-lg border">
+    <div
+      className={cn(
+        logCategory === 'common'
+          ? 'min-w-0 space-y-3'
+          : 'border-border/50 bg-card overflow-hidden rounded-lg border'
+      )}
+    >
       {rows.map((row) => {
         const cells = new Map(
-          row.getVisibleCells().map((cell) => [cell.column.id, cell]),
-        );
+          row.getVisibleCells().map((cell) => [cell.column.id, cell])
+        )
 
         const logType = (row.original as Record<string, unknown>).type as
-          number | undefined;
-        const tintClass =
-          logType != null ? (logTypeRowTint[logType] ?? "") : "";
+          | number
+          | undefined
+        const tintClass = logType != null ? (logTypeRowTint[logType] ?? '') : ''
 
         return (
           <div
             key={row.id}
             className={cn(
-              "border-border/40 border-b border-l-2 border-l-transparent p-3 transition-colors last:border-b-0",
-              tintClass,
+              logCategory === 'common'
+                ? 'border-border/60 bg-card min-w-0 rounded-xl border p-3.5'
+                : 'border-border/40 border-b border-l-2 border-l-transparent p-3 transition-colors last:border-b-0',
+              tintClass
             )}
           >
-            {logCategory === "common" && <CommonLogsCard cells={cells} />}
-            {logCategory === "task" && <TaskLogsCard cells={cells} />}
-            {logCategory === "drawing" && <DrawingLogsCard cells={cells} />}
+            {logCategory === 'common' && (
+              <CommonLogMobileCard
+                log={row.original as UsageLog}
+                cells={cells}
+              />
+            )}
+            {logCategory === 'task' && <TaskLogsCard cells={cells} />}
+            {logCategory === 'drawing' && <DrawingLogsCard cells={cells} />}
           </div>
-        );
+        )
       })}
     </div>
-  );
+  )
 }

@@ -1,3 +1,4 @@
+import { useUpdateOption } from '../hooks/use-update-option'
 import type { SiteSettings as GeneralSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
 import { ChannelAffinitySection } from './channel-affinity'
@@ -25,6 +26,10 @@ const GENERAL_SECTIONS = [
           About: settings.About,
           HomePageContent: settings.HomePageContent,
           ServerAddress: settings.ServerAddress,
+          TaskPublicAddress: settings.TaskPublicAddress,
+          general_setting: {
+            docs_link: settings['general_setting.docs_link'],
+          },
           legal: {
             user_agreement: settings['legal.user_agreement'],
             privacy_policy: settings['legal.privacy_policy'],
@@ -41,16 +46,16 @@ const GENERAL_SECTIONS = [
       <QuotaSettingsSection
         defaultValues={{
           QuotaForNewUser: settings.QuotaForNewUser,
-          PreConsumedQuota: settings.PreConsumedQuota,
           QuotaForInviter: settings.QuotaForInviter,
           QuotaForInvitee: settings.QuotaForInvitee,
           TopUpLink: settings.TopUpLink,
-          general_setting: {
-            docs_link: settings['general_setting.docs_link'],
-          },
           quota_setting: {
             enable_free_model_pre_consume:
               settings['quota_setting.enable_free_model_pre_consume'],
+            trust_quota_usd:
+              (settings as Record<string, any>)['quota_setting.trust_quota_usd'] ?? 10,
+            pre_consume_multiplier:
+              (settings as Record<string, any>)['quota_setting.pre_consume_multiplier'] ?? 1,
           },
         }}
       />
@@ -138,25 +143,26 @@ const GENERAL_SECTIONS = [
     titleKey: 'Channel Affinity',
     descriptionKey: 'Configure channel affinity (sticky routing) rules',
     build: (settings: GeneralSettings) => (
-      <ChannelAffinitySection
-        defaultValues={{
-          'channel_affinity_setting.enabled':
-            settings['channel_affinity_setting.enabled'],
-          'channel_affinity_setting.switch_on_success':
-            settings['channel_affinity_setting.switch_on_success'],
-          'channel_affinity_setting.keep_on_channel_disabled':
-            settings['channel_affinity_setting.keep_on_channel_disabled'],
-          'channel_affinity_setting.max_entries':
-            settings['channel_affinity_setting.max_entries'],
-          'channel_affinity_setting.default_ttl_seconds':
-            settings['channel_affinity_setting.default_ttl_seconds'],
-          'channel_affinity_setting.rules':
-            settings['channel_affinity_setting.rules'],
-        }}
-      />
+      <ChannelAffinitySectionWrapper settings={settings} />
     ),
   },
 ] as const
+
+function ChannelAffinitySectionWrapper(props: { settings: GeneralSettings }) {
+  const updateOption = useUpdateOption()
+  return (
+    <ChannelAffinitySection
+      rulesJson={props.settings['channel_affinity_setting.rules'] || '[]'}
+      onRulesChange={(rules) => {
+        updateOption.mutate({
+          key: 'channel_affinity_setting.rules',
+          value: rules,
+        })
+      }}
+      enabled={props.settings['channel_affinity_setting.enabled']}
+    />
+  )
+}
 
 export type GeneralSectionId = (typeof GENERAL_SECTIONS)[number]['id']
 

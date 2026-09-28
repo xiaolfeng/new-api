@@ -3,7 +3,6 @@ package relay
 import (
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,7 +10,6 @@ import (
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/logger"
 	"github.com/QuantumNous/new-api/relay/bamboo"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	relayconstant "github.com/QuantumNous/new-api/relay/constant"
@@ -94,17 +92,6 @@ func markResponsesToChatCompletionsFallback(info *relaycommon.RelayInfo) {
 }
 
 func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
-	info.InitChannelMeta(c)
-	if info.RelayMode == relayconstant.RelayModeResponsesCompact &&
-		!common.SupportsResponsesCompact(info.ChannelType, info.ApiType) {
-		return types.NewErrorWithStatusCode(
-			fmt.Errorf("unsupported endpoint %q for api type %d", "/v1/responses/compact", info.ApiType),
-			types.ErrorCodeInvalidRequest,
-			http.StatusBadRequest,
-			types.ErrOptionWithSkipRetry(),
-		)
-	}
-
 	var responsesReq *dto.OpenAIResponsesRequest
 	switch req := info.Request.(type) {
 	case *dto.OpenAIResponsesRequest:
@@ -135,41 +122,21 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 		)
 	}
 
-	request, err := common.DeepCopy(responsesReq)
-	if err != nil {
-		return types.NewError(fmt.Errorf("failed to copy request to GeneralOpenAIRequest: %w", err), types.ErrorCodeInvalidRequest, types.ErrOptionWithSkipRetry())
-	}
-
-	err = helper.ModelMappedHelper(c, info, request)
-	if err != nil {
-		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
-	}
-
-	// Responses→ChatCompletions 旁路：无论 bamboo 开关都走原生。
-	// 这个旁路依赖 adaptor 错误探测，bamboo 路径无法替代，必须保留。
-	passThroughGlobal := model_setting.GetGlobalSettings().PassThroughRequestEnabled
-	if info.RelayMode != relayconstant.RelayModeResponsesCompact &&
-		!passThroughGlobal &&
-		!info.ChannelSetting.PassThroughBodyEnabled &&
-		shouldResponsesUseChatCompletionsCached(info) {
-		return originalResponsesRelay(c, info, request, responsesReq)
-	}
-
 	// bamboo 中继桥：灰度开启时由 bamboo 替代协议转换三段式内核
-	if model_setting.GetBambooSettings().EnableBambooRelay {
+	if model_setting.GetBambooSettings().EnableBambooRelay && info.RelayMode != relayconstant.RelayModeResponsesCompact {
 		// 归一化第三方扩展 effort（max→xhigh）：qwen 等上游只接受
 		// none/minimal/low/medium/high/xhigh，直接透传 "max" 会被拒绝。
-		if request.Reasoning != nil && request.Reasoning.Effort != "" {
-			request.Reasoning.Effort = reasoning.NormalizeEffort(request.Reasoning.Effort)
+		if responsesReq.Reasoning != nil && responsesReq.Reasoning.Effort != "" {
+			responsesReq.Reasoning.Effort = reasoning.NormalizeEffort(responsesReq.Reasoning.Effort)
 		}
-		bodyBytes, mErr := common.Marshal(request)
+		bodyBytes, mErr := common.Marshal(responsesReq)
 		if mErr != nil {
 			return types.NewError(mErr, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
 		}
 		usage, relayErr := bamboo.ChatRelay(c, info, types.RelayFormatOpenAIResponses, bodyBytes)
 		if relayErr != nil {
 			if errors.Is(relayErr, bamboo.ErrUnsupportedProvider) {
-				return originalResponsesRelay(c, info, request, responsesReq)
+				return originalResponsesRelay(c, info, responsesReq)
 			}
 			if usage != nil {
 				// 失败但已收到部分交付：按实际用量结算（脱敏 + relay_error 标记），
@@ -179,26 +146,15 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 			}
 			return relayErr
 		}
-		postResponsesUsageQuota(c, info, usage)
+		ConsumeResponsesQuota(c, info, usage)
 		return nil
 	}
 
-	return originalResponsesRelay(c, info, request, responsesReq)
+	return originalResponsesRelay(c, info, responsesReq)
 }
 
 // originalResponsesRelay 是 new-api 原生三段式中继，作为 bamboo 未覆盖渠道的 fallback。
-//
-// 含 ConvertOpenAIResponsesRequest→DoRequest→DoResponse 完整三段式，
-// 以及 Responses→ChatCompletions 动态降级（错误探测）机制。
-// bamboo 灰度关闭或 ErrUnsupportedProvider 时调用，行为与改造前完全一致。
-func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
-	request *dto.OpenAIResponsesRequest, responsesReq *dto.OpenAIResponsesRequest) (newAPIError *types.NewAPIError) {
-	adaptor := GetAdaptor(info.ApiType)
-	if adaptor == nil {
-		return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
-	}
-	adaptor.Init(info)
-
+func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo, responsesReq *dto.OpenAIResponsesRequest) (newAPIError *types.NewAPIError) {
 	// Responses→ChatCompletions conversion: prefer native Responses, and only
 	// route directly through Chat Completions when a recent unsupported probe
 	// has already established that this channel/model needs the compatibility path.
@@ -211,66 +167,34 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		!passThroughGlobal &&
 		!info.ChannelSetting.PassThroughBodyEnabled &&
 		shouldResponsesUseChatCompletionsCached(info) {
+		adaptor := GetAdaptor(info.ApiType)
+		if adaptor == nil {
+			return types.NewError(fmt.Errorf("invalid api type: %d", info.ApiType), types.ErrorCodeInvalidApiType, types.ErrOptionWithSkipRetry())
+		}
+		adaptor.Init(info)
 		usage, newApiErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
 		if newApiErr != nil {
 			return newApiErr
 		}
 
-		postResponsesUsageQuota(c, info, usage)
+		ConsumeResponsesQuota(c, info, usage)
 		return nil
 	}
 
-	var requestBody io.Reader
-	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
-		storage, err := common.GetBodyStorage(c)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeReadRequestBodyFailed, types.ErrOptionWithSkipRetry())
-		}
-		requestBody = common.NewReplayableBodyReader(storage)
-	} else {
-		convertedRequest, err := adaptor.ConvertOpenAIResponsesRequest(c, info, *request)
-		if err != nil {
-			newAPIError = types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-			if responsesToChatFallbackEnabled && isResponsesToChatFallbackCandidate(newAPIError) {
-				usage, fallbackErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
-				if fallbackErr != nil {
-					return fallbackErr
-				}
-				markResponsesToChatCompletionsFallback(info)
-				postResponsesUsageQuota(c, info, usage)
-				return nil
+	adaptor, requestBody, closer, apiErr := PrepareResponsesRequest(c, info, responsesReq)
+	if apiErr != nil {
+		if responsesToChatFallbackEnabled && isResponsesToChatFallbackCandidate(apiErr) {
+			usage, fallbackErr := responsesViaChatCompletions(c, info, adaptor, responsesReq)
+			if fallbackErr != nil {
+				return fallbackErr
 			}
-			return newAPIError
+			markResponsesToChatCompletionsFallback(info)
+			ConsumeResponsesQuota(c, info, usage)
+			return nil
 		}
-		relaycommon.AppendRequestConversionFromRequest(info, convertedRequest)
-		jsonData, err := common.Marshal(convertedRequest)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-
-		// remove disabled fields for OpenAI Responses API
-		jsonData, err = relaycommon.RemoveDisabledFields(jsonData, info.ChannelOtherSettings, info.ChannelSetting.PassThroughBodyEnabled)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-
-		// apply param override
-		if len(info.ParamOverride) > 0 {
-			jsonData, err = relaycommon.ApplyParamOverrideWithRelayInfo(jsonData, info)
-			if err != nil {
-				return newAPIErrorFromParamOverride(err)
-			}
-		}
-
-		logger.LogDebug(c, "requestBody: %s", jsonData)
-		body, closer, err := relaycommon.NewOutboundJSONBody(jsonData)
-		if err != nil {
-			return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
-		}
-		defer closer.Close()
-		jsonData = nil
-		requestBody = body
+		return apiErr
 	}
+	defer closer.Close()
 
 	var httpResp *http.Response
 	resp, err := adaptor.DoRequest(c, info, requestBody)
@@ -282,7 +206,7 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 				return fallbackErr
 			}
 			markResponsesToChatCompletionsFallback(info)
-			postResponsesUsageQuota(c, info, usage)
+			ConsumeResponsesQuota(c, info, usage)
 			return nil
 		}
 		return newAPIError
@@ -303,7 +227,7 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 					return fallbackErr
 				}
 				markResponsesToChatCompletionsFallback(info)
-				postResponsesUsageQuota(c, info, usage)
+				ConsumeResponsesQuota(c, info, usage)
 				return nil
 			}
 			return newAPIError
@@ -335,11 +259,13 @@ func originalResponsesRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		return nil
 	}
 
-	postResponsesUsageQuota(c, info, usageDto)
+	ConsumeResponsesQuota(c, info, usageDto)
 	return nil
 }
 
-func postResponsesUsageQuota(c *gin.Context, info *relaycommon.RelayInfo, usageDto *dto.Usage) {
+// ConsumeResponsesQuota applies the same settlement dispatch to HTTP and
+// WebSocket Responses usage. Compact requests keep their separate repricing.
+func ConsumeResponsesQuota(c *gin.Context, info *relaycommon.RelayInfo, usageDto *dto.Usage) {
 	if usageDto == nil {
 		usageDto = &dto.Usage{}
 	}

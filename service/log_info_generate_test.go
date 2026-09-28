@@ -27,16 +27,17 @@ func TestAppendUsageActivityTagsFromSuccessfulHostToolsAndImageRecognize(t *test
 			ImageCount: 2,
 		},
 	}
-	other := map[string]interface{}{}
+	other := model.NewLogOther()
 	appendUsageActivityTags(info, other)
+	snap := other.Snapshot()
 
-	require.Equal(t, []string{"web_search", "web_fetch", "image_recognize"}, other["usage_tags"])
-	assert.Equal(t, true, other["web_search"])
-	assert.Equal(t, 1, other["web_search_call_count"])
-	assert.Equal(t, true, other["web_fetch"])
-	assert.Equal(t, 1, other["web_fetch_call_count"])
-	assert.Equal(t, true, other["image_recognize"])
-	assert.Equal(t, 2, other["image_recognize_image_count"])
+	require.Equal(t, []string{"web_search", "web_fetch", "image_recognize"}, snap["usage_tags"])
+	assert.Equal(t, true, snap["web_search"])
+	assert.Equal(t, 1, snap["web_search_call_count"])
+	assert.Equal(t, true, snap["web_fetch"])
+	assert.Equal(t, 1, snap["web_fetch_call_count"])
+	assert.Equal(t, true, snap["image_recognize"])
+	assert.Equal(t, 2, snap["image_recognize_image_count"])
 }
 
 func TestAppendUsageActivityTagsUsesBuiltInSearchCount(t *testing.T) {
@@ -47,12 +48,13 @@ func TestAppendUsageActivityTagsUsesBuiltInSearchCount(t *testing.T) {
 			},
 		},
 	}
-	other := map[string]interface{}{}
+	other := model.NewLogOther()
 	appendUsageActivityTags(info, other)
-	assert.Equal(t, []string{"web_search"}, other["usage_tags"])
-	assert.Equal(t, 3, other["web_search_call_count"])
-	assert.NotContains(t, other, "web_fetch")
-	assert.NotContains(t, other, "image_recognize")
+	snap := other.Snapshot()
+	assert.Equal(t, []string{"web_search"}, snap["usage_tags"])
+	assert.Equal(t, 3, snap["web_search_call_count"])
+	assert.NotContains(t, snap, "web_fetch")
+	assert.NotContains(t, snap, "image_recognize")
 }
 
 func TestAppendUsageActivityTagsSkipsFailedOrDisabled(t *testing.T) {
@@ -67,28 +69,31 @@ func TestAppendUsageActivityTagsSkipsFailedOrDisabled(t *testing.T) {
 			SkippedReason: relaycommon.ImageRecognizeSkipNoLatestUserImage,
 		},
 	}
-	other := map[string]interface{}{}
+	other := model.NewLogOther()
 	appendUsageActivityTags(info, other)
-	assert.NotContains(t, other, "usage_tags")
-	assert.NotContains(t, other, "web_fetch")
-	assert.NotContains(t, other, "image_recognize")
+	snap := other.Snapshot()
+	assert.NotContains(t, snap, "usage_tags")
+	assert.NotContains(t, snap, "web_fetch")
+	assert.NotContains(t, snap, "image_recognize")
 }
 
 func TestAppendClientProfileAdminInfo(t *testing.T) {
-	admin := map[string]interface{}{}
+	admin := model.NewLogOther()
 	appendClientProfileAdminInfo(&relaycommon.RelayInfo{
 		ClientProfile:    common.ClientProfileClaudeCode,
 		ClientProfileHit: "claude-cli",
 	}, admin)
-	assert.Equal(t, "claude_code", admin["client_profile"])
-	assert.Equal(t, "claude-cli", admin["client_profile_hit"])
-	assert.NotContains(t, admin, "return_profile")
+	adminMap := admin.Snapshot()["admin_info"].(map[string]any)
+	assert.Equal(t, "claude_code", adminMap["client_profile"])
+	assert.Equal(t, "claude-cli", adminMap["client_profile_hit"])
+	assert.NotContains(t, adminMap, "return_profile")
 
-	empty := map[string]interface{}{}
+	empty := model.NewLogOther()
 	appendClientProfileAdminInfo(&relaycommon.RelayInfo{ClientProfile: common.ClientProfileGeneric}, empty)
-	assert.Equal(t, "generic", empty["client_profile"])
-	assert.NotContains(t, empty, "client_profile_hit")
-	assert.NotContains(t, empty, "return_profile")
+	emptyMap := empty.Snapshot()["admin_info"].(map[string]any)
+	assert.Equal(t, "generic", emptyMap["client_profile"])
+	assert.NotContains(t, emptyMap, "client_profile_hit")
+	assert.NotContains(t, emptyMap, "return_profile")
 }
 
 func TestBuildTokenRecordTiming(t *testing.T) {

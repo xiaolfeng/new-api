@@ -19,6 +19,7 @@ const defaultGeneralSettings: SiteSettings = {
   About: '',
   HomePageContent: '',
   ServerAddress: '',
+  TaskPublicAddress: '',
   'legal.user_agreement': '',
   'legal.privacy_policy': '',
   QuotaForNewUser: 0,

@@ -16,9 +16,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
+import {
+  CrownIcon,
+  Wallet01Icon,
+  Wrench01Icon,
+} from '@hugeicons/core-free-icons'
+import { HugeiconsIcon } from '@hugeicons/react'
 import { useTranslation } from 'react-i18next'
 
 import { StatusBadge } from '@/components/status-badge'
+import { Badge } from '@/components/ui/badge'
 import {
   Tooltip,
   TooltipContent,
@@ -27,65 +34,108 @@ import {
 } from '@/components/ui/tooltip'
 import { formatLogQuota } from '@/lib/format'
 
+import { hasToolSurcharge } from '../lib/format'
 import type { LogOtherData } from '../types'
 
 interface LogCostDisplayProps {
   quota: number
   other: LogOtherData | null
+  showBillingSource?: boolean
 }
 
-function splitQuotaDisplay(value: string): { prefix: string; amount: string } {
-  const match = value.match(/^([^0-9+\-.,\s]+)(.+)$/)
-  if (!match) return { prefix: '', amount: value }
-  return { prefix: match[1], amount: match[2] }
-}
-
-function QuotaBadge(props: { quota: number }) {
-  const quotaDisplay = splitQuotaDisplay(formatLogQuota(props.quota))
-
-  return (
-    <span className='border-border/80 bg-muted/60 inline-flex h-6 w-fit items-center rounded-md border px-2 [font-family:var(--font-body)] text-sm leading-none font-semibold tabular-nums'>
-      {quotaDisplay.prefix ? (
-        <span className='mr-1'>{quotaDisplay.prefix}</span>
-      ) : null}
-      <span>{quotaDisplay.amount}</span>
-    </span>
-  )
-}
-
-function SubscriptionBadge(props: { quota: number }) {
+function ToolSurchargeMarker() {
   const { t } = useTranslation()
+  const label = t('Includes tool-call surcharge')
 
   return (
     <Tooltip>
       <TooltipTrigger
         render={
-          <StatusBadge
-            label={t('Subscription')}
-            variant='success'
-            size='sm'
-            copyable={false}
-            className='cursor-help'
-          />
+          <Badge
+            variant='warning'
+            className='h-5 min-w-5 cursor-help gap-0 rounded-full px-1'
+            role='img'
+            aria-label={label}
+            tabIndex={0}
+            data-tool-surcharge-indicator='true'
+          >
+            <HugeiconsIcon
+              icon={Wrench01Icon}
+              strokeWidth={2}
+              aria-hidden='true'
+            />
+            <span
+              className='text-[9px] leading-none font-bold'
+              aria-hidden='true'
+            >
+              +
+            </span>
+          </Badge>
         }
       />
-      <TooltipContent>
-        <span>
-          {t('Deducted by subscription')}: {formatLogQuota(props.quota)}
-        </span>
-      </TooltipContent>
+      <TooltipContent>{label}</TooltipContent>
     </Tooltip>
   )
 }
 
 export function LogCostDisplay(props: LogCostDisplayProps) {
-  if (props.other?.billing_source !== 'subscription') {
-    return <QuotaBadge quota={props.quota} />
+  const { t } = useTranslation()
+  const isSubscription = props.other?.billing_source === 'subscription'
+  const showToolSurcharge = hasToolSurcharge(props.other)
+  const quota = isSubscription
+    ? (props.other?.subscription_consumed ?? props.quota)
+    : props.quota
+  let source: string | undefined
+
+  // A log billed to a subscription always names its funding source: that
+  // subscription may have expired since, and the viewer may hold no active
+  // plan today. Only the wallet marker is contextual and follows
+  // showBillingSource.
+  if (isSubscription) {
+    source = t('Subscription')
+  } else if (
+    props.showBillingSource &&
+    props.other?.billing_source === 'wallet'
+  ) {
+    source = t('Wallet')
   }
 
   return (
     <TooltipProvider>
-      <SubscriptionBadge quota={props.quota} />
+      <div className='inline-flex w-fit items-center gap-1.5'>
+        <StatusBadge
+          type='badge'
+          variant='neutral'
+          size='lg'
+          copyable={false}
+          className='border-border/80 bg-muted/60 text-foreground rounded-md border font-semibold tabular-nums'
+        >
+          {source ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <span
+                    className='inline-flex shrink-0 cursor-help'
+                    role='img'
+                    aria-label={source}
+                    tabIndex={0}
+                  >
+                    <HugeiconsIcon
+                      icon={isSubscription ? CrownIcon : Wallet01Icon}
+                      className='size-3.5'
+                      strokeWidth={2}
+                      aria-hidden='true'
+                    />
+                  </span>
+                }
+              />
+              <TooltipContent>{source}</TooltipContent>
+            </Tooltip>
+          ) : null}
+          <span className='whitespace-nowrap'>{formatLogQuota(quota)}</span>
+        </StatusBadge>
+        {showToolSurcharge ? <ToolSurchargeMarker /> : null}
+      </div>
     </TooltipProvider>
   )
 }

@@ -203,6 +203,9 @@ func attachToolLogChannelNames(logs []*ToolLog) {
 }
 
 func CountOldToolLog(ctx context.Context, targetTimestamp int64) (int64, error) {
+	if !LOG_DB.Migrator().HasTable(&ToolLog{}) {
+		return 0, nil
+	}
 	var total int64
 	if err := LOG_DB.WithContext(ctx).Model(&ToolLog{}).Where("created_at < ?", targetTimestamp).Count(&total).Error; err != nil {
 		return 0, err
@@ -211,6 +214,9 @@ func CountOldToolLog(ctx context.Context, targetTimestamp int64) (int64, error) 
 }
 
 func deleteOldToolLogBatch(ctx context.Context, targetTimestamp int64, limit int) (int64, error) {
+	if !LOG_DB.Migrator().HasTable(&ToolLog{}) {
+		return 0, nil
+	}
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		total, err := CountOldToolLog(ctx, targetTimestamp)
 		if err != nil {
