@@ -11,6 +11,7 @@ const (
 	ClientProfileCodex      ClientProfile = "codex"
 	ClientProfileOpenCode   ClientProfile = "opencode"
 	ClientProfileZCode      ClientProfile = "zcode"
+	ClientProfilePi         ClientProfile = "pi"
 	ClientProfileGeneric    ClientProfile = "generic"
 )
 
@@ -21,6 +22,7 @@ const (
 	ClientSourceCodex      = "Codex"
 	ClientSourceOpenCode   = "OpenCode"
 	ClientSourceZCode      = "ZCode"
+	ClientSourcePi         = "Pi"
 )
 
 // ClientIdentity 是一次 UA / 头匹配的结果。
@@ -59,6 +61,9 @@ var namedClientTokens = []namedClientToken{
 	{token: "opencode/", profile: ClientProfileOpenCode, source: ClientSourceOpenCode},
 	{token: "crush/", profile: ClientProfileOpenCode, source: ClientSourceOpenCode},
 	{token: "zcode/", profile: ClientProfileZCode, source: ClientSourceZCode},
+	{token: "pi (", profile: ClientProfilePi, source: ClientSourcePi},
+	{token: "pi/", profile: ClientProfilePi, source: ClientSourcePi},
+	{token: "pi-coding-agent", profile: ClientProfilePi, source: ClientSourcePi},
 }
 
 const grokClientIdentifierHeader = "x-grok-client-identifier"
@@ -101,6 +106,13 @@ func matchNamedClientToken(raw string) ClientIdentity {
 	folded := strings.ToLower(strings.TrimSpace(raw))
 	if folded == "" {
 		return ClientIdentity{Profile: ClientProfileGeneric}
+	}
+	if folded == "pi" || strings.HasPrefix(folded, "pi ") || strings.HasPrefix(folded, "pi/") || strings.HasPrefix(folded, "pi(") {
+		return ClientIdentity{
+			Profile: ClientProfilePi,
+			Source:  ClientSourcePi,
+			Hit:     "pi",
+		}
 	}
 	for _, item := range namedClientTokens {
 		if strings.Contains(folded, item.token) {

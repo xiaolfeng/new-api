@@ -3,6 +3,8 @@ package hosttool
 import (
 	"testing"
 
+	bamboosdk "github.com/bamboo-services/bamboo-messages/bamboo"
+	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
 	"github.com/QuantumNous/new-api/common"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/setting/model_setting"
@@ -76,3 +78,34 @@ func TestSuppressHostToolEcho(t *testing.T) {
 }
 
 func boolPtr(v bool) *bool { return &v }
+
+func TestBuildHop2Request_PopulatesToolName(t *testing.T) {
+	req := &bamboocodec.RelayRequest{
+		Messages: []bamboosdk.BambooMessage{
+			bamboosdk.NewUserMessage("hello"),
+		},
+	}
+	hop1 := []bamboosdk.ContentBlock{
+		bamboosdk.NewToolUseBlock("call_1", "WebSearch", nil),
+	}
+	results := []ExecResult{
+		{Kind: "search", OriginalName: "WebSearch", Query: "test query"},
+	}
+	uses := []toolUseCall{
+		{ID: "call_1", Name: "WebSearch"},
+	}
+
+	hop2Req := BuildHop2Request(req, hop1, results, uses)
+	assert.NotNil(t, hop2Req)
+	assert.Len(t, hop2Req.Messages, 3)
+
+	lastMsg := hop2Req.Messages[2]
+	assert.Equal(t, bamboosdk.RoleUser, lastMsg.Role)
+	assert.Len(t, lastMsg.Content, 1)
+
+	trb, ok := lastMsg.Content[0].(*bamboosdk.ToolResultBlock)
+	assert.True(t, ok)
+	assert.Equal(t, "call_1", trb.ToolUseID)
+	assert.Equal(t, "WebSearch", trb.ToolName)
+}
+

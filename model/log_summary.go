@@ -69,7 +69,7 @@ func ExtractLogDetailSummaries(record string) (string, string, string, string, s
 
 func IsDeveloperToolLogSource(source string) bool {
 	switch strings.TrimSpace(source) {
-	case "Claude Code", "Codex", "OpenCode", "ZCode", "Grok Build":
+	case "Claude Code", "Codex", "OpenCode", "ZCode", "Grok Build", "Pi":
 		return true
 	default:
 		return false
@@ -123,6 +123,21 @@ func parseAgentSessionFromHeaders(headers map[string]string, source string) (age
 		sessionId = getHeaderIgnoreCase(headers, "X-Grok-Session-Id")
 		return "", sessionId, parentSessionId
 	}
+	// Pi: X-Client-Request-Id 是权威匹配的 Session ID
+	if source == "Pi" {
+		sessionId = getHeaderIgnoreCase(headers, "X-Client-Request-Id")
+		if sessionId == "" {
+			sessionId = getHeaderIgnoreCase(headers, "X-Session-Affinity")
+		}
+		if sessionId == "" {
+			sessionId = getHeaderIgnoreCase(headers, "X-Session-Id")
+		}
+		parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Session-Id")
+		if parentSessionId == "" {
+			parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Request-Id")
+		}
+		return "", sessionId, parentSessionId
+	}
 	// OpenCode headers (highest priority)
 	sessionId = getHeaderIgnoreCase(headers, "X-Session-Affinity")
 	parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Session-Id")
@@ -130,11 +145,33 @@ func parseAgentSessionFromHeaders(headers map[string]string, source string) (age
 	if sessionId == "" {
 		sessionId = getHeaderIgnoreCase(headers, "X-Claude-Code-Session-Id")
 	}
+	// X-Client-Request-Id 作为权威匹配的通用 Session（适用于 Pi 及主流 Agent/SDK）
+	if sessionId == "" {
+		sessionId = getHeaderIgnoreCase(headers, "X-Client-Request-Id")
+	}
+	// 通用 Agent 多轮会话标识
+	if sessionId == "" {
+		sessionId = getHeaderIgnoreCase(headers, "X-Conversation-Id")
+	}
 	// Generic session header (lowest priority, any client can opt in)
 	if sessionId == "" {
 		sessionId = getHeaderIgnoreCase(headers, "X-Session-Id")
 	}
+	if sessionId == "" {
+		sessionId = getHeaderIgnoreCase(headers, "Session-Id")
+	}
+
+	if parentSessionId == "" {
+		parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Request-Id")
+	}
+	if parentSessionId == "" {
+		parentSessionId = getHeaderIgnoreCase(headers, "X-Parent-Client-Request-Id")
+	}
+
 	agentId = getHeaderIgnoreCase(headers, "X-Claude-Code-Agent-Id")
+	if agentId == "" {
+		agentId = getHeaderIgnoreCase(headers, "X-Agent-Id")
+	}
 	return agentId, sessionId, parentSessionId
 }
 
@@ -173,6 +210,8 @@ func parseClientSource(userAgent string) string {
 	ua := strings.ToLower(userAgent)
 
 	switch {
+	case ua == "pi", strings.HasPrefix(ua, "pi "), strings.HasPrefix(ua, "pi/"), strings.HasPrefix(ua, "pi("), strings.Contains(ua, "pi-coding-agent"):
+		return "Pi"
 	case strings.Contains(ua, "cherrystudio/"):
 		return "Cherry Studio"
 	case strings.Contains(ua, "cursor/"):

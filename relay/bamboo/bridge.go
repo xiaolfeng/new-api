@@ -117,6 +117,14 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		relayReq.IsStream = true
 	}
 
+	// 跨协议调用 Anthropic 上游时，若未指定 max_tokens，优先从系统 ClaudeSettings 注入配置值，
+	// 若未配置或 <= 0，bamboo SDK v1.0.14 会安全回退为 4096。
+	if relayReq.Config.MaxTokens <= 0 && resolveUpstreamRelayFormat(info) == types.RelayFormatClaude {
+		if def := model_setting.GetClaudeSettings().GetDefaultMaxTokens(relayReq.Config.Model); def > 0 {
+			relayReq.Config.MaxTokens = int64(def)
+		}
+	}
+
 	info.BambooRelayData = extractBambooRelayData(relayReq)
 
 	var cs *clientStream

@@ -11,6 +11,15 @@ export function parseClientSource(userAgent: string): ParsedSource {
   const ua = userAgent.toLowerCase()
 
   // AI coding assistants
+  if (
+    ua === 'pi' ||
+    ua.startsWith('pi ') ||
+    ua.startsWith('pi/') ||
+    ua.startsWith('pi(') ||
+    ua.includes('pi-coding-agent')
+  ) {
+    return { name: 'Pi', color: getSourceColor('Pi') }
+  }
   if (ua.includes('claude-cli'))
     return { name: 'Claude Code', color: getSourceColor('Claude Code') }
   if (

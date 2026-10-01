@@ -581,6 +581,42 @@ func TestExtractLogDetailSummariesWithCodexParentThread(t *testing.T) {
 	require.Equal(t, "thread_parent", parentSessionId)
 }
 
+func TestExtractLogDetailSummariesWithPiAgentAndClientRequestId(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":          "pi (darwin 27.0.0; arm64)",
+			"X-Client-Request-Id": "01a0f589-5137-70c7-b0c4-1a84df321d4d",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Hello Pi"},
+		},
+	})
+	require.NoError(t, err)
+
+	source, _, _, sessionId, parentSessionId := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "Pi", source)
+	require.Equal(t, "01a0f589-5137-70c7-b0c4-1a84df321d4d", sessionId)
+	require.Empty(t, parentSessionId)
+}
+
+func TestExtractLogDetailSummariesWithGenericClientRequestId(t *testing.T) {
+	recordBytes, err := common.Marshal(LogDetailRecord{
+		Headers: map[string]string{
+			"User-Agent":          "my-agent/1.0",
+			"X-Client-Request-Id": "req-uuid-9876",
+			"X-Session-Id":        "generic-session",
+		},
+		OpenAIRequestBlocks: []OpenAIRequestBlock{
+			{Type: "text", Role: "user", Text: "Hello Agent"},
+		},
+	})
+	require.NoError(t, err)
+
+	// X-Client-Request-Id 具有权威性，排在通用的 X-Session-Id 前面
+	_, _, _, sessionId, _ := ExtractLogDetailSummaries(string(recordBytes))
+	require.Equal(t, "req-uuid-9876", sessionId)
+}
+
 func TestInferOpenAIStructuredInteractionType(t *testing.T) {
 	tests := []struct {
 		name           string

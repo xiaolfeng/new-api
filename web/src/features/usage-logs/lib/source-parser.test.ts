@@ -12,6 +12,11 @@ describe('parseClientSource', () => {
   })
 
   // AI coding assistants
+  it('detects Pi Agent', () => {
+    expect(parseClientSource('pi (darwin 27.0.0; arm64)').name).toBe('Pi')
+    expect(parseClientSource('pi/0.99.2').name).toBe('Pi')
+    expect(parseClientSource('pi-coding-agent/0.99.2').name).toBe('Pi')
+  })
   it('detects Claude Code', () => {
     expect(parseClientSource('Claude-CLI/1.0').name).toBe('Claude Code')
   })

@@ -133,11 +133,20 @@ func BuildHop2Request(req *bamboocodec.RelayRequest, hop1 []bamboosdk.ContentBlo
 	userBlocks := make([]bamboosdk.ContentBlock, 0, len(results))
 	for i, r := range results {
 		id := ""
+		toolName := ""
 		if i < len(uses) {
 			id = uses[i].ID
+			toolName = uses[i].Name
 		}
 		content, isErr := FormatToolResult(r)
-		userBlocks = append(userBlocks, bamboosdk.NewToolResultBlock(id, content, isErr))
+		trb := &bamboosdk.ToolResultBlock{
+			Type:      bamboosdk.ContentBlockToolResult,
+			ToolUseID: id,
+			ToolName:  toolName,
+			Content:   content,
+			IsError:   isErr,
+		}
+		userBlocks = append(userBlocks, trb)
 	}
 	out := *req
 	msgs := make([]bamboosdk.BambooMessage, 0, len(req.Messages)+2)

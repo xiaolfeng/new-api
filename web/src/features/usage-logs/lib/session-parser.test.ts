@@ -171,6 +171,36 @@ describe('parseLogSession', () => {
     })
   })
 
+  it('matches Pi Agent session from X-Client-Request-Id', () => {
+    const log = createLog({
+      record: JSON.stringify({
+        headers: {
+          'User-Agent': 'pi (darwin 27.0.0; arm64)',
+          'X-Client-Request-Id': '01a0f589-5137-70c7-b0c4-1a84df321d4d',
+        },
+      }),
+    })
+
+    expect(parseLogSession(log)).toEqual({
+      sessionId: '01a0f589-5137-70c7-b0c4-1a84df321d4d',
+    })
+  })
+
+  it('matches generic X-Client-Request-Id as authoritative session', () => {
+    const log = createLog({
+      record: JSON.stringify({
+        headers: {
+          'X-Client-Request-Id': 'client-req-uuid-1234',
+          'X-Session-Id': 'fallback-session',
+        },
+      }),
+    })
+
+    expect(parseLogSession(log)).toEqual({
+      sessionId: 'client-req-uuid-1234',
+    })
+  })
+
   it('returns empty session when no headers or summaries exist', () => {
     expect(parseLogSession(createLog({}))).toEqual({})
   })

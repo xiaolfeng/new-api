@@ -147,6 +147,37 @@ func TestMatchClientProfileNamedAgents(t *testing.T) {
 			hit:     "zcode/",
 		},
 		{
+			name:    "pi agent user agent",
+			ua:      "pi (darwin 27.0.0; arm64)",
+			profile: ClientProfilePi,
+			source:  ClientSourcePi,
+			hit:     "pi",
+		},
+		{
+			name:    "pi slash version",
+			ua:      "pi/0.99.2 (darwin; node/v22.19.0; arm64)",
+			profile: ClientProfilePi,
+			source:  ClientSourcePi,
+			hit:     "pi",
+		},
+		{
+			name:    "pi-coding-agent",
+			ua:      "pi-coding-agent/0.99.2",
+			profile: ClientProfilePi,
+			source:  ClientSourcePi,
+			hit:     "pi-coding-agent",
+		},
+		{
+			name:    "copilot is not pi",
+			ua:      "github-copilot/1.2.3",
+			profile: ClientProfileGeneric,
+		},
+		{
+			name:    "api-client is not pi",
+			ua:      "my-api-client/1.0",
+			profile: ClientProfileGeneric,
+		},
+		{
 			name:    "chrome is not grok",
 			ua:      "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
 			profile: ClientProfileGeneric,

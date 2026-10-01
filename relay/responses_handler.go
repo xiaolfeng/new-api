@@ -92,6 +92,17 @@ func markResponsesToChatCompletionsFallback(info *relaycommon.RelayInfo) {
 }
 
 func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *types.NewAPIError) {
+	info.InitChannelMeta(c)
+	if info.RelayMode == relayconstant.RelayModeResponsesCompact &&
+		!common.SupportsResponsesCompact(info.ChannelType, info.ApiType) {
+		return types.NewErrorWithStatusCode(
+			fmt.Errorf("unsupported endpoint %q for api type %d", "/v1/responses/compact", info.ApiType),
+			types.ErrorCodeInvalidRequest,
+			http.StatusBadRequest,
+			types.ErrOptionWithSkipRetry(),
+		)
+	}
+
 	var responsesReq *dto.OpenAIResponsesRequest
 	switch req := info.Request.(type) {
 	case *dto.OpenAIResponsesRequest:
