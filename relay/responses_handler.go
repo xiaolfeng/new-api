@@ -135,6 +135,16 @@ func ResponsesHelper(c *gin.Context, info *relaycommon.RelayInfo) (newAPIError *
 
 	// bamboo 中继桥：灰度开启时由 bamboo 替代协议转换三段式内核
 	if model_setting.GetBambooSettings().EnableBambooRelay && info.RelayMode != relayconstant.RelayModeResponsesCompact {
+		// 模型映射必须在进入 bamboo 前完成：PrepareResponsesRequest 里的
+		// ModelMappedHelper 只服务原生链路，而 bamboo 分支先于它返回。
+		// 缺失这一步时，渠道 model_mapping（如 gemini-3.8-flash → gemini-3.8-flash-high）
+		// 不会作用于上游请求，上游收到未映射原名后报 unknown provider。
+		if err := helper.ModelMappedHelper(c, info, responsesReq); err != nil {
+			return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
+		}
+		if err := helper.ApplyReasoningModelSuffix(c, info, responsesReq); err != nil {
+			return newConvertRequestFailedError(c, info, err)
+		}
 		// 归一化第三方扩展 effort（max→xhigh）：qwen 等上游只接受
 		// none/minimal/low/medium/high/xhigh，直接透传 "max" 会被拒绝。
 		if responsesReq.Reasoning != nil && responsesReq.Reasoning.Effort != "" {
