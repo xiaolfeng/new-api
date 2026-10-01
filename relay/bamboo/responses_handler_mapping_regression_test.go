@@ -2,7 +2,6 @@ package bamboo_test
 
 import (
 	"encoding/json"
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -19,23 +18,23 @@ import (
 )
 
 // TestResponsesHelperBambooBranchSendsMappedModel 直接驱动 /v1/responses 的
-// ResponsesHelper：渠道配置 model_mapping 且 bamboo 中继开启时，上游收到的
-// 请求体必须携带映射后的模型名。
+// ResponsesHelper，回归生产事故「unknown provider for model gemini-3.8-flash」：
 //
-// 回归背景：bamboo 分支曾先于 ModelMappedHelper 执行，上游收到未映射原名
-// gemini-3.8-flash 后返回 "unknown provider for model gemini-3.8-flash"。
+//  1. bamboo 分支必须先执行 ModelMappedHelper（历史上它先于映射执行，
+//     渠道 model_mapping 从未作用于该入口）；
+//  2. 映射目标名带 -high 后缀时，需在 thinking_model_blacklist 注册保留，
+//     否则 ApplyReasoningModelSuffix 会把 -high 剥成 effort 并把基础名发上游，
+//     上游（CLIProxyAPI 只注册变体名）随即报 unknown provider。
+//
 // 失败路径（上游 500）不涉计费结算，无需 billing 夹具。
 func TestResponsesHelperBambooBranchSendsMappedModel(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 
-	var capturedModel string
+	var capturedPath string
 	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		var parsed map[string]any
-		_ = json.Unmarshal(body, &parsed)
-		if m, ok := parsed["model"].(string); ok {
-			capturedModel = m
-		}
+		// Gemini provider 把模型放在 URL path（/v1beta/models/{model}:generateContent），
+		// 与生产事故链路一致，捕获 path 即可判别映射是否生效。
+		capturedPath = r.URL.Path
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusInternalServerError)
 		_, _ = w.Write([]byte(`{"error":{"code":500,"message":"unknown provider for model gemini-3.8-flash","status":"INTERNAL"}}`))
@@ -46,8 +45,7 @@ func TestResponsesHelperBambooBranchSendsMappedModel(t *testing.T) {
 	c, _ := gin.CreateTestContext(w)
 	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 
-	// 模拟 distributor 注入的渠道上下文（Gemini 渠道 → 原生 Gemini provider，
-	// 请求体中的 model 字段即上游收到的模型名）
+	// 模拟 distributor 注入的渠道上下文（Gemini 渠道 → 原生 Gemini provider）
 	common.SetContextKey(c, constant.ContextKeyChannelType, constant.ChannelTypeGemini)
 	common.SetContextKey(c, constant.ContextKeyChannelId, 1)
 	common.SetContextKey(c, constant.ContextKeyChannelBaseUrl, upstream.URL)
@@ -64,11 +62,17 @@ func TestResponsesHelperBambooBranchSendsMappedModel(t *testing.T) {
 		},
 	}
 
-	// 开启 bamboo 中继（测试后恢复，避免污染全局设置）
-	settings := model_setting.GetBambooSettings()
-	prev := settings.EnableBambooRelay
-	settings.EnableBambooRelay = true
-	defer func() { settings.EnableBambooRelay = prev }()
+	// 生产修复组合之一：开启 bamboo 中继
+	bambooSettings := model_setting.GetBambooSettings()
+	prevBamboo := bambooSettings.EnableBambooRelay
+	bambooSettings.EnableBambooRelay = true
+	defer func() { bambooSettings.EnableBambooRelay = prevBamboo }()
+
+	// 生产修复组合之二：thinking 后缀黑名单保留 -high 变体名（测试后恢复）
+	globalSettings := model_setting.GetGlobalSettings()
+	prevBlacklist := append([]string(nil), globalSettings.ThinkingModelBlacklist...)
+	globalSettings.ThinkingModelBlacklist = []string{`re:^gemini-.*-(high|medium|low)$`}
+	defer func() { globalSettings.ThinkingModelBlacklist = prevBlacklist }()
 
 	apiErr := relay.ResponsesHelper(c, info)
 	if apiErr == nil {
@@ -76,7 +80,7 @@ func TestResponsesHelperBambooBranchSendsMappedModel(t *testing.T) {
 	}
 
 	wantPath := "/v1beta/models/gemini-3.8-flash-high:generateContent"
-	if capturedModel != wantPath {
-		t.Fatalf("upstream path = %q, want mapped %q", capturedModel, wantPath)
+	if capturedPath != wantPath {
+		t.Fatalf("upstream path = %q, want mapped %q", capturedPath, wantPath)
 	}
 }
