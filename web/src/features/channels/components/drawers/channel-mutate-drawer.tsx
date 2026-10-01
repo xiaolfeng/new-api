@@ -36,6 +36,7 @@ import {
   Eye,
   RefreshCw,
   Code,
+  Layers,
   Route,
   Settings,
   SlidersHorizontal,
@@ -105,6 +106,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { SecureVerificationDialog } from '@/features/auth/secure-verification'
+import { useSystemOptions } from '@/features/system-settings/hooks/use-system-options'
 import { PluginIcon } from '@/features/task-plugins/components/plugin-icon'
 import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { useHiddenClickUnlock } from '@/hooks/use-hidden-click-unlock'
@@ -315,6 +317,12 @@ const SENSITIVE_FORM_FIELDS = [
   'upstream_model_update_check_enabled',
   'upstream_model_update_auto_sync_enabled',
   'upstream_model_update_ignored_models',
+  'bamboo_upstream_format',
+  'bamboo_legacy_compat',
+  'bamboo_legacy_cache_key',
+  'bamboo_strip_think_tags',
+  'bamboo_include_reasoning_content',
+  'bamboo_ignore_encrypted_content',
 ] satisfies (keyof ChannelFormValues)[]
 
 function parseSettingsRecord(
@@ -572,6 +580,15 @@ export function ChannelMutateDrawer({
     resolver: zodResolver(channelFormSchema),
     defaultValues: CHANNEL_FORM_DEFAULT_VALUES,
   })
+
+  const { data: systemOptions } = useSystemOptions()
+  const bambooRelayEnabled = useMemo(() => {
+    return (
+      systemOptions?.data?.find(
+        (o) => o.key === 'bamboo.enable_bamboo_relay'
+      )?.value === 'true'
+    )
+  }, [systemOptions])
 
   // Watch values once for conditional fields and configuration indicators.
   const formValues = form.watch()
@@ -1998,6 +2015,212 @@ export function ChannelMutateDrawer({
         </FormItem>
       )}
     />
+  )
+  const bambooUpstreamFormat = form.watch('bamboo_upstream_format')
+  const bambooLegacyCompat = form.watch('bamboo_legacy_compat')
+
+  const bambooFields = bambooRelayEnabled && (
+    <div className='flex flex-col gap-3'>
+      <FormField
+        control={form.control}
+        name='bamboo_upstream_format'
+        render={({ field }) => (
+          <FormItem className='space-y-2'>
+            <div className='space-y-0.5'>
+              <FormLabel>{t('Upstream Protocol Format')}</FormLabel>
+              <FormDescription>
+                {t(
+                  'Override the upstream protocol format used by bamboo relay. Auto detects based on channel type. Use this to force a specific protocol (e.g., send Anthropic format to an OpenAI-compatible endpoint).'
+                )}
+              </FormDescription>
+            </div>
+            <Select
+              disabled={sensitiveLocked}
+              value={field.value ?? 'auto'}
+              onValueChange={field.onChange}
+            >
+              <FormControl>
+                <SelectTrigger className='w-full'>
+                  <SelectValue />
+                </SelectTrigger>
+              </FormControl>
+              <SelectContent alignItemWithTrigger={false}>
+                <SelectItem value='auto'>{t('Auto (by channel type)')}</SelectItem>
+                <SelectItem value='openai'>{t('OpenAI Chat Completions')}</SelectItem>
+                <SelectItem value='anthropic'>{t('Anthropic Messages')}</SelectItem>
+                <SelectItem value='gemini'>{t('Google Gemini')}</SelectItem>
+                <SelectItem value='responses'>{t('OpenAI Responses')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </FormItem>
+        )}
+      />
+      {(bambooUpstreamFormat === 'openai' || bambooUpstreamFormat === 'anthropic') && (
+        <FormField
+          control={form.control}
+          name='bamboo_legacy_compat'
+          render={({ field }) => (
+            <FormItem className='space-y-2'>
+              <div className='space-y-0.5'>
+                <FormLabel>{t('Traditional Mode')}</FormLabel>
+                <FormDescription>
+                  {t(
+                    'When enabled, uses legacy field names (e.g., max_tokens instead of max_completion_tokens) and omits reasoning_effort / parallel_tool_calls. Enable for endpoints that do not support the latest OpenAI/Anthropic schema.'
+                  )}
+                </FormDescription>
+              </div>
+              <Select
+                disabled={sensitiveLocked}
+                value={field.value ? 'true' : 'false'}
+                onValueChange={(v) => field.onChange(v === 'true')}
+              >
+                <FormControl>
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value='false'>{t('Off (Standard)')}</SelectItem>
+                  <SelectItem value='true'>{t('On (Legacy fields)')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )}
+        />
+      )}
+      {bambooUpstreamFormat === 'openai' && bambooLegacyCompat === true && (
+        <FormField
+          control={form.control}
+          name='bamboo_legacy_cache_key'
+          render={({ field }) => (
+            <FormItem className='space-y-2'>
+              <div className='space-y-0.5'>
+                <FormLabel>{t('Legacy Cache Key')}</FormLabel>
+                <FormDescription>
+                  {t(
+                    'When enabled, sends prompt_cache_key in Legacy compatibility mode. Use for endpoints that support it (e.g. Kimi/Moonshot).'
+                  )}
+                </FormDescription>
+              </div>
+              <Select
+                disabled={sensitiveLocked}
+                value={field.value ? 'true' : 'false'}
+                onValueChange={(v) => field.onChange(v === 'true')}
+              >
+                <FormControl>
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value='false'>{t('Off (No cache key)')}</SelectItem>
+                  <SelectItem value='true'>{t('On (Send cache key)')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )}
+        />
+      )}
+      {bambooUpstreamFormat === 'openai' && (
+        <FormField
+          control={form.control}
+          name='bamboo_strip_think_tags'
+          render={({ field }) => (
+            <FormItem className='space-y-2'>
+              <div className='space-y-0.5'>
+                <FormLabel>{t('Strip Think Tags')}</FormLabel>
+                <FormDescription>
+                  {t(
+                    'When enabled, strips inline XML-style think tags from content and converts them to thinking events. Use for endpoints that leak reasoning as literal tags (e.g. DeepSeek-R1 early format, GLM, QwQ).'
+                  )}
+                </FormDescription>
+              </div>
+              <Select
+                disabled={sensitiveLocked}
+                value={field.value ? 'true' : 'false'}
+                onValueChange={(v) => field.onChange(v === 'true')}
+              >
+                <FormControl>
+                  <SelectTrigger className='w-full'>
+                    <SelectValue />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  <SelectItem value='false'>{t('Off (Passthrough)')}</SelectItem>
+                  <SelectItem value='true'>{t('On (Strip tags)')}</SelectItem>
+                </SelectContent>
+              </Select>
+            </FormItem>
+          )}
+        />
+      )}
+      {bambooUpstreamFormat === 'responses' && (
+        <>
+          <FormField
+            control={form.control}
+            name='bamboo_include_reasoning_content'
+            render={({ field }) => (
+              <FormItem className='space-y-2'>
+                <div className='space-y-0.5'>
+                  <FormLabel>{t('Include Reasoning Content')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'When enabled, sends plaintext reasoning.content in Responses input items. Enable for third-party Open Responses (Grok, vLLM, SGLang). Keep off for official OpenAI.'
+                    )}
+                  </FormDescription>
+                </div>
+                <Select
+                  disabled={sensitiveLocked}
+                  value={field.value ? 'true' : 'false'}
+                  onValueChange={(v) => field.onChange(v === 'true')}
+                >
+                  <FormControl>
+                    <SelectTrigger className='w-full'>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value='false'>{t('Off (Official OpenAI schema)')}</SelectItem>
+                    <SelectItem value='true'>{t('On (Send plaintext reasoning)')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name='bamboo_ignore_encrypted_content'
+            render={({ field }) => (
+              <FormItem className='space-y-2'>
+                <div className='space-y-0.5'>
+                  <FormLabel>{t('Ignore Encrypted Content')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'When enabled, drops encrypted_content from Responses reasoning items. Use for multi-key rotation or failover where ciphertext from one key cannot be decrypted by another.'
+                    )}
+                  </FormDescription>
+                </div>
+                <Select
+                  disabled={sensitiveLocked}
+                  value={field.value ? 'true' : 'false'}
+                  onValueChange={(v) => field.onChange(v === 'true')}
+                >
+                  <FormControl>
+                    <SelectTrigger className='w-full'>
+                      <SelectValue />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value='false'>{t('Off (Keep ciphertext)')}</SelectItem>
+                    <SelectItem value='true'>{t('On (Drop ciphertext)')}</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormItem>
+            )}
+          />
+        </>
+      )}
+    </div>
   )
 
   const notesFields = (
@@ -4664,6 +4887,29 @@ export function ChannelMutateDrawer({
                 {systemPromptOverrideFields}
               </fieldset>
             </div>
+            {bambooRelayEnabled && (
+              <div
+                role='group'
+                aria-label={t('Bamboo Relay Adapter')}
+                className={channelConfigurationBlockClassName(
+                  configuration.blocks.bambooSettings,
+                  'space-y-4'
+                )}
+              >
+                <CardHeading
+                  status={configuration.blocks.bambooSettings}
+                  title={t('Bamboo Relay Adapter')}
+                  icon={<Layers className='size-4' />}
+                  iconTone='info'
+                />
+                <fieldset
+                  disabled={sensitiveLocked}
+                  className='space-y-4 disabled:opacity-60'
+                >
+                  {bambooFields}
+                </fieldset>
+              </div>
+            )}
             {fieldPassthroughFields}
           </>
         }

@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import type { ColumnDef } from '@tanstack/react-table'
 import { GitBranch, Sparkles, KeyRound } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { GroupBadge } from '@/components/group-badge'
@@ -35,12 +35,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import type { ReactNode } from 'react'
 import {
   HostToolInternalDash,
   InteractionTypeCell,
 } from '../interaction-type-cell'
-import { getCacheRateSummary } from '../../lib/format'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import {
   normalizeTierLabel,
@@ -64,6 +62,7 @@ import type { UsageLog } from '../../data/schema'
 import {
   formatModelName,
   decodeBillingExprB64,
+  getCacheRateSummary,
   getTieredBillingSummary,
   hasAnyCacheTokens,
   parseLogOther,
@@ -80,7 +79,7 @@ import type { LogOtherData } from '../../types'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
-import { TimingMetricsCell, StreamTpsCell } from '../timing-metrics-cell'
+import { TimingMetricsCell } from '../timing-metrics-cell'
 import { useUsageLogsContext } from '../usage-logs-provider'
 
 interface DetailSegment {
@@ -695,32 +694,6 @@ export function useCommonLogsColumns(
         meta: { mobileTitle: true },
       },
       {
-        accessorKey: 'is_stream',
-        header: t('Stream'),
-        cell: ({ row }) => {
-          const log = row.original
-          if (!isTimingLogType(log.type)) return null
-
-          const useTime = row.getValue('use_time') as number
-          const other = parseLogOther(log.other)
-          const tokensPerSecond =
-            useTime > 0 && log.completion_tokens > 0
-              ? log.completion_tokens / useTime
-              : null
-
-          return (
-            <StreamTpsCell
-              isStream={log.is_stream}
-              isTask={other?.is_task === true}
-              isSyncTask={other?.task_sync === true}
-              tokensPerSecond={tokensPerSecond}
-              streamStatus={other?.stream_status}
-            />
-          )
-        },
-        meta: { label: t('Stream') },
-      },
-      {
         id: 'interaction_type',
         header: t('Interaction'),
         cell: ({ row }) => <InteractionTypeCell log={row.original} />,
@@ -1000,6 +973,7 @@ export function useCommonLogsColumns(
 
           const useTime = row.getValue('use_time') as number
           const other = parseLogOther(log.other)
+          const bt = other?.bamboo_timing
 
           return (
             <TimingMetricsCell
@@ -1007,6 +981,24 @@ export function useCommonLogsColumns(
               completionTokens={log.completion_tokens}
               frtMs={other?.frt}
               isStream={log.is_stream}
+              phaseTiming={
+                bt
+                  ? {
+                      thinkingMs:
+                        typeof bt.thinking_ms === 'number' && bt.thinking_ms > 0
+                          ? bt.thinking_ms
+                          : null,
+                      contentMs:
+                        typeof bt.content_ms === 'number' && bt.content_ms > 0
+                          ? bt.content_ms
+                          : null,
+                      toolMs:
+                        typeof bt.tool_ms === 'number' && bt.tool_ms > 0
+                          ? bt.tool_ms
+                          : null,
+                    }
+                  : undefined
+              }
             />
           )
         },

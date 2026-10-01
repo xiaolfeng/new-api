@@ -103,4 +103,35 @@ func TestChatRelay_InjectsClaudeDefaultMaxTokensWhenUnspecified(t *testing.T) {
 		t.Fatalf("expected MaxTokens=%d, got %d", expectedMax, relayReq.Config.MaxTokens)
 	}
 }
+func TestChatRelay_ModelMappingPrecedence(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		OriginModelName: "gemini-3.8-flash",
+		ChannelMeta: &relaycommon.ChannelMeta{
+			UpstreamModelName: "gemini-2.5-flash",
+			IsModelMapped:     true,
+		},
+	}
+
+	reqBody := []byte(`{"model":"gemini-3.8-flash","messages":[{"role":"user","content":"hi"}]}`)
+	codecFmt, _ := relayFormatToCodec(types.RelayFormatOpenAI)
+	codec, _ := bamboocodec.Get(codecFmt)
+	relayReq, err := codec.ParseRequest(reqBody)
+	if err != nil {
+		t.Fatalf("ParseRequest failed: %v", err)
+	}
+
+	if info.IsModelMapped && info.GetUpstreamModelName() != "" {
+		relayReq.Config.Model = info.GetUpstreamModelName()
+	} else if relayReq.Config.Model == "" {
+		if model := info.GetUpstreamModelName(); model != "" {
+			relayReq.Config.Model = model
+		} else {
+			relayReq.Config.Model = info.GetOriginModelName()
+		}
+	}
+
+	if relayReq.Config.Model != "gemini-2.5-flash" {
+		t.Fatalf("expected mapped model %q, got %q", "gemini-2.5-flash", relayReq.Config.Model)
+	}
+}
 

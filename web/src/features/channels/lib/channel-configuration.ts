@@ -78,6 +78,17 @@ const CONFIGURATION_BLOCKS = {
       'claude_beta_query',
     ],
   },
+  bambooSettings: {
+    section: 'request',
+    fields: [
+      'bamboo_upstream_format',
+      'bamboo_legacy_compat',
+      'bamboo_legacy_cache_key',
+      'bamboo_strip_think_tags',
+      'bamboo_include_reasoning_content',
+      'bamboo_ignore_encrypted_content',
+    ],
+  },
   extraSettings: {
     section: 'other',
     fields: [
@@ -170,6 +181,15 @@ export function getChannelConfigurationState(
       (claudePassthrough &&
         (values.allow_speed ||
           (values.type === 14 && values.claude_beta_query)))
+    ),
+    bambooSettings: Boolean(
+      (values.bamboo_upstream_format &&
+        values.bamboo_upstream_format !== 'auto') ||
+      values.bamboo_legacy_compat ||
+      values.bamboo_legacy_cache_key ||
+      values.bamboo_strip_think_tags ||
+      values.bamboo_include_reasoning_content ||
+      values.bamboo_ignore_encrypted_content
     ),
     extraSettings: Boolean(
       values.proxy?.trim() ||

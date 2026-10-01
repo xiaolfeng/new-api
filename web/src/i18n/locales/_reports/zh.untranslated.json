@@ -1,5 +1,10 @@
 {
   "Doubao": "Doubao",
   "Responses WebSocket": "Responses WebSocket",
-  "SGLang": "SGLang"
+  "SGLang": "SGLang",
+  "Anthropic Messages": "Anthropic Messages",
+  "Google Gemini": "Google Gemini",
+  "Midjourney": "Midjourney",
+  "MidjourneyPlus": "MidjourneyPlus",
+  "OpenAI Responses": "OpenAI Responses"
 }

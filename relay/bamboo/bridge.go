@@ -106,7 +106,13 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	if relayReq.Config == nil {
 		relayReq.Config = &bamboosdk.RequestConfig{}
 	}
-	if relayReq.Config.Model == "" {
+	// 确保上游模型名称：
+	// 1. 若经过渠道模型重定向（IsModelMapped 为真），无条件优先采用重定向后的 UpstreamModelName；
+	// 2. 若入站 Codec 未解析出 model（如 Gemini REST 协议请求体无 model 字段），
+	//    依次回退到 UpstreamModelName、OriginModelName。
+	if info.IsModelMapped && info.GetUpstreamModelName() != "" {
+		relayReq.Config.Model = info.GetUpstreamModelName()
+	} else if relayReq.Config.Model == "" {
 		if model := info.GetUpstreamModelName(); model != "" {
 			relayReq.Config.Model = model
 		} else {

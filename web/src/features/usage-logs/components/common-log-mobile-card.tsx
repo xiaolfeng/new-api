@@ -186,9 +186,11 @@ export function CommonLogMobileCard<TData>(props: {
           </div>
         )}
         {timing &&
-          (props.cells.has('use_time') || props.cells.has('is_stream')) && (
+          (props.cells.has('use_time') ||
+            props.cells.has('tps') ||
+            props.cells.has('is_stream')) && (
             <div className='col-start-2 flex min-w-0 flex-col items-end gap-1 [overflow-wrap:anywhere]'>
-              {props.cells.has('is_stream') && (
+              {(props.cells.has('tps') || props.cells.has('is_stream')) && (
                 <StreamTpsCell
                   compact
                   className='min-h-5 max-w-full min-w-0 justify-end'
@@ -211,6 +213,27 @@ export function CommonLogMobileCard<TData>(props: {
                   isStream={log.is_stream}
                   indicator='dot'
                   compact
+                  phaseTiming={
+                    other?.bamboo_timing
+                      ? {
+                          thinkingMs:
+                            typeof other.bamboo_timing.thinking_ms === 'number' &&
+                            other.bamboo_timing.thinking_ms > 0
+                              ? other.bamboo_timing.thinking_ms
+                              : null,
+                          contentMs:
+                            typeof other.bamboo_timing.content_ms === 'number' &&
+                            other.bamboo_timing.content_ms > 0
+                              ? other.bamboo_timing.content_ms
+                              : null,
+                          toolMs:
+                            typeof other.bamboo_timing.tool_ms === 'number' &&
+                            other.bamboo_timing.tool_ms > 0
+                              ? other.bamboo_timing.tool_ms
+                              : null,
+                        }
+                      : undefined
+                  }
                   className='min-h-6 max-w-full min-w-0 items-center justify-end [&>div]:justify-end'
                 />
               )}
