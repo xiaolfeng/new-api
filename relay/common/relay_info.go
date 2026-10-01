@@ -1079,6 +1079,10 @@ func (info *RelayInfo) ConvOptions() *convmeta.Options {
 	return options
 }
 
+func (info *RelayInfo) InitFirstResponse() {
+	info.isFirstResponse = true
+}
+
 func (info *RelayInfo) SetFirstResponseTime() {
 	if info.isFirstResponse {
 		info.FirstResponseTime = time.Now()

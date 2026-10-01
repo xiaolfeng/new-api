@@ -122,3 +122,40 @@ func TestBuildTokenRecordTiming(t *testing.T) {
 	}, BuildTokenRecordTiming(info))
 	require.Equal(t, model.TokenRecordTiming{}, BuildTokenRecordTiming(nil))
 }
+
+func TestAppendBambooTimingAlignsFrt(t *testing.T) {
+	info := &relaycommon.RelayInfo{
+		BambooTiming: &relaycommon.BambooTimingResult{
+			Stats: relaycommon.BambooTimingStats{
+				TotalDuration:     8795 * time.Millisecond,
+				FirstByteDuration: 8756 * time.Millisecond,
+				ThinkingDuration:  500 * time.Millisecond,
+				ContentDuration:   500 * time.Millisecond,
+			},
+			Rates: relaycommon.BambooTokenRates{
+				ThinkingTokensPerSec: -96.6,
+				OutputTokensPerSec:   45.2,
+			},
+			Tokens: relaycommon.BambooTokenCounts{
+				ThinkingTokens: 100,
+				OutputTokens:   200,
+			},
+		},
+	}
+
+	other := model.NewLogOther()
+	// 模拟外部初始 frt 为 0 或旧值
+	other.SetPublic("frt", float64(0))
+
+	appendBambooTiming(info, other)
+	snap := other.Snapshot()
+
+	// 验证 frt 被 FirstByteDuration 对齐回填
+	assert.Equal(t, float64(8756), snap["frt"])
+
+	timing, ok := snap["bamboo_timing"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, int64(8795), timing["total_ms"])
+	assert.Equal(t, int64(8756), timing["ttft_ms"])
+	assert.Equal(t, -96.6, timing["thinking_tps"])
+}

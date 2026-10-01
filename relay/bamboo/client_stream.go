@@ -360,20 +360,27 @@ func (s *clientStream) forward(ev bamboosdk.StreamEvent) bool {
 		if s.onStart != nil {
 			s.onStart()
 		}
-		if s.info != nil {
-			s.info.SetFirstResponseTime()
-		}
 		return s.emit(ev)
 	case bamboosdk.EventMessageStop:
 		return s.ok
 	case bamboosdk.EventContentBlockStart:
 		s.ensureStart()
+		if s.info != nil {
+			s.info.SetFirstResponseTime()
+		}
 		if ev.ContentBlock != nil && ev.ContentBlock.BlockType() == bamboosdk.ContentBlockToolUse {
 			s.sawToolUse = true
 		}
 		ev.Index += s.prefixN
 		return s.emit(ev)
-	case bamboosdk.EventContentBlockDelta, bamboosdk.EventContentBlockStop:
+	case bamboosdk.EventContentBlockDelta:
+		s.ensureStart()
+		if s.info != nil {
+			s.info.SetFirstResponseTime()
+		}
+		ev.Index += s.prefixN
+		return s.emit(ev)
+	case bamboosdk.EventContentBlockStop:
 		s.ensureStart()
 		ev.Index += s.prefixN
 		return s.emit(ev)

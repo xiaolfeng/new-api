@@ -67,6 +67,10 @@ type bambooTimingCollector struct {
 	stopTime      time.Time
 	lastEventTime time.Time
 
+	// 新增：请求级物理时间锚点（来自 SDK EventMessageStart.Timing）
+	requestSentAt    time.Time // 上游 HTTP 请求实际发出时刻（全程物理起点）
+	responseHeaderAt time.Time // 上游 HTTP 响应头到达时刻（首包时延终点）
+
 	thinkingStart time.Time
 	thinkingEnd   time.Time
 	contentStart  time.Time
@@ -85,8 +89,22 @@ func newBambooTimingCollector() *bambooTimingCollector {
 }
 
 func (tc *bambooTimingCollector) observe(event bamboosdk.StreamEvent) {
-	now := time.Now()
+	// 优先消费 SDK 适配器在 SSE 帧解析瞬间打上的物理时间戳，零值时回退本地时间
+	now := event.ReceivedAt
+	if now.IsZero() {
+		now = time.Now()
+	}
 	tc.lastEventTime = now
+
+	// 捕获请求级物理锚点（由 SDK 挂载在 EventMessageStart 上）
+	if event.Type == bamboosdk.EventMessageStart && event.Timing != nil {
+		if !event.Timing.RequestSentAt.IsZero() {
+			tc.requestSentAt = event.Timing.RequestSentAt
+		}
+		if !event.Timing.ResponseHeaderAt.IsZero() {
+			tc.responseHeaderAt = event.Timing.ResponseHeaderAt
+		}
+	}
 
 	if tc.startTime.IsZero() {
 		tc.startTime = now
@@ -197,11 +215,19 @@ func (tc *bambooTimingCollector) result() relaycommon.BambooTimingResult {
 		tc.firstByteTime = tc.startTime
 	}
 
-	if !tc.startTime.IsZero() && !endTime.IsZero() {
-		stats.TotalDuration = endTime.Sub(tc.startTime)
+	// 核心修正：优先使用真实的物理请求发起时刻（requestSentAt），无锚点时回退 startTime
+	effectiveStartTime := tc.requestSentAt
+	if effectiveStartTime.IsZero() {
+		effectiveStartTime = tc.startTime
 	}
-	if !tc.startTime.IsZero() && !tc.firstByteTime.IsZero() {
-		stats.FirstByteDuration = tc.firstByteTime.Sub(tc.startTime)
+
+	// 总耗时（真实网络 + 排队 + 推理全程）
+	if !effectiveStartTime.IsZero() && !endTime.IsZero() {
+		stats.TotalDuration = endTime.Sub(effectiveStartTime)
+	}
+	// 首字耗时（真实 TTFT，覆盖 8.7s 网络等待与 Prefill，满足 TTFT ≤ TotalDuration 物理不变量）
+	if !effectiveStartTime.IsZero() && !tc.firstByteTime.IsZero() {
+		stats.FirstByteDuration = tc.firstByteTime.Sub(effectiveStartTime)
 	}
 
 	if !tc.thinkingStart.IsZero() {
@@ -267,9 +293,9 @@ func (tc *bambooTimingCollector) result() relaycommon.BambooTimingResult {
 }
 
 // minReliableDuration 最小可信耗时阈值。
-// 低于此值时，阶段内事件密集到达（channel buffer 导致时间戳几乎相同），
-// 计算出的 token/s 严重失真（如 5k+ tok/s），用负号标记不可靠。
-const minReliableDuration = time.Millisecond
+// 从 1ms 提升至 100ms。低于此阈值时为 TCP 缓冲倒灌，算出的 token/s 严重失真，
+// 一律按既有约定用负号标记不可靠。
+const minReliableDuration = 100 * time.Millisecond
 
 // computeRate 计算 token/s 速率，含不可靠标记逻辑。
 // 阶段已发生（start != zero）但耗时低于 minReliableDuration 时，

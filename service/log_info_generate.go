@@ -361,6 +361,12 @@ func appendBambooTiming(relayInfo *relaycommon.RelayInfo, other *model.LogOther)
 		"output_tokens":   bt.Tokens.OutputTokens,
 		"tool_tokens":     bt.Tokens.ToolTokens,
 	}
+	// 推荐兜底：如果外部因异步调度导致 frt 为 0，而 bamboo_timing 有高精度 ttft_ms，
+	// 可用 ttft_ms 对齐回填 other["frt"]，保证前端两处展示完全吻合
+	if bt.Stats.FirstByteDuration > 0 {
+		other.SetPublic("frt", float64(bt.Stats.FirstByteDuration.Milliseconds()))
+	}
+
 	other.SetPublic("bamboo_timing", timing)
 }
 
