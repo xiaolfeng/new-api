@@ -50,6 +50,12 @@ import {
   UserCog,
   Info,
   LogIn,
+  ArrowDownToLine,
+  Brain,
+  MessageSquare,
+  Wrench,
+  FileText,
+  Code,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -66,12 +72,9 @@ import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
 
 import { AuditDetailFields } from '../../audit/components/audit-detail-fields'
-import {
-  FileText,
-  Code,
-} from 'lucide-react'
 import { MarkdownSourceHighlighter } from '@/components/ui/markdown-source-highlighter'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -106,6 +109,14 @@ import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
 import { ResponseModelDetails } from '../model-badge'
 import { PluginAuthorLink } from '../plugin-author-link'
 import { DetailRow, DetailSection } from './log-detail-layout'
+import {
+  hasStructuredData,
+  parseLogDetailRecord,
+  type ParsedSections,
+  type ToolUseRow,
+} from '../../lib/log-block-parser'
+import { parseLogSession } from '../../lib/session-parser'
+import { parseClientSource } from '../../lib/source-parser'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
 // to its i18n label key for display in the audit details.
@@ -638,6 +649,58 @@ export function DetailsDialog(props: DetailsDialogProps) {
     other?.reasoning_effort
   )
 
+  const session = parseLogSession(props.log)
+  const hasParent = Boolean(session.parentSessionName || session.parentSessionId)
+  const mainSessionName = hasParent
+    ? session.parentSessionName
+    : session.sessionName
+  const mainSessionId = hasParent
+    ? session.parentSessionId
+    : session.sessionId
+  const subSessionName = hasParent ? session.sessionName : null
+  const subSessionId = hasParent ? session.sessionId : null
+  const subAgentName = session.agentName
+  const subAgentId = session.agentId
+  const hasSession = Boolean(
+    mainSessionName ||
+      mainSessionId ||
+      subSessionName ||
+      subSessionId ||
+      subAgentName ||
+      subAgentId ||
+      session.parentSessionName ||
+      session.parentSessionId
+  )
+
+  const userAgentDisplay = (() => {
+    for (const raw of [props.log.record, props.log.full_log, props.log.content]) {
+      if (!raw) continue
+      try {
+        const parsed = JSON.parse(raw)
+        const headers = parsed?.request?.headers || parsed?.headers
+        if (headers && typeof headers === 'object' && !Array.isArray(headers)) {
+          const key = Object.keys(headers).find(
+            (k) => k.toLowerCase() === 'user-agent'
+          )
+          if (key && headers[key]) return String(headers[key]).trim()
+        }
+      } catch {
+        // continue
+      }
+    }
+    return undefined
+  })()
+
+  const clientSourceDisplay = (() => {
+    if (other?.client_source && typeof other.client_source === 'string') {
+      return other.client_source
+    }
+    if (userAgentDisplay) {
+      const parsed = parseClientSource(userAgentDisplay)
+      if (parsed.name !== '-') return parsed.name
+    }
+    return undefined
+  })()
   return (
     <>
     <Dialog
@@ -766,7 +829,101 @@ export function DetailsDialog(props: DetailsDialogProps) {
               }
             />
           )}
+          {clientSourceDisplay && (
+            <DetailRow
+              label={t('Source')}
+              value={
+                <span
+                  className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-center text-xs font-medium'
+                  style={{
+                    backgroundColor: `color-mix(in srgb, ${stringToHslColor(clientSourceDisplay)} 15%, transparent)`,
+                    color: stringToHslColor(clientSourceDisplay),
+                  }}
+                >
+                  {clientSourceDisplay}
+                </span>
+              }
+            />
+          )}
+          {userAgentDisplay && (
+            <DetailRow
+              label='User-Agent'
+              value={userAgentDisplay}
+              mono
+            />
+          )}
         </div>
+
+        {/* Session Info */}
+        {hasSession && (
+          <DetailSection label={t('Session Info')}>
+            {mainSessionName && (
+              <DetailRow
+                label={t('Session Name')}
+                value={
+                  <span className='inline-flex items-center gap-1.5'>
+                    {(() => {
+                      const badge = getBadgeStyle(`session-${mainSessionName}`)
+                      return (
+                        <span
+                          className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
+                        >
+                          {mainSessionName}
+                        </span>
+                      )
+                    })()}
+                  </span>
+                }
+              />
+            )}
+            {mainSessionId && (
+              <DetailRow
+                label={t('Session ID')}
+                value={mainSessionId}
+                mono
+              />
+            )}
+            {subSessionName && (
+              <DetailRow
+                label={t('Sub Session')}
+                value={subSessionName}
+              />
+            )}
+            {subSessionId && (
+              <DetailRow
+                label={t('Sub Session ID')}
+                value={subSessionId}
+                mono
+              />
+            )}
+            {subAgentName && (
+              <DetailRow
+                label={t('Agent Name')}
+                value={subAgentName}
+              />
+            )}
+            {subAgentId && (
+              <DetailRow
+                label={t('Agent ID')}
+                value={subAgentId}
+                mono
+              />
+            )}
+            {session.parentSessionName && (
+              <DetailRow
+                label={t('Parent Session')}
+                value={session.parentSessionName}
+              />
+            )}
+            {session.parentSessionId && (
+              <DetailRow
+                label={t('Parent Session ID')}
+                value={session.parentSessionId}
+                mono
+              />
+            )}
+          </DetailSection>
+        )}
 
         {/* Request conversion (admin only, not for refund) */}
         {showConversion && (
@@ -1442,6 +1599,342 @@ function parseJsonRecord(content: string): Record<string, unknown> | null {
   }
 }
 
+function ToolUseTable(props: { rows: ToolUseRow[] }) {
+  const { t } = useTranslation()
+  if (props.rows.length === 0) return null
+  return (
+    <div className='overflow-x-auto'>
+      <table className='w-full text-xs'>
+        <thead>
+          <tr className='border-b text-left'>
+            <th className='px-2 py-1.5 font-medium'>#</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Tool')}</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Call ID')}</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Arguments')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.rows.map((row) => (
+            <tr key={row.id} className='border-b last:border-b-0'>
+              <td className='px-2 py-1.5 font-mono'>{row.order}</td>
+              <td className='px-2 py-1.5 font-semibold'>{row.name || '-'}</td>
+              <td className='max-w-[200px] px-2 py-1.5 font-mono break-all'>
+                {row.callId || row.id || '-'}
+              </td>
+              <td className='max-w-[300px] px-2 py-1.5'>
+                {row.arguments != null || row.input != null ? (
+                  <pre className='m-0 font-mono text-[11px] leading-relaxed wrap-break-word whitespace-pre-wrap'>
+                    {JSON.stringify(row.arguments ?? row.input, null, 2)}
+                  </pre>
+                ) : (
+                  '-'
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function ToolResponseTable(props: {
+  rows: Array<{ order: number; name: string; callId: string; type?: string }>
+}) {
+  const { t } = useTranslation()
+  if (props.rows.length === 0) return null
+  return (
+    <div className='overflow-x-auto'>
+      <table className='w-full text-xs'>
+        <thead>
+          <tr className='border-b text-left'>
+            <th className='px-2 py-1.5 font-medium'>#</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Tool')}</th>
+            <th className='px-2 py-1.5 font-medium'>{t('Call ID')}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {props.rows.map((row) => (
+            <tr
+              key={`${row.callId}-${row.order}`}
+              className='border-b last:border-b-0'
+            >
+              <td className='px-2 py-1.5 font-mono'>{row.order}</td>
+              <td className='px-2 py-1.5 font-semibold'>{row.name || '-'}</td>
+              <td className='max-w-[300px] px-2 py-1.5 font-mono break-all'>
+                {row.callId || '-'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+function StructuredLogContent(props: {
+  sections: ParsedSections
+  rawContent: string
+}) {
+  const { t } = useTranslation()
+  const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
+  const { sections } = props
+
+  const hasThinking = sections.thinking.trim() !== ''
+  const hasAnswer = sections.answer.trim() !== ''
+  const hasToolUses = sections.toolUses.length > 0
+  const hasRequestBlocks = sections.requestBlocks.length > 0
+  const hasToolResponses = sections.toolResponses.length > 0
+  const hasHeaders = Object.keys(sections.headers).length > 0
+
+  const headersJson = useMemo(
+    () => JSON.stringify(sections.headers, null, 2),
+    [sections.headers]
+  )
+
+  const copyAllText = JSON.stringify(
+    {
+      headers: sections.headers,
+      request: sections.requestBlocks,
+      thinking: sections.thinking,
+      answer: sections.answer,
+      toolUses: sections.toolUses,
+      toolResponses: sections.toolResponses,
+    },
+    null,
+    2
+  )
+
+  return (
+    <div className='space-y-2.5'>
+      {hasHeaders && (
+        <DetailSection
+          icon={<FileText className='size-3.5' aria-hidden='true' />}
+          label={t('Request Headers')}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() => copyToClipboard(headersJson)}
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText === headersJson ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <div className='max-h-64 overflow-y-auto pr-5'>
+              <dl className='space-y-1'>
+                {Object.entries(sections.headers).map(([key, value]) => (
+                  <div
+                    key={key}
+                    className='border-border/40 flex items-start gap-2 border-b border-dashed pb-1 last:border-0 last:pb-0'
+                  >
+                    <dt className='text-muted-foreground w-1/3 shrink-0 font-mono text-[11px] font-semibold break-all'>
+                      {key}
+                    </dt>
+                    <dd className='min-w-0 flex-1 font-mono text-[11px] leading-relaxed break-all'>
+                      {value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          </div>
+        </DetailSection>
+      )}
+
+      {hasRequestBlocks && (
+        <DetailSection
+          icon={<ArrowDownToLine className='size-3.5' aria-hidden='true' />}
+          label={t('Input')}
+        >
+          <div className='relative space-y-2'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() =>
+                copyToClipboard(
+                  sections.requestBlocks.map((b) => b.text).join('\n\n')
+                )
+              }
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText ===
+              sections.requestBlocks.map((b) => b.text).join('\n\n') ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            {sections.requestBlocks.map((block, index) => (
+              <div
+                key={`${block.role || 'user'}-${block.type}-${block.text.slice(0, 32)}`}
+                className='bg-background/60 rounded-md border p-2'
+              >
+                <div className='mb-1 flex items-center justify-between gap-2'>
+                  <span className='text-xs font-semibold'>
+                    {t('Input')} #{index + 1}
+                  </span>
+                  <span className='text-muted-foreground text-[11px]'>
+                    {[block.role, block.type].filter(Boolean).join(' · ') ||
+                      block.type}
+                  </span>
+                </div>
+                <MarkdownSourceHighlighter
+                  content={block.text}
+                  fontSize={12}
+                  className='pr-5'
+                />
+              </div>
+            ))}
+          </div>
+        </DetailSection>
+      )}
+
+      {hasToolResponses && (
+        <DetailSection
+          icon={<Wrench className='size-3.5' aria-hidden='true' />}
+          label={t('Tool Responses')}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() =>
+                copyToClipboard(JSON.stringify(sections.toolResponses, null, 2))
+              }
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText ===
+              JSON.stringify(sections.toolResponses, null, 2) ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <ToolResponseTable rows={sections.toolResponses} />
+          </div>
+        </DetailSection>
+      )}
+
+      {hasThinking && (
+        <DetailSection
+          icon={<Brain className='size-3.5' aria-hidden='true' />}
+          label={t('Thinking')}
+        >
+          <details className='bg-background/60 rounded-md border'>
+            <summary className='cursor-pointer px-2.5 py-1.5 text-xs font-medium select-none'>
+              {t('Show thinking content')}
+            </summary>
+            <div className='relative border-t px-2.5 py-2'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='absolute top-1.5 right-1 h-5 w-5 p-0'
+                onClick={() => copyToClipboard(sections.thinking)}
+                title={t('Copy to clipboard')}
+                aria-label={t('Copy to clipboard')}
+              >
+                {copiedText === sections.thinking ? (
+                  <Check className='size-3 text-green-600' />
+                ) : (
+                  <Copy className='size-3' />
+                )}
+              </Button>
+              <MarkdownSourceHighlighter
+                content={sections.thinking}
+                fontSize={11}
+                className='max-h-64 overflow-y-auto pr-6'
+              />
+            </div>
+          </details>
+        </DetailSection>
+      )}
+
+      {hasAnswer && (
+        <DetailSection
+          icon={<MessageSquare className='size-3.5' aria-hidden='true' />}
+          label={t('Answer')}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() => copyToClipboard(sections.answer)}
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText === sections.answer ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <MarkdownSourceHighlighter
+              content={sections.answer}
+              fontSize={12}
+              className='max-h-64 overflow-y-auto pr-6'
+            />
+          </div>
+        </DetailSection>
+      )}
+
+      {hasToolUses && (
+        <DetailSection
+          icon={<Wrench className='size-3.5' aria-hidden='true' />}
+          label={`${t('Tool Calls')} (${sections.toolUses.length})`}
+        >
+          <div className='relative'>
+            <Button
+              variant='ghost'
+              size='sm'
+              className='absolute -top-0.5 right-0 h-5 w-5 p-0'
+              onClick={() =>
+                copyToClipboard(JSON.stringify(sections.toolUses, null, 2))
+              }
+              title={t('Copy to clipboard')}
+              aria-label={t('Copy to clipboard')}
+            >
+              {copiedText === JSON.stringify(sections.toolUses, null, 2) ? (
+                <Check className='size-3 text-green-600' />
+              ) : (
+                <Copy className='size-3' />
+              )}
+            </Button>
+            <ToolUseTable rows={sections.toolUses} />
+          </div>
+        </DetailSection>
+      )}
+
+      <div className='flex justify-end'>
+        <Button
+          variant='ghost'
+          size='sm'
+          className='h-6 gap-1 px-2 text-[11px]'
+          onClick={() => copyToClipboard(copyAllText)}
+        >
+          {copiedText === copyAllText ? (
+            <Check className='size-3 text-green-600' />
+          ) : (
+            <Copy className='size-3' />
+          )}
+          {t('Copy all')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 function LogDetailSheet(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1452,7 +1945,20 @@ function LogDetailSheet(props: {
 }) {
   const { t } = useTranslation()
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
-  const parsedRecord = useMemo(() => parseJsonRecord(props.content), [props.content])
+  const parsedRecord = useMemo(
+    () => parseJsonRecord(props.content),
+    [props.content]
+  )
+  const sections = useMemo(
+    () =>
+      props.structured
+        ? parseLogDetailRecord(
+            parsedRecord as Parameters<typeof parseLogDetailRecord>[0]
+          )
+        : null,
+    [parsedRecord, props.structured]
+  )
+  const isStructured = Boolean(sections && hasStructuredData(sections))
   const rawJson = useMemo(() => {
     if (!parsedRecord) return props.content
     return JSON.stringify(parsedRecord, null, 2)
@@ -1460,30 +1966,67 @@ function LogDetailSheet(props: {
 
   return (
     <Sheet open={props.open} onOpenChange={props.onOpenChange}>
-      <SheetContent side='right' className='h-[100dvh] w-[92vw] gap-0 p-0 sm:max-w-2xl lg:max-w-3xl'>
+      <SheetContent
+        side='right'
+        className='h-[100dvh] w-[92vw] gap-0 p-0 sm:max-w-2xl lg:max-w-3xl'
+      >
         <SheetHeader className='flex-shrink-0 border-b pr-12'>
           <SheetTitle>{props.title}</SheetTitle>
           <SheetDescription>{props.description}</SheetDescription>
         </SheetHeader>
         <ScrollArea className='min-h-0 flex-1 overflow-hidden'>
           <div className='space-y-3 p-4'>
-            <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
-              <Button
-                variant='ghost'
-                size='sm'
-                className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
-                onClick={() => copyToClipboard(rawJson)}
-                title={t('Copy to clipboard')}
-                aria-label={t('Copy to clipboard')}
-              >
-                {copiedText === rawJson ? (
-                  <Check className='size-3 text-green-600' />
-                ) : (
-                  <Copy className='size-3' />
-                )}
-              </Button>
-              <MarkdownSourceHighlighter content={rawJson} fontSize={12} className='pr-6' />
-            </div>
+            {isStructured && sections ? (
+              <StructuredLogContent sections={sections} rawContent={rawJson} />
+            ) : (
+              <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
+                <Button
+                  variant='ghost'
+                  size='sm'
+                  className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
+                  onClick={() => copyToClipboard(rawJson)}
+                  title={t('Copy to clipboard')}
+                  aria-label={t('Copy to clipboard')}
+                >
+                  {copiedText === rawJson ? (
+                    <Check className='size-3 text-green-600' />
+                  ) : (
+                    <Copy className='size-3' />
+                  )}
+                </Button>
+                <MarkdownSourceHighlighter
+                  content={rawJson}
+                  fontSize={12}
+                  className='pr-6'
+                />
+              </div>
+            )}
+
+            {isStructured && (
+              <DetailSection label={t('Raw JSON')}>
+                <div className='relative min-w-0'>
+                  <Button
+                    variant='ghost'
+                    size='sm'
+                    className='absolute top-1 right-1 h-5 w-5 p-0'
+                    onClick={() => copyToClipboard(rawJson)}
+                    title={t('Copy to clipboard')}
+                    aria-label={t('Copy to clipboard')}
+                  >
+                    {copiedText === rawJson ? (
+                      <Check className='size-3 text-green-600' />
+                    ) : (
+                      <Copy className='size-3' />
+                    )}
+                  </Button>
+                  <MarkdownSourceHighlighter
+                    content={rawJson}
+                    fontSize={11}
+                    className='max-h-96 overflow-y-auto pr-6'
+                  />
+                </div>
+              </DetailSection>
+            )}
           </div>
         </ScrollArea>
       </SheetContent>

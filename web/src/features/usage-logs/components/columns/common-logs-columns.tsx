@@ -52,6 +52,7 @@ import { pluginUsageSchema } from '@/features/pricing/lib/plugin-pricing'
 import { taskUsageUnitLabel } from '@/features/pricing/lib/task-price-display'
 import type { BillingUsageSchema } from '@/features/pricing/types'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
+import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
 import { formatBillingCurrencyFromUSD } from '@/lib/currency'
 import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -76,6 +77,8 @@ import {
   isPerCallBilling,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
+import { parseLogSession } from '../../lib/session-parser'
+import { parseClientSource } from '../../lib/source-parser'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
@@ -692,6 +695,149 @@ export function useCommonLogsColumns(
           )
         },
         meta: { mobileTitle: true },
+      },
+      {
+        id: 'source',
+        header: t('Source'),
+        cell: ({ row }) => {
+          const log = row.original
+          if (!isDisplayableLogType(log.type)) return null
+
+          try {
+            const other = parseLogOther(log.other)
+            if (other?.client_source && typeof other.client_source === 'string') {
+              const color = stringToHslColor(other.client_source)
+              return (
+                <div className='flex justify-center'>
+                  <span
+                    className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-center text-xs font-medium'
+                    style={{
+                      backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+                      color,
+                    }}
+                  >
+                    {other.client_source}
+                  </span>
+                </div>
+              )
+            }
+
+            const recordData =
+              typeof log.content === 'string'
+                ? JSON.parse(log.content)
+                : log.content
+            const headers =
+              recordData?.request?.headers || recordData?.headers || {}
+            const uaKey = Object.keys(headers).find(
+              (k) => k.toLowerCase() === 'user-agent'
+            )
+            const userAgent = uaKey ? headers[uaKey] : ''
+            const source = parseClientSource(userAgent)
+
+            if (source.name === '-') return null
+            const color = stringToHslColor(source.name)
+            return (
+              <div className='flex justify-center'>
+                <span
+                  className='inline-flex items-center justify-center rounded-full px-2 py-0.5 text-center text-xs font-medium'
+                  style={{
+                    backgroundColor: `color-mix(in srgb, ${color} 15%, transparent)`,
+                    color,
+                  }}
+                >
+                  {source.name}
+                </span>
+              </div>
+            )
+          } catch {
+            return null
+          }
+        },
+        meta: { label: t('Source'), mobileHidden: true },
+        size: 100,
+      },
+      {
+        id: 'session',
+        header: t('Session'),
+        cell: ({ row }) => {
+          const log = row.original
+          if (!isDisplayableLogType(log.type)) return null
+
+          const session = parseLogSession(log)
+          const hasParent =
+            Boolean(session.parentSessionName || session.parentSessionId)
+          const mainSessionName = hasParent
+            ? session.parentSessionName
+            : session.sessionName
+          const mainSessionId = hasParent
+            ? session.parentSessionId
+            : session.sessionId
+          const subSessionName = hasParent ? session.sessionName : null
+          const subSessionId = hasParent ? session.sessionId : null
+          const subAgentName = session.agentName
+          const subAgentId = session.agentId
+
+          if (
+            !mainSessionName &&
+            !mainSessionId &&
+            !subSessionName &&
+            !subSessionId &&
+            !subAgentName &&
+            !subAgentId
+          ) {
+            return null
+          }
+
+          const renderSessionId = (id: string) => (
+            <span
+              title={id}
+              className='text-muted-foreground/80 max-w-[10rem] truncate rounded-full border px-2 py-0.5 font-mono text-[11px]'
+            >
+              #{id.length > 16 ? `${id.slice(0, 16)}…` : id}
+            </span>
+          )
+
+          return (
+            <div className='flex flex-col items-start gap-0.5'>
+              {mainSessionName &&
+                (() => {
+                  const badge = getBadgeStyle(`session-${mainSessionName}`)
+                  return (
+                    <span
+                      className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
+                    >
+                      {mainSessionName}
+                    </span>
+                  )
+                })()}
+              {!mainSessionName &&
+                mainSessionId &&
+                renderSessionId(mainSessionId)}
+              {subSessionName && (
+                <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
+                  ↳ {subSessionName}
+                </span>
+              )}
+              {!subSessionName && subSessionId && (
+                <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
+                  ↳ {renderSessionId(subSessionId)}
+                </span>
+              )}
+              {subAgentName && (
+                <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
+                  ↳ {subAgentName}
+                </span>
+              )}
+              {!subAgentName && subAgentId && (
+                <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
+                  ↳ {renderSessionId(subAgentId)}
+                </span>
+              )}
+            </div>
+          )
+        },
+        meta: { label: t('Session'), mobileHidden: true },
+        size: 130,
       },
       {
         id: 'interaction_type',
