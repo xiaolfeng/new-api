@@ -570,8 +570,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 
 	// 计算 TPS (Tokens Per Second)
 	var tpsValue float64
-	frt := float64(relayInfo.FirstResponseTime.UnixMilli() - relayInfo.StartTime.UnixMilli())
-	if tps, valid := CalculateTPS(summary.CompletionTokens, int(summary.UseTimeSeconds), frt, relayInfo.IsStream); valid {
+	if tps, valid := calculateTextLogTPS(relayInfo, summary.CompletionTokens, int(summary.UseTimeSeconds)); valid {
 		other.SetPublic("tps", tps)
 		tpsValue = tps
 	}

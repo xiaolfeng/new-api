@@ -17,7 +17,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { TFunction } from 'i18next'
-import { useState, useMemo } from 'react'
 /*
 Copyright (C) 2023-2026 QuantumNous
 
@@ -57,24 +56,14 @@ import {
   FileText,
   Code,
 } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Dialog } from '@/components/dialog'
 import { StatusBadge, type StatusBadgeProps } from '@/components/status-badge'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
-import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
-import { BILLING_PRICING_VARS } from '@/features/pricing/lib/billing-expr'
-import { pluginUsageSchema } from '@/features/pricing/lib/plugin-pricing'
-import { PolicyDecisionRecord } from '@/features/system-settings/request-policies/decision-record'
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
-import { formatBillingCurrencyFromUSD } from '@/lib/currency'
-import { formatLogQuota, formatTokens, formatUseTime } from '@/lib/format'
-import { cn } from '@/lib/utils'
-import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
-
-import { AuditDetailFields } from '../../audit/components/audit-detail-fields'
 import { MarkdownSourceHighlighter } from '@/components/ui/markdown-source-highlighter'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import {
@@ -84,7 +73,21 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
+import { DynamicPricingBreakdown } from '@/features/pricing/components/dynamic-pricing-breakdown'
+import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
+import { BILLING_PRICING_VARS } from '@/features/pricing/lib/billing-expr'
+import { pluginUsageSchema } from '@/features/pricing/lib/plugin-pricing'
+import { PolicyDecisionRecord } from '@/features/system-settings/request-policies/decision-record'
+import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard'
+import { getBadgeStyle, stringToHslColor } from '@/lib/colors'
+import { formatBillingCurrencyFromUSD } from '@/lib/currency'
+import { formatLogQuota, formatTokens } from '@/lib/format'
 import { hasDeveloperToolLogAccess } from '@/lib/log-helpers'
+import { cn } from '@/lib/utils'
+
+import { AuditDetailFields } from '../../audit/components/audit-detail-fields'
+import { getLogDetail } from '../../api'
+import { useOptionalUsageLogsContext } from '../usage-logs-provider'
 import type { UsageLog } from '../../data/schema'
 import {
   parseLogOther,
@@ -94,12 +97,18 @@ import {
   getTieredBillingSummary,
   hasAnyCacheTokens,
   isViolationFeeLog,
-  getFirstResponseTimeColor,
-  getResponseTimeColor,
   getReasoningEffortVariant,
   renderAuditContent,
 } from '../../lib/format'
+import {
+  hasStructuredData,
+  parseLogDetailRecord,
+  type ParsedSections,
+  type ToolUseRow,
+} from '../../lib/log-block-parser'
 import { buildQuotaAuditOperation } from '../../lib/quota-audit-operation'
+import { parseLogSession } from '../../lib/session-parser'
+import { parseClientSource } from '../../lib/source-parser'
 import {
   getLogTypeConfig,
   isPerCallBilling,
@@ -109,14 +118,7 @@ import { USAGE_BILLING_PATH, type LogOtherData } from '../../types'
 import { ResponseModelDetails } from '../model-badge'
 import { PluginAuthorLink } from '../plugin-author-link'
 import { DetailRow, DetailSection } from './log-detail-layout'
-import {
-  hasStructuredData,
-  parseLogDetailRecord,
-  type ParsedSections,
-  type ToolUseRow,
-} from '../../lib/log-block-parser'
-import { parseLogSession } from '../../lib/session-parser'
-import { parseClientSource } from '../../lib/source-parser'
+import { LogTimingDetails } from './log-timing-details'
 
 // Maps a channel-update changed-field token (as recorded by the backend audit)
 // to its i18n label key for display in the audit details.
@@ -127,14 +129,6 @@ const CHANNEL_FIELD_LABELS: Record<string, string> = {
   type: 'Type',
   base_url: 'Base URL',
   key: 'Key',
-}
-
-function timingTextColorClass(
-  variant: 'success' | 'warning' | 'danger'
-): string {
-  if (variant === 'success') return 'text-emerald-600'
-  if (variant === 'warning') return 'text-amber-600'
-  return 'text-rose-600'
 }
 
 function formatRatio(ratio: number | undefined): string {
@@ -505,6 +499,25 @@ export function DetailsDialog(props: DetailsDialogProps) {
   const { copiedText, copyToClipboard } = useCopyToClipboard({ notify: false })
   const [recordSheetOpen, setRecordSheetOpen] = useState(false)
   const [fullLogSheetOpen, setFullLogSheetOpen] = useState(false)
+  // 详情打开期间暂停自动刷新，避免刷新改写正在查看的行；
+  // Provider 缺省（如独立复用的弹层）时自动降级为无操作。
+  const logsContext = useOptionalUsageLogsContext()
+  useEffect(() => {
+    logsContext?.setIsDetailOpen(props.open)
+    return () => {
+      logsContext?.setIsDetailOpen(false)
+    }
+  }, [props.open, logsContext])
+  // record/full_log 大字段已从列表响应剥离，打开详情时按需拉取。
+  const { data: detailResponse } = useQuery({
+    queryKey: ['log-detail', props.log.request_id],
+    queryFn: () => getLogDetail(props.log.request_id),
+    enabled: props.open && Boolean(props.log.request_id),
+    staleTime: 60_000,
+    gcTime: 5 * 60_000,
+  })
+  const record = detailResponse?.data?.record ?? ''
+  const fullLog = detailResponse?.data?.full_log ?? ''
   const other = parseLogOther(props.log.other)
   const hasDetailAccess = props.isAdmin || hasDeveloperToolLogAccess()
   const typeConfig = getLogTypeConfig(props.log.type)
@@ -650,13 +663,13 @@ export function DetailsDialog(props: DetailsDialogProps) {
   )
 
   const session = parseLogSession(props.log)
-  const hasParent = Boolean(session.parentSessionName || session.parentSessionId)
+  const hasParent = Boolean(
+    session.parentSessionName || session.parentSessionId
+  )
   const mainSessionName = hasParent
     ? session.parentSessionName
     : session.sessionName
-  const mainSessionId = hasParent
-    ? session.parentSessionId
-    : session.sessionId
+  const mainSessionId = hasParent ? session.parentSessionId : session.sessionId
   const subSessionName = hasParent ? session.sessionName : null
   const subSessionId = hasParent ? session.sessionId : null
   const subAgentName = session.agentName
@@ -673,7 +686,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
   )
 
   const userAgentDisplay = (() => {
-    for (const raw of [props.log.record, props.log.full_log, props.log.content]) {
+    for (const raw of [record, fullLog, props.log.content]) {
       if (!raw) continue
       try {
         const parsed = JSON.parse(raw)
@@ -786,7 +799,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
               label={t('IP Address')}
               value={
                 <span className='flex items-center gap-1'>
-                  <Globe className='size-3 text-amber-500' aria-hidden='true' />
+                    <Globe
+                      className='size-3 text-amber-500'
+                      aria-hidden='true'
+                    />
                   {props.log.ip}
                 </span>
               }
@@ -794,41 +810,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
             />
           )}
 
-          {showTiming && props.log.use_time > 0 && (
-            <DetailRow
-              label={t('Response Time')}
-              value={
-                <span
-                  className={cn(
-                    'font-medium',
-                    timingTextColorClass(
-                      getResponseTimeColor(
-                        props.log.use_time,
-                        props.log.completion_tokens
-                      )
-                    )
-                  )}
-                >
-                  {formatUseTime(props.log.use_time)}
-                  {props.log.is_stream &&
-                    other?.frt != null &&
-                    other.frt > 0 && (
-                      <span
-                        className={cn(
-                          'font-normal',
-                          timingTextColorClass(
-                            getFirstResponseTimeColor(other.frt / 1000)
-                          )
-                        )}
-                      >
-                        {' '}
-                        (FRT: {formatUseTime(other.frt / 1000)})
-                      </span>
-                    )}
-                </span>
-              }
-            />
-          )}
+            {showTiming && <LogTimingDetails log={props.log} other={other} />}
           {clientSourceDisplay && (
             <DetailRow
               label={t('Source')}
@@ -846,11 +828,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
             />
           )}
           {userAgentDisplay && (
-            <DetailRow
-              label='User-Agent'
-              value={userAgentDisplay}
-              mono
-            />
+              <DetailRow label='User-Agent' value={userAgentDisplay} mono />
           )}
         </div>
 
@@ -863,7 +841,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 value={
                   <span className='inline-flex items-center gap-1.5'>
                     {(() => {
-                      const badge = getBadgeStyle(`session-${mainSessionName}`)
+                        const badge = getBadgeStyle(
+                          `session-${mainSessionName}`
+                        )
                       return (
                         <span
                           className={`inline-flex items-center justify-center rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
@@ -877,17 +857,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
               />
             )}
             {mainSessionId && (
-              <DetailRow
-                label={t('Session ID')}
-                value={mainSessionId}
-                mono
-              />
+                <DetailRow label={t('Session ID')} value={mainSessionId} mono />
             )}
             {subSessionName && (
-              <DetailRow
-                label={t('Sub Session')}
-                value={subSessionName}
-              />
+                <DetailRow label={t('Sub Session')} value={subSessionName} />
             )}
             {subSessionId && (
               <DetailRow
@@ -897,17 +870,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
               />
             )}
             {subAgentName && (
-              <DetailRow
-                label={t('Agent Name')}
-                value={subAgentName}
-              />
+                <DetailRow label={t('Agent Name')} value={subAgentName} />
             )}
             {subAgentId && (
-              <DetailRow
-                label={t('Agent ID')}
-                value={subAgentId}
-                mono
-              />
+                <DetailRow label={t('Agent ID')} value={subAgentId} mono />
             )}
             {session.parentSessionName && (
               <DetailRow
@@ -1015,7 +981,9 @@ export function DetailsDialog(props: DetailsDialogProps) {
             label={t('Reject Reason')}
             variant='danger'
           >
-            <p className='text-xs wrap-break-word'>{adminInfo.reject_reason}</p>
+              <p className='text-xs wrap-break-word'>
+                {adminInfo.reject_reason}
+              </p>
           </DetailSection>
         )}
 
@@ -1138,7 +1106,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
             ))}
             {showLegacyTopupWarning && (
               <div className='flex items-start gap-1.5 text-xs text-amber-600 dark:text-amber-400'>
-                <Info className='mt-0.5 size-3.5 shrink-0' aria-hidden='true' />
+                  <Info
+                    className='mt-0.5 size-3.5 shrink-0'
+                    aria-hidden='true'
+                  />
                 <span>
                   {t(
                     'This historical record predates audit-info tracking and cannot be backfilled. The current instance already records server IP, callback IP, payment method, and system version for new top-ups going forward.'
@@ -1506,9 +1477,10 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
 
         {/* Detailed logs */}
-        {hasDetailAccess && Boolean(props.log.record || props.log.full_log) && (
+          {hasDetailAccess &&
+            Boolean(record || fullLog) && (
           <div className='flex flex-wrap items-center gap-2 border-t pt-3'>
-            {Boolean(props.log.record) && (
+            {Boolean(record) && (
               <Button
                 variant='outline'
                 size='sm'
@@ -1519,7 +1491,7 @@ export function DetailsDialog(props: DetailsDialogProps) {
                 {t('View Record')}
               </Button>
             )}
-            {Boolean(props.log.full_log) && (
+            {Boolean(fullLog) && (
               <Button
                 variant='outline'
                 size='sm'
@@ -1560,23 +1532,25 @@ export function DetailsDialog(props: DetailsDialogProps) {
         )}
       </div>
     </Dialog>
-    {Boolean(props.log.record) && (
+    {Boolean(record) && (
       <LogDetailSheet
         open={recordSheetOpen}
         onOpenChange={setRecordSheetOpen}
         title={t('Consumption Record Details')}
-        description={t('Formatted view of the request and response lifecycle')}
-        content={props.log.record}
+          description={t(
+            'Formatted view of the request and response lifecycle'
+          )}
+        content={record}
         structured
       />
     )}
-    {Boolean(props.log.full_log) && (
+    {Boolean(fullLog) && (
       <LogDetailSheet
         open={fullLogSheetOpen}
         onOpenChange={setFullLogSheetOpen}
         title={t('Full Log Payload')}
         description={t('Raw upstream payloads and timing breakdown')}
-        content={props.log.full_log}
+        content={fullLog}
       />
     )}
   </>

@@ -73,7 +73,7 @@ func truncateResponseBody(body string) string {
 // 返回 (usage, nil) 成功；(nil, err) 失败。
 // 当 errors.Is(err, ErrUnsupportedProvider) 时，调用方应 fallback 原生链路。
 func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
-	entryFormat types.RelayFormat, requestBody []byte) (*dto.Usage, *types.NewAPIError) {
+	entryFormat types.RelayFormat, requestBody []byte) (usage *dto.Usage, relayErr *types.NewAPIError) {
 
 	// ① 入口格式映射：RelayFormat → codec FormatType
 	codecFmt, ok := relayFormatToCodec(entryFormat)
@@ -132,6 +132,18 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 	}
 
 	info.BambooRelayData = extractBambooRelayData(relayReq)
+	writer := newDeliveryWriter(c, info, codecFmt)
+	defer func() {
+		// 未开始写出的连接失败仍可能重试，不提前结束请求级计时。
+		if relayErr != nil && !info.DeliveryTiming.Committed() && !isClientCancel(c, relayErr) {
+			return
+		}
+		status := "completed"
+		if relayErr != nil {
+			status = "upstream_error"
+		}
+		writer.finish(status)
+	}()
 
 	var cs *clientStream
 	if relayReq.IsStream {
@@ -297,6 +309,13 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 	var usage dto.Usage
 
 	collector := newBambooTimingCollector()
+	defer func() {
+		if timingResult := collector.result(); !timingResult.IsZero() {
+			result := timingResult
+			info.BambooTiming = &result
+			info.BambooTimingHops = append(info.BambooTimingHops, result)
+		}
+	}()
 
 	// 流式内容块累加器：从 StreamEvent 直接累积 thinking / text / tool_use，
 	// 避免后续从格式化 SSE 字符串反向解析（可能丢失 thinking 块或被截断）。
@@ -437,11 +456,6 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 		info.BambooRelayData.ResponseBlocks = responseBlocks
 	}
 
-	if timingResult := collector.result(); !timingResult.IsZero() {
-		result := timingResult
-		info.BambooTiming = &result
-	}
-
 	// 空响应检测：流式输出无任何 content_block_delta 且 output_tokens 为 0 时标记，
 	// 供 controller 触发空响应重试（与非流式 doCompleteRelay 对齐）。
 	// GLM 等端点在限流（429）时可能返回 200 + 空流而非标准错误码，
@@ -570,7 +584,6 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 		return nil, translateSDKError(err)
 	}
 
-	info.SetFirstResponseTime()
 	prependVisibleBox(resp, info)
 
 	// 空响应检测：content 为空且 output_tokens 为 0 时标记，供 controller 触发重试。
@@ -613,8 +626,9 @@ func doCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboos
 		info.BambooDebug.RelayResponse = bamboorelay.FormatRelayResponse("CompleteRelay", codecFmt, codecFmt, body)
 	}
 
-	c.Writer.Header().Set("Content-Type", "application/json")
-	c.Writer.Write(body)
+	if werr := writeDeliveryJSON(c, info, codecFmt, body); werr != nil {
+		return usageFromBamboo(resp), types.NewError(werr, types.ErrorCodeBadResponseBody)
+	}
 
 	info.ResponseBody = truncateResponseBody(string(body))
 

@@ -45,7 +45,7 @@ import {
 import { shouldShowBillingSource } from '../lib/billing-source'
 import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
-import { fetchLogsByCategory } from '../lib/utils'
+import { fetchLogsByCategory, getLogRowId } from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
@@ -225,6 +225,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       viewAccess
     ),
     pagination,
+    // 稳定行身份：避免自动刷新后同位置行复用旧弹层状态串到另一条日志。
+    getRowId: (row, index) => getLogRowId(row, index),
     enableRowSelection: false,
     onPaginationChange,
     onColumnFiltersChange,

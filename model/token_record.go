@@ -259,6 +259,9 @@ func mergeFailedDetail(existing string, statusCode string) string {
 	return string(merged)
 }
 
+// recordFailedTokenRecordMaxAttempts 限制乐观重试次数，避免持续竞争时无限循环。
+const recordFailedTokenRecordMaxAttempts = 4
+
 func RecordFailedTokenRecord(modelName string, statusCode int, createdAt int64) {
 	if LOG_DB == nil {
 		return
@@ -268,9 +271,9 @@ func RecordFailedTokenRecord(modelName string, statusCode int, createdAt int64) 
 	bucketStartAt, bucketEndAt := getTokenRecordHourBucket(createdAt)
 	statusCodeStr := fmt.Sprintf("%d", statusCode)
 
-	var existing TokenRecord
-	err := LOG_DB.Where("bucket_start_at = ? AND model_name = ?", bucketStartAt, modelName).First(&existing).Error
-	if err != nil {
+	for attempt := 0; attempt < recordFailedTokenRecordMaxAttempts; attempt++ {
+		var existing TokenRecord
+		err := LOG_DB.Where("bucket_start_at = ? AND model_name = ?", bucketStartAt, modelName).First(&existing).Error
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			failedDetail, _ := common.Marshal(map[string]int64{statusCodeStr: 1})
 			record := TokenRecord{
@@ -284,34 +287,63 @@ func RecordFailedTokenRecord(modelName string, statusCode int, createdAt int64) 
 				CreatedAt:     createdAt,
 				UpdatedAt:     createdAt,
 			}
-			_ = LOG_DB.Create(&record).Error
+			// 并发首建碰撞时 DoNothing 保证不报错；RowsAffected==0 说明对手已插入，走重试进入更新路径。
+			result := LOG_DB.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "bucket_start_at"}, {Name: "model_name"}},
+				DoNothing: true,
+			}).Create(&record)
+			if result.Error != nil {
+				common.SysError("failed to record failed token record: " + result.Error.Error())
+				return
+			}
+			if result.RowsAffected == 1 {
+				return
+			}
+			continue
 		}
-		return
-	}
+		if err != nil {
+			common.SysError("failed to load token record for failure stats: " + err.Error())
+			return
+		}
 
-	mergedDetail := mergeFailedDetail(existing.FailedDetail, statusCodeStr)
-	_ = LOG_DB.Model(&TokenRecord{}).
-		Where("bucket_start_at = ? AND model_name = ?", bucketStartAt, modelName).
-		Updates(map[string]interface{}{
-			"failed_count":  existing.FailedCount + 1,
-			"failed_detail": mergedDetail,
-			"updated_at":    createdAt,
-		}).Error
+		// 乐观锁：仅当 failed_count 仍等于读取快照时才提交增量，
+		// 避免并发失败请求相互覆盖导致丢计数。
+		mergedDetail := mergeFailedDetail(existing.FailedDetail, statusCodeStr)
+		updateResult := LOG_DB.Model(&TokenRecord{}).
+			Where("bucket_start_at = ? AND model_name = ? AND failed_count = ?", bucketStartAt, modelName, existing.FailedCount).
+			Updates(map[string]interface{}{
+				"failed_count":  gorm.Expr("failed_count + ?", 1),
+				"failed_detail": mergedDetail,
+				"updated_at":    createdAt,
+			})
+		if updateResult.Error != nil {
+			common.SysError("failed to record failed token record: " + updateResult.Error.Error())
+			return
+		}
+		if updateResult.RowsAffected == 1 {
+			return
+		}
+		// CAS 未命中：并发写已变更快照，重读后重试。
+	}
+	common.SysError("failed to record failed token record: retry budget exhausted")
 }
 
-func buildTokenRecordHours(rangeStartAt int64, currentBucketStartAt int64) []TokenRecordHourMeta {
-	hours := make([]TokenRecordHourMeta, 0, 24)
-	for i := 0; i < 24; i++ {
-		bucketStartAt := rangeStartAt + int64(i*3600)
+func buildTokenRecordHours(rangeStartAt int64, currentBucketStartAt int64, hours int64) []TokenRecordHourMeta {
+	if hours <= 0 {
+		hours = 24
+	}
+	hoursList := make([]TokenRecordHourMeta, 0, hours)
+	for i := int64(0); i < hours; i++ {
+		bucketStartAt := rangeStartAt + i*3600
 		bucketEndAt := bucketStartAt + 3599
-		hours = append(hours, TokenRecordHourMeta{
+		hoursList = append(hoursList, TokenRecordHourMeta{
 			BucketStartAt: bucketStartAt,
 			BucketEndAt:   bucketEndAt,
 			Label:         time.Unix(bucketStartAt, 0).Format("15:00"),
 			IsCurrent:     bucketStartAt == currentBucketStartAt,
 		})
 	}
-	return hours
+	return hoursList
 }
 
 func buildEmptyTokenRecordCells(hours []TokenRecordHourMeta) []TokenRecordHourCell {
@@ -370,7 +402,7 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRec
 
 	currentBucketStartAt, _ := getTokenRecordHourBucket(currentTimestamp)
 	rangeStartAt := currentBucketStartAt - (hours-1)*3600
-	hoursList := buildTokenRecordHours(rangeStartAt, currentBucketStartAt)
+	hoursList := buildTokenRecordHours(rangeStartAt, currentBucketStartAt, hours)
 
 	var records []TokenRecord
 	err := LOG_DB.Model(&TokenRecord{}).
@@ -476,19 +508,25 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRec
 	}, nil
 }
 
+// tokenRecordDateExpr 生成每日统计的日期表达式。表达式在日志库上执行，
+// 必须跟随日志库方言，不能跟随主库。
+func tokenRecordDateExpr(column string) string {
+	switch common.LogDatabaseType() {
+	case common.DatabaseTypeSQLite:
+		return "DATE(ROUND(" + column + "), 'unixepoch')"
+	case common.DatabaseTypePostgreSQL:
+		return "TO_CHAR(TO_TIMESTAMP(" + column + ")::DATE, 'YYYY-MM-DD')"
+	default:
+		return "DATE(FROM_UNIXTIME(" + column + "))"
+	}
+}
+
 func GetDailyTokenSummary(startTime, endTime int64) ([]TokenRecordDailyItem, error) {
 	if LOG_DB == nil {
 		return nil, errors.New("log db is not initialized")
 	}
 
-	var dateExpr string
-	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
-		dateExpr = "DATE(ROUND(bucket_start_at), 'unixepoch')"
-	} else if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		dateExpr = "TO_CHAR(TO_TIMESTAMP(bucket_start_at)::DATE, 'YYYY-MM-DD')"
-	} else {
-		dateExpr = "DATE(FROM_UNIXTIME(bucket_start_at))"
-	}
+	dateExpr := tokenRecordDateExpr("bucket_start_at")
 
 	var items []TokenRecordDailyItem
 	err := LOG_DB.Model(&TokenRecord{}).
@@ -515,14 +553,7 @@ func GetUserDailyTokenSummary(userId int, startTime, endTime int64) ([]TokenReco
 		return nil, errors.New("log db is not initialized")
 	}
 
-	var dateExpr string
-	if common.UsingMainDatabase(common.DatabaseTypeSQLite) {
-		dateExpr = "DATE(ROUND(created_at), 'unixepoch')"
-	} else if common.UsingMainDatabase(common.DatabaseTypePostgreSQL) {
-		dateExpr = "TO_CHAR(TO_TIMESTAMP(created_at)::DATE, 'YYYY-MM-DD')"
-	} else {
-		dateExpr = "DATE(FROM_UNIXTIME(created_at))"
-	}
+	dateExpr := tokenRecordDateExpr("created_at")
 
 	var items []TokenRecordDailyItem
 	err := LOG_DB.Table("logs").

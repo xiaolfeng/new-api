@@ -276,7 +276,9 @@ export function processChartData(
   const MAX_TREND_POINTS = MAX_CHART_TREND_POINTS
   const fillTimePoints = (times: string[]) => {
     if (times.length >= MAX_TREND_POINTS) return times
-    const lastTime = Math.max(
+    // 补点只能新增空桶：保留全部已有时间点，向更早方向补齐到下限，
+    // 避免稀疏跨度下“最后数据点前的连续窗口”丢弃已有数据。
+    const earliestTime = Math.min(
       ...data.map((item) => Number(item.created_at) || 0)
     )
     const intervalSec =
@@ -285,13 +287,14 @@ export function processChartData(
         : timeGranularity === 'day'
           ? 86400
           : 3600
-    const padded = Array.from({ length: MAX_TREND_POINTS }, (_, i) =>
+    const missing = MAX_TREND_POINTS - times.length
+    const prefix = Array.from({ length: missing }, (_, i) =>
       formatChartTime(
-        lastTime - (MAX_TREND_POINTS - 1 - i) * intervalSec,
+        earliestTime - (missing - i) * intervalSec,
         timeGranularity
       )
     )
-    return padded
+    return [...prefix, ...times]
   }
   const chartTimes = fillTimePoints(sortedTimes)
 

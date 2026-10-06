@@ -259,6 +259,10 @@ type RelayInfo struct {
 	// 以及基于字符估算的分阶段 token/s 速率。
 	// 非 bamboo 路径（原生 adaptor 链路）为 nil，下游应做 nil 判断。
 	BambooTiming *BambooTimingResult
+	// BambooTimingHops 按调用顺序保存上游计时，BambooTiming 兼容保留最后一跳。
+	BambooTimingHops []BambooTimingResult
+	// DeliveryTiming 是请求级服务端交付计时，重试及宿主多跳不得重置。
+	DeliveryTiming *DeliveryTiming
 
 	// BambooRelayData 存储 bamboo relay 的 N2N 中间态请求（从 ParseRequest 结果提取）。
 	// 仅在走 bamboo relay 路径（relay/bamboo/bridge.go ChatRelay）时非 nil。
@@ -1091,6 +1095,9 @@ func (info *RelayInfo) SetFirstResponseTime() {
 }
 
 func (info *RelayInfo) HasSendResponse() bool {
+	if info.DeliveryTiming != nil && info.DeliveryTiming.Committed() {
+		return true
+	}
 	return info.FirstResponseTime.After(info.StartTime)
 }
 

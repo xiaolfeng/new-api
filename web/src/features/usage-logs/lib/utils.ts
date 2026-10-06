@@ -42,6 +42,27 @@ import type {
 
 export { buildQueryParams } from './query-params'
 
+// 统计查询与分页无关（请求固定 page=1/pageSize=1），缓存键必须剔除分页参数，
+// 否则每次翻页都会重复请求同一份统计。
+export function buildLogStatsQueryKey<
+  T extends { page?: number; pageSize?: number; [key: string]: unknown },
+>(searchParams: T, isAdmin: boolean
+) {
+  const { page: _page, pageSize: _pageSize, ...filters } = searchParams
+  return ['usage-logs-stats', isAdmin, filters] as const
+}
+
+// getLogRowId 行的稳定身份：request_id 是跨库稳定的唯一键
+//（ClickHouse 部署下列表 id 是展示序号而非主键）；
+// 刷新后新日志插入时避免同位置行复用打开状态串到另一条日志。
+export function getLogRowId<
+  T extends { request_id?: string; id?: number },
+>(row: T, index: number): string {
+  if (row.request_id) return row.request_id
+  if (row.id) return String(row.id)
+  return String(index)
+}
+
 // ============================================================================
 // Type Checkers & Utilities
 // ============================================================================

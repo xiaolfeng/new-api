@@ -1,6 +1,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -105,26 +106,40 @@ func SaveQuotaDataCache() {
 	// 1. 先查询数据库中是否有数据
 	// 2. 如果有数据，就更新数据
 	// 3. 如果没有数据，就插入数据
-	for _, quotaData := range CacheQuotaData {
+	// 任何一步落库失败的条目都保留在缓存中，等待下次刷盘重试，
+	// 避免数据库短暂故障时永久丢失统计增量。
+	failed := make(map[string]*QuotaData)
+	for key, quotaData := range CacheQuotaData {
 		quotaDataDB := &QuotaData{}
-		DB.Table("quota_data").
+		err := DB.Table("quota_data").
 			Where("user_id = ? and username = ? and model_name = ? and created_at = ? and use_group = ? and token_id = ? and channel_id = ? and node_name = ?",
 				quotaData.UserID, quotaData.Username, quotaData.ModelName, quotaData.CreatedAt, quotaData.UseGroup, quotaData.TokenID, quotaData.ChannelID, quotaData.NodeName).
-			First(quotaDataDB)
-		if quotaDataDB.Id > 0 {
-			//quotaDataDB.Count += quotaData.Count
-			//quotaDataDB.Quota += quotaData.Quota
-			//DB.Table("quota_data").Save(quotaDataDB)
-			increaseQuotaData(quotaData)
-		} else {
-			DB.Table("quota_data").Create(quotaData)
+			First(quotaDataDB).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			failed[key] = quotaData
+			common.SysError(fmt.Sprintf("查询数据看板数据失败，保留待重试: %s", err))
+			continue
+		}
+		if err == nil && quotaDataDB.Id > 0 {
+			if err := increaseQuotaData(quotaData); err != nil {
+				failed[key] = quotaData
+				continue
+			}
+		} else if err := DB.Table("quota_data").Create(quotaData).Error; err != nil {
+			failed[key] = quotaData
+			common.SysError(fmt.Sprintf("保存数据看板数据失败，保留待重试: %s", err))
+			continue
 		}
 	}
-	CacheQuotaData = make(map[string]*QuotaData)
+	CacheQuotaData = failed
+	if len(failed) > 0 {
+		common.SysError(fmt.Sprintf("保存数据看板数据部分失败，共%d条中%d条保留待重试", size, len(failed)))
+		return
+	}
 	common.SysLog(fmt.Sprintf("保存数据看板数据成功，共保存%d条数据", size))
 }
 
-func increaseQuotaData(quotaData *QuotaData) {
+func increaseQuotaData(quotaData *QuotaData) error {
 	err := DB.Table("quota_data").
 		Where("user_id = ? and username = ? and model_name = ? and created_at = ? and use_group = ? and token_id = ? and channel_id = ? and node_name = ?",
 			quotaData.UserID, quotaData.Username, quotaData.ModelName, quotaData.CreatedAt, quotaData.UseGroup, quotaData.TokenID, quotaData.ChannelID, quotaData.NodeName).
@@ -134,8 +149,9 @@ func increaseQuotaData(quotaData *QuotaData) {
 			"token_used": gorm.Expr("token_used + ?", quotaData.TokenUsed),
 		}).Error
 	if err != nil {
-		common.SysLog(fmt.Sprintf("increaseQuotaData error: %s", err))
+		common.SysError(fmt.Sprintf("increaseQuotaData error: %s", err))
 	}
+	return err
 }
 
 func GetQuotaDataByUsername(username string, startTime int64, endTime int64) (quotaData []*QuotaData, err error) {

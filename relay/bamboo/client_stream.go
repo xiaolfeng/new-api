@@ -10,7 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/QuantumNous/new-api/common"
-	"github.com/QuantumNous/new-api/relay/clientprofile"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 )
 
@@ -20,26 +19,27 @@ const clientStreamDeltaRunes = 512
 // 识图前缀、host 围栏、主 hop / hop2 必须共用同一把 serializer，
 // 只写一次 message_start，结束时只 Flush 一次。
 type clientStream struct {
-	c         *gin.Context
-	info      *relaycommon.RelayInfo
-	ser       bamboocodec.StreamSerializer
-	writeSSE  func([]byte) bool
-	onStart   func()
-	startPing func() func()
-	stopPing  func()
-	headers   bool
-	started   bool
-	finished  bool
-	ok        bool
-	prefixN   int
+	c          *gin.Context
+	info       *relaycommon.RelayInfo
+	ser        bamboocodec.StreamSerializer
+	writer     *deliveryWriter
+	writeSSE   func([]byte) bool
+	onStart    func()
+	startPing  func() func()
+	stopPing   func()
+	headers    bool
+	started    bool
+	finished   bool
+	ok         bool
+	prefixN    int
 	openIdx    int
 	hasOpen    bool
 	sawDelta   bool
 	sawToolUse bool
 	frames     []string
-	format    bamboocodec.FormatType
-	model     string
-	lastUsage *bamboosdk.Usage
+	format     bamboocodec.FormatType
+	model      string
+	lastUsage  *bamboosdk.Usage
 }
 
 func newClientStream(c *gin.Context, entryCodec bamboocodec.Codec, info *relaycommon.RelayInfo, model string) *clientStream {
@@ -54,24 +54,8 @@ func newClientStream(c *gin.Context, entryCodec bamboocodec.Codec, info *relayco
 		format: entryCodec.Format(),
 		model:  model,
 	}
-	cs.writeSSE = func(data []byte) bool {
-		if c == nil || c.Writer == nil {
-			return false
-		}
-		data = clientprofile.NormalizeClaudeSSEFrame(info, data)
-		if len(data) == 0 {
-			return true
-		}
-		data = clientprofile.NormalizeResponsesSSEFrame(info, data)
-		if len(data) == 0 {
-			return true
-		}
-		if _, err := c.Writer.Write(data); err != nil {
-			return false
-		}
-		c.Writer.Flush()
-		return true
-	}
+	cs.writer = newDeliveryWriter(c, info, entryCodec.Format())
+	cs.writeSSE = cs.writer.writeSSE
 	return cs
 }
 
@@ -101,9 +85,7 @@ func (s *clientStream) ensureHeaders() {
 	if s == nil || s.headers {
 		return
 	}
-	if s.c != nil {
-		writeStreamHeaders(s.c)
-	}
+	s.writer.headers()
 	s.headers = true
 	s.resumePing()
 }
@@ -136,9 +118,6 @@ func (s *clientStream) ensureStart() {
 	if s.onStart != nil {
 		s.onStart()
 	}
-	if s.info != nil {
-		s.info.SetFirstResponseTime()
-	}
 	s.emit(bamboosdk.StreamEvent{
 		Type:    bamboosdk.EventMessageStart,
 		Message: &bamboosdk.BambooMessage{Role: bamboosdk.RoleAssistant},
@@ -165,7 +144,12 @@ func (s *clientStream) emit(ev bamboosdk.StreamEvent) bool {
 	}
 	s.rememberUsage(ev)
 	data, err := s.ser.Serialize(ev)
-	if err != nil || data == nil {
+	if err != nil {
+		s.info.DeliveryTiming.Fail("upstream_error")
+		s.ok = false
+		return false
+	}
+	if data == nil {
 		return s.ok
 	}
 	for _, frame := range bamboorelay.SplitSSEFrames(data) {
@@ -365,9 +349,6 @@ func (s *clientStream) forward(ev bamboosdk.StreamEvent) bool {
 		return s.ok
 	case bamboosdk.EventContentBlockStart:
 		s.ensureStart()
-		if s.info != nil {
-			s.info.SetFirstResponseTime()
-		}
 		if ev.ContentBlock != nil && ev.ContentBlock.BlockType() == bamboosdk.ContentBlockToolUse {
 			s.sawToolUse = true
 		}
@@ -375,9 +356,6 @@ func (s *clientStream) forward(ev bamboosdk.StreamEvent) bool {
 		return s.emit(ev)
 	case bamboosdk.EventContentBlockDelta:
 		s.ensureStart()
-		if s.info != nil {
-			s.info.SetFirstResponseTime()
-		}
 		ev.Index += s.prefixN
 		return s.emit(ev)
 	case bamboosdk.EventContentBlockStop:
@@ -399,6 +377,8 @@ func (s *clientStream) finish() {
 		return
 	}
 	s.finished = true
+	s.pausePing()
+	defer s.writer.finish("completed")
 	if s.started && !s.sawDelta {
 		stopReason := bamboosdk.FinishReasonEndTurn
 		if s.sawToolUse {
@@ -416,7 +396,12 @@ func (s *clientStream) finish() {
 	if s.ser == nil {
 		return
 	}
-	tail, _ := s.ser.Flush()
+	tail, err := s.ser.Flush()
+	if err != nil {
+		s.info.DeliveryTiming.Fail("upstream_error")
+		s.ok = false
+		return
+	}
 	if len(tail) == 0 {
 		return
 	}
@@ -451,6 +436,7 @@ func (s *clientStream) emitError(err error) {
 		return
 	}
 	s.ensureHeaders()
+	s.info.DeliveryTiming.Fail("upstream_error")
 	msg := "stream error"
 	if err != nil {
 		msg = err.Error()

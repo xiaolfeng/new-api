@@ -84,10 +84,31 @@ func TestClickHouseLogCreateTableSQL(t *testing.T) {
 	assert.Contains(t, withoutTTL, "PARTITION BY toYYYYMM(toDateTime(created_at))")
 	assert.Contains(t, withoutTTL, "ORDER BY (created_at, request_id)")
 	assert.NotContains(t, withoutTTL, "TTL ")
+	// 写入模型包含这些列，建表 SQL 必须齐全，否则常规消费日志插入直接失败。
+	assert.Contains(t, withoutTTL, "record String DEFAULT ''")
+	assert.Contains(t, withoutTTL, "full_log String DEFAULT ''")
+	assert.Contains(t, withoutTTL, "tps Float64 DEFAULT 0")
 
 	withTTL := clickHouseLogCreateTableSQL(30)
 	assert.Contains(t, withTTL, "ORDER BY (created_at, request_id)")
 	assert.Contains(t, withTTL, "TTL toDateTime(created_at) + INTERVAL 30 DAY DELETE")
+}
+
+func TestClickHouseTokenRecordCreateTableSQL(t *testing.T) {
+	sql := clickHouseTokenRecordCreateTableSQL()
+	assert.Contains(t, sql, "CREATE TABLE IF NOT EXISTS token_record")
+	assert.Contains(t, sql, "ORDER BY (bucket_start_at, model_name)")
+	// 读路径聚合依赖的全部指标列必须存在。
+	for _, column := range []string{
+		"request_count Int64 DEFAULT 0",
+		"prompt_tokens Int64 DEFAULT 0",
+		"completion_tokens Int64 DEFAULT 0",
+		"total_tokens Int64 DEFAULT 0",
+		"failed_count Int64 DEFAULT 0",
+		"failed_detail String DEFAULT ''",
+	} {
+		assert.Contains(t, sql, column)
+	}
 }
 
 func TestClickHouseCreateTableHasTTL(t *testing.T) {

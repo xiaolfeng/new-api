@@ -134,6 +134,28 @@ export interface HostToolsAdminInfo {
   builtin_responses?: boolean
 }
 
+export interface DeliveryTiming {
+  version: 1
+  source: 'server_delivery'
+  total_ms: number
+  ttft_ms: number | null
+  status: 'completed' | 'cancelled' | 'write_error' | 'upstream_error'
+}
+
+export interface UpstreamTiming {
+  total_ms?: number
+  ttft_ms?: number
+  thinking_ms?: number
+  content_ms?: number
+  tool_ms?: number
+  thinking_tps?: number
+  output_tps?: number
+  tool_tps?: number
+  thinking_tokens?: number
+  output_tokens?: number
+  tool_tokens?: number
+}
+
 export interface LogOtherData {
   admin_info?: {
     request_policy?: PolicyEvent[]
@@ -312,19 +334,10 @@ export interface LogOtherData {
   parent_session_id?: string
   parent_session_name?: string
   tps?: number
-  bamboo_timing?: {
-    total_ms?: number
-    ttft_ms?: number
-    thinking_ms?: number
-    content_ms?: number
-    tool_ms?: number
-    thinking_tps?: number
-    output_tps?: number
-    tool_tps?: number
-    thinking_tokens?: number
-    output_tokens?: number
-    tool_tokens?: number
-  }
+  delivery_timing?: DeliveryTiming
+  delivery_timing_invalid?: boolean
+  bamboo_timing?: UpstreamTiming
+  bamboo_timing_hops?: (UpstreamTiming & { hop_index: number })[]
 }
 
 /**

@@ -498,6 +498,9 @@ func migrateClickHouseLogDB() error {
 	if err := LOG_DB.Exec(clickHouseToolLogCreateTableSQL(ttlDays)).Error; err != nil {
 		return err
 	}
+	if err := LOG_DB.Exec(clickHouseTokenRecordCreateTableSQL()).Error; err != nil {
+		return err
+	}
 	return syncClickHouseLogTTL(ttlDays)
 }
 
@@ -546,11 +549,45 @@ CREATE TABLE IF NOT EXISTS logs (
 	ip String DEFAULT '',
 	request_id String DEFAULT '',
 	upstream_request_id String DEFAULT '',
-	other String DEFAULT ''
+	other String DEFAULT '',
+	record String DEFAULT '',
+	full_log String DEFAULT '',
+	tps Float64 DEFAULT 0
 )
 ENGINE = MergeTree()
 PARTITION BY toYYYYMM(toDateTime(created_at))
 ORDER BY (created_at, request_id)%s`, clickHouseLogTTLClause(ttlDays))
+}
+
+// clickHouseTokenRecordCreateTableSQL 与 TokenRecord 模型字段对齐。
+// ClickHouse 无唯一约束与原地 UPDATE，桶聚合写入语义受限（见修复记录），
+// 但读路径与列契约必须完整，否则模型日志看板直接不可用。
+func clickHouseTokenRecordCreateTableSQL() string {
+	return `CREATE TABLE IF NOT EXISTS token_record (
+	id Int64 DEFAULT 0,
+	bucket_start_at Int64 DEFAULT 0,
+	bucket_end_at Int64 DEFAULT 0,
+	model_name String DEFAULT '',
+	request_count Int64 DEFAULT 0,
+	prompt_tokens Int64 DEFAULT 0,
+	completion_tokens Int64 DEFAULT 0,
+	total_tokens Int64 DEFAULT 0,
+	total_use_time Int64 DEFAULT 0,
+	thinking_tokens Int64 DEFAULT 0,
+	thinking_duration_ms Int64 DEFAULT 0,
+	output_tokens Int64 DEFAULT 0,
+	output_duration_ms Int64 DEFAULT 0,
+	tool_tokens Int64 DEFAULT 0,
+	tool_duration_ms Int64 DEFAULT 0,
+	failed_count Int64 DEFAULT 0,
+	failed_detail String DEFAULT '',
+	first_used_at Int64 DEFAULT 0,
+	last_used_at Int64 DEFAULT 0,
+	created_at Int64 DEFAULT 0,
+	updated_at Int64 DEFAULT 0
+)
+ENGINE = MergeTree()
+ORDER BY (bucket_start_at, model_name)`
 }
 
 func clickHouseToolLogCreateTableSQL(ttlDays int) string {

@@ -15,7 +15,6 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/relay/bamboo/hosttool"
-	"github.com/QuantumNous/new-api/relay/clientprofile"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
@@ -67,7 +66,6 @@ func doHostCompleteRelay(c *gin.Context, info *relaycommon.RelayInfo, client bam
 		}
 		return nil, translateSDKError(err)
 	}
-	info.SetFirstResponseTime()
 	usage := usageFromBamboo(resp)
 	rawUsage1 := resp.Usage
 	blocks := hosttool.BlocksFromResponse(resp)
@@ -163,9 +161,9 @@ func writeCompleteResponse(c *gin.Context, info *relaycommon.RelayInfo, entryCod
 	if info.BambooDebug != nil {
 		info.BambooDebug.RelayResponse = bamboorelay.FormatRelayResponse("CompleteRelay", codecFmt, codecFmt, body)
 	}
-	body = clientprofile.NormalizeResponsesPayload(info, body)
-	c.Writer.Header().Set("Content-Type", "application/json")
-	_, _ = c.Writer.Write(body)
+	if werr := writeDeliveryJSON(c, info, codecFmt, body); werr != nil {
+		return usage, types.NewError(werr, types.ErrorCodeBadResponseBody)
+	}
 	info.ResponseBody = truncateResponseBody(string(body))
 	return usage, nil
 }
@@ -429,6 +427,13 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 	}
 
 	collector := newBambooTimingCollector()
+	defer func() {
+		if timingResult := collector.result(); !timingResult.IsZero() {
+			result := timingResult
+			info.BambooTiming = &result
+			info.BambooTimingHops = append(info.BambooTimingHops, result)
+		}
+	}()
 
 	type streamBlockAccum struct {
 		blockType         string
@@ -590,10 +595,6 @@ func collectStreamHop(ctx context.Context, c *gin.Context, info *relaycommon.Rel
 	out.blocks = blocks
 	out.usage = &usage
 	recordResponseBlocks(info, blocks)
-	if timingResult := collector.result(); !timingResult.IsZero() {
-		result := timingResult
-		info.BambooTiming = &result
-	}
 	if usage.PromptTokens == 0 {
 		usage.PromptTokens = info.GetEstimatePromptTokens()
 		out.usage = &usage
@@ -696,25 +697,20 @@ func doHostBuiltinResponses(c *gin.Context, info *relaycommon.RelayInfo, req *ba
 	createdAt := time.Now().Unix()
 	usage := &dto.Usage{UsageSemantic: "anthropic"}
 	common.SetContextKey(c, constant.ContextKeyEmptyResponse, false)
-	info.SetFirstResponseTime()
+	writer := newDeliveryWriter(c, info, bamboocodec.FormatResponses)
 
 	if req != nil && req.IsStream {
-		writeStreamHeaders(c)
+		writer.headers()
 		frames, err := hosttool.BuiltinStreamFrames(modelName, info.RequestId, createdAt, result)
 		if err != nil {
 			return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
 		}
 		var items []string
 		for _, frame := range frames {
-			frame = clientprofile.NormalizeResponsesSSEFrame(info, frame)
-			if len(frame) == 0 {
-				continue
-			}
 			items = append(items, string(frame))
-			if _, werr := c.Writer.Write(frame); werr != nil {
-				break
+			if !writer.writeSSE(frame) {
+				return usage, types.NewError(fmt.Errorf("response write failed"), types.ErrorCodeBadResponseBody)
 			}
-			c.Writer.Flush()
 		}
 		if len(items) > 0 {
 			info.ResponseBody = truncateResponseBody(strings.Join(items, "\n"))
@@ -727,9 +723,9 @@ func doHostBuiltinResponses(c *gin.Context, info *relaycommon.RelayInfo, req *ba
 	if err != nil {
 		return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
-	body = clientprofile.NormalizeResponsesPayload(info, body)
-	c.Writer.Header().Set("Content-Type", "application/json")
-	_, _ = c.Writer.Write(body)
+	if !writer.write(body, false) {
+		return usage, types.NewError(fmt.Errorf("response write failed"), types.ErrorCodeBadResponseBody)
+	}
 	info.ResponseBody = truncateResponseBody(string(body))
 	return usage, nil
 }
@@ -745,10 +741,10 @@ func doHostClaudeSearch(c *gin.Context, info *relaycommon.RelayInfo, req *bamboo
 	}
 	usage := &dto.Usage{UsageSemantic: "anthropic"}
 	common.SetContextKey(c, constant.ContextKeyEmptyResponse, false)
-	info.SetFirstResponseTime()
+	writer := newDeliveryWriter(c, info, bamboocodec.FormatAnthropic)
 
 	if req != nil && req.IsStream {
-		writeStreamHeaders(c)
+		writer.headers()
 		var frames [][]byte
 		var err error
 		if result.Kind == "fetch" {
@@ -761,15 +757,10 @@ func doHostClaudeSearch(c *gin.Context, info *relaycommon.RelayInfo, req *bamboo
 		}
 		var items []string
 		for _, frame := range frames {
-			frame = clientprofile.NormalizeClaudeSSEFrame(info, frame)
-			if len(frame) == 0 {
-				continue
-			}
 			items = append(items, string(frame))
-			if _, werr := c.Writer.Write(frame); werr != nil {
-				break
+			if !writer.writeSSE(frame) {
+				return usage, types.NewError(fmt.Errorf("response write failed"), types.ErrorCodeBadResponseBody)
 			}
-			c.Writer.Flush()
 		}
 		if len(items) > 0 {
 			info.ResponseBody = truncateResponseBody(strings.Join(items, "\n"))
@@ -788,8 +779,9 @@ func doHostClaudeSearch(c *gin.Context, info *relaycommon.RelayInfo, req *bamboo
 	if err != nil {
 		return usage, types.NewError(err, types.ErrorCodeBadResponseBody)
 	}
-	c.Writer.Header().Set("Content-Type", "application/json")
-	_, _ = c.Writer.Write(body)
+	if !writer.write(body, false) {
+		return usage, types.NewError(fmt.Errorf("response write failed"), types.ErrorCodeBadResponseBody)
+	}
 	info.ResponseBody = truncateResponseBody(string(body))
 	return usage, nil
 }

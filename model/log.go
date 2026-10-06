@@ -117,6 +117,11 @@ func assignDisplayLogIds(logs []*Log, startIdx int) {
 	}
 }
 
+// FormatUserLogs 对外暴露的用户视角格式化（详情端点单条复用列表同一套清洗规则）。
+func FormatUserLogs(logs []*Log, viewer *User) {
+	formatUserLogs(logs, 0, viewer)
+}
+
 func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 	for i := range logs {
 		logs[i].ChannelName = ""
@@ -186,6 +191,31 @@ func FormatRootLogs(logs []*Log) {
 	for i := range logs {
 		logs[i].Other = formatLogOtherJSON(logs[i].Other, logOtherVisibilityRoot)
 	}
+}
+
+// stripLogDetailPayload 列表响应不携带 record/full_log 大字段；
+// 详情按需经 GetLogByRequestId 获取，避免翻页一次性返回过多数据。
+func stripLogDetailPayload(logs []*Log) {
+	for i := range logs {
+		logs[i].Record = ""
+		logs[i].FullLog = ""
+	}
+}
+
+func GetLogByRequestId(requestId string) (*Log, error) {
+	order := "id desc"
+	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+		order = clickHouseLogOrder("")
+	}
+	var logs []*Log
+	err := LOG_DB.Model(&Log{}).Where("request_id = ?", requestId).Order(order).Limit(1).Find(&logs).Error
+	if err != nil {
+		return nil, err
+	}
+	if len(logs) == 0 {
+		return nil, gorm.ErrRecordNotFound
+	}
+	return logs[0], nil
 }
 
 func GetLogByTokenId(tokenId int) (logs []*Log, err error) {
@@ -619,7 +649,10 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if group != "" {
 		tx = tx.Where("logs."+logGroupCol+" = ?", group)
 	}
-	err = tx.Model(&Log{}).Count(&total).Error
+	err = countLogsCapped(tx, &total)
+	if err != nil {
+		return nil, 0, err
+	}
 	if err != nil {
 		return nil, 0, err
 	}
@@ -676,6 +709,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	}
 
 	appendAdminLogSummaries(logs)
+	stripLogDetailPayload(logs)
 	return logs, total, err
 }
 
@@ -726,6 +760,20 @@ func appendAdminLogSummaries(logs []*Log) {
 
 const logSearchCountLimit = 10000
 
+// countLogsCapped 用子查询封顶计数：`SELECT count(*) FROM (… LIMIT limit+1)`。
+// 直接 `Limit(n).Count()` 只限制结果行数（恒为 1），不会限制扫描量；
+// 封顶后超出部分的总数固定返回 limit，换取计数成本有界。
+func countLogsCapped(tx *gorm.DB, total *int64) error {
+	subQuery := tx.Session(&gorm.Session{}).Model(&Log{}).Select("1").Limit(logSearchCountLimit + 1)
+	if err := LOG_DB.Table("(?) as capped_logs", subQuery).Count(total).Error; err != nil {
+		return err
+	}
+	if *total > logSearchCountLimit {
+		*total = logSearchCountLimit
+	}
+	return nil
+}
+
 func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int64, modelName string, tokenName string, startIdx int, num int, group string, requestId string, upstreamRequestId string) (logs []*Log, total int64, err error) {
 	var tx *gorm.DB
 	if logType == LogTypeUnknown {
@@ -755,7 +803,11 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 	if group != "" {
 		tx = tx.Where("logs."+logGroupCol+" = ?", group)
 	}
-	err = tx.Model(&Log{}).Limit(logSearchCountLimit).Count(&total).Error
+	err = countLogsCapped(tx, &total)
+	if err != nil {
+		common.SysError("failed to count user logs: " + err.Error())
+		return nil, 0, errors.New("查询日志失败")
+	}
 	if err != nil {
 		common.SysError("failed to count user logs: " + err.Error())
 		return nil, 0, errors.New("查询日志失败")
@@ -777,6 +829,7 @@ func GetUserLogs(userId int, logType int, startTimestamp int64, endTimestamp int
 		common.SysError("failed to load user when formatting logs: " + userErr.Error())
 	}
 	formatUserLogs(logs, startIdx, viewer)
+	stripLogDetailPayload(logs)
 	return logs, total, err
 }
 
@@ -913,7 +966,10 @@ func DeleteOldLogBatch(ctx context.Context, targetTimestamp int64, limit int) (i
 		return total, nil
 	}
 
-	result := LOG_DB.WithContext(ctx).Where("created_at < ?", targetTimestamp).Limit(limit).Delete(&Log{})
+	// MySQL 之外 GORM 不会把 LIMIT 编入 DELETE，用 id IN (子查询 LIMIT) 三库统一限制批量。
+	result := LOG_DB.WithContext(ctx).
+		Where("id IN (?)", LOG_DB.Session(&gorm.Session{NewDB: true}).Model(&Log{}).Select("id").Where("created_at < ?", targetTimestamp).Limit(limit)).
+		Delete(&Log{})
 	if nil != result.Error {
 		return 0, result.Error
 	}

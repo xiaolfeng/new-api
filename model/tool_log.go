@@ -233,7 +233,10 @@ func deleteOldToolLogBatch(ctx context.Context, targetTimestamp int64, limit int
 		}
 		return total, nil
 	}
-	result := LOG_DB.WithContext(ctx).Where("created_at < ?", targetTimestamp).Limit(limit).Delete(&ToolLog{})
+	// MySQL 之外 GORM 不会把 LIMIT 编入 DELETE，用 id IN (子查询 LIMIT) 三库统一限制批量。
+	result := LOG_DB.WithContext(ctx).
+		Where("id IN (?)", LOG_DB.Session(&gorm.Session{NewDB: true}).Model(&ToolLog{}).Select("id").Where("created_at < ?", targetTimestamp).Limit(limit)).
+		Delete(&ToolLog{})
 	if result.Error != nil {
 		return 0, result.Error
 	}

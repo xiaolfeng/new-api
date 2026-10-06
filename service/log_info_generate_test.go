@@ -159,3 +159,59 @@ func TestAppendBambooTimingAlignsFrt(t *testing.T) {
 	assert.Equal(t, int64(8756), timing["ttft_ms"])
 	assert.Equal(t, -96.6, timing["thinking_tps"])
 }
+
+func TestDeliveryTimingLogUsesWrittenContentNotUpstreamTTFT(t *testing.T) {
+	start := time.Unix(100, 0)
+	info := &relaycommon.RelayInfo{
+		StartTime: start, IsStream: true,
+		FirstResponseTime: start.Add(9 * time.Second),
+		DeliveryTiming:    relaycommon.NewDeliveryTiming(start),
+		BambooTiming:      &relaycommon.BambooTimingResult{Stats: relaycommon.BambooTimingStats{TotalDuration: 7109 * time.Millisecond, FirstByteDuration: 7079 * time.Millisecond}},
+	}
+	info.BambooTimingHops = []relaycommon.BambooTimingResult{*info.BambooTiming, *info.BambooTiming}
+	info.DeliveryTiming.RecordContent(start.Add(8 * time.Second))
+	info.DeliveryTiming.Finish(start.Add(9*time.Second), "completed")
+	other := model.NewLogOther()
+	other.SetPublic("frt", float64(9000))
+	appendBambooTiming(info, other)
+	assert.Equal(t, float64(9000), other.Snapshot()["frt"], "上游明细不能覆盖交付首字")
+	appendDeliveryTiming(nil, info, other)
+	snap := other.Snapshot()
+	assert.Equal(t, float64(8000), snap["frt"])
+	result, ok := snap["delivery_timing"].(*relaycommon.DeliveryTimingResult)
+	require.True(t, ok)
+	assert.Equal(t, int64(9000), result.TotalMs)
+	assert.Equal(t, int64(8000), *result.TTFTMs)
+	hops, ok := snap["bamboo_timing_hops"].([]map[string]any)
+	require.True(t, ok)
+	require.Len(t, hops, 2)
+	assert.Equal(t, 1, hops[0]["hop_index"])
+	assert.Equal(t, 2, hops[1]["hop_index"])
+	tps, valid := calculateTextLogTPS(info, 100, 7)
+	require.True(t, valid)
+	assert.Equal(t, float64(100), tps)
+}
+
+func TestDeliveryTimingLogMissingAndZeroFirstContent(t *testing.T) {
+	start := time.Unix(100, 0)
+	for _, hasContent := range []bool{false, true} {
+		info := &relaycommon.RelayInfo{StartTime: start, IsStream: true, DeliveryTiming: relaycommon.NewDeliveryTiming(start)}
+		if hasContent {
+			info.DeliveryTiming.RecordContent(start)
+		}
+		info.DeliveryTiming.Finish(start.Add(time.Second), "completed")
+		other := model.NewLogOther()
+		appendDeliveryTiming(nil, info, other)
+		data, err := common.Marshal(other.Snapshot())
+		require.NoError(t, err)
+		var decoded map[string]any
+		require.NoError(t, common.Unmarshal(data, &decoded))
+		result := decoded["delivery_timing"].(map[string]any)
+		assert.Equal(t, float64(0), decoded["frt"])
+		if hasContent {
+			assert.Equal(t, float64(0), result["ttft_ms"])
+		} else {
+			assert.Nil(t, result["ttft_ms"])
+		}
+	}
+}

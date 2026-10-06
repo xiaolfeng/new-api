@@ -28,12 +28,21 @@ import { I18nextProvider } from 'react-i18next'
 import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 
 import en from '@/i18n/locales/en.json'
+import { getLogDetail } from '../../api'
 import type { UsageLog } from '../../data/schema'
 import { useCommonLogsColumns } from '../columns/common-logs-columns'
 import { DetailsDialog } from '../dialogs/details-dialog'
 import { UsageLogsProvider } from '../usage-logs-provider'
 
 vi.mock('@lobehub/icons', () => ({}))
+// 详情大字段已按需经 /api/log/detail 获取，测试直接 mock 端点返回。
+vi.mock('../../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api')>()
+  return {
+    ...actual,
+    getLogDetail: vi.fn(async () => ({ success: true, data: {} })),
+  }
+})
 vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: () => null,
@@ -185,7 +194,7 @@ describe('DetailsDialog session and structured record regression tests', () => {
     expect(screen.getByText('Code-Agent')).toBeInTheDocument()
   })
 
-  test('structured consumption record details displays headers and tool calls instead of only raw json', () => {
+  test('structured consumption record details displays headers and tool calls instead of only raw json', async () => {
     const recordPayload = {
       headers: {
         'user-agent': 'pi/0.99.0 darwin',
@@ -204,8 +213,11 @@ describe('DetailsDialog session and structured record regression tests', () => {
       ],
     }
 
-    const log = makeTestLog({
-      record: JSON.stringify(recordPayload),
+    const log = makeTestLog({})
+    // 列表响应已剥离大字段，详情经端点按需返回。
+    vi.mocked(getLogDetail).mockResolvedValue({
+      success: true,
+      data: { ...log, record: JSON.stringify(recordPayload) },
     })
 
     render(
@@ -222,8 +234,8 @@ describe('DetailsDialog session and structured record regression tests', () => {
       </I18nextProvider>
     )
 
-    // Click "View Record" button
-    const viewRecordButton = screen.getByRole('button', { name: /View Record/i })
+    // Click "View Record" button（详情端点异步返回后出现）
+    const viewRecordButton = await screen.findByRole('button', { name: /View Record/i })
     expect(viewRecordButton).toBeInTheDocument()
     fireEvent.click(viewRecordButton)
 

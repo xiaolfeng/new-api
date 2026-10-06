@@ -32,6 +32,8 @@ import {
   TooltipTrigger,
 } from '@/components/ui/tooltip'
 import { ROLE } from '@/lib/roles'
+import { useThemeRadiusPx } from '@/lib/theme-radius'
+import { useThemeCustomization } from '@/context/theme-customization-provider'
 import { cn } from '@/lib/utils'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -45,6 +47,7 @@ import {
   getDefaultDays,
   getSavedChartPreferences,
   getSavedGranularity,
+  processChartData,
   saveChartPreferences,
 } from './lib'
 import {
@@ -202,10 +205,28 @@ export function Dashboard() {
 
   const [modelData, setModelData] = useState<QuotaDataItem[]>([])
   const [dataLoading, setDataLoading] = useState(false)
+  const { customization } = useThemeCustomization()
+  const modelChartRadius = useThemeRadiusPx(
+    '--radius-md',
+    `${customization.preset}:${customization.radius}`
+  )
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
   const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
     buildDefaultDashboardFilters(getSavedChartPreferences())
+  )
+  const modelGranularity =
+    modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY
+  // models 页两张图共享同一次完整聚合，避免重复构造时间×模型矩阵。
+  const modelChartData = useMemo(
+    () =>
+      processChartData(
+        dataLoading ? [] : modelData,
+        modelGranularity,
+        t,
+        modelChartRadius
+      ),
+    [modelData, dataLoading, modelGranularity, t, modelChartRadius]
   )
   const [userChartsFilters, setUserChartsFilters] = useState<UserChartsFilters>(
     () => {
@@ -369,6 +390,7 @@ export function Dashboard() {
                   <LazyConsumptionDistributionChart
                     data={modelData}
                     loading={dataLoading}
+                    chartData={modelChartData}
                     defaultChartType={
                       chartPreferences.consumptionDistributionChart
                     }
@@ -383,6 +405,7 @@ export function Dashboard() {
                   <LazyModelCharts
                     data={modelData}
                     loading={dataLoading}
+                    chartData={modelChartData}
                     defaultChartTab={chartPreferences.modelAnalyticsChart}
                     timeGranularity={
                       modelFilters.time_granularity || DEFAULT_TIME_GRANULARITY

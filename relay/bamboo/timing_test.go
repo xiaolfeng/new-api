@@ -1,6 +1,7 @@
 package bamboo
 
 import (
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -8,6 +9,7 @@ import (
 	bamboocodec "github.com/bamboo-services/bamboo-messages/bamboo/codec"
 	_ "github.com/bamboo-services/bamboo-messages/bamboo/codec/openai"
 	"github.com/bamboo-services/bamboo-messages/provider"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -170,8 +172,8 @@ func TestClientStreamFirstResponseTimeCalibration(t *testing.T) {
 	}
 	relayInfo.InitFirstResponse()
 
-	cs := newClientStream(nil, codec, relayInfo, "test-model")
-	cs.writeSSE = func([]byte) bool { return true }
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	cs := newClientStream(c, codec, relayInfo, "test-model")
 
 	// 1. 发送 EventMessageStart：信封到达，此时不应打点首字响应时间
 	ok := cs.forward(bamboosdk.StreamEvent{
@@ -180,12 +182,17 @@ func TestClientStreamFirstResponseTimeCalibration(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, relayInfo.FirstResponseTime.IsZero(), "EventMessageStart 时不应打上首字时间")
 
-	// 2. 发送 EventContentBlockStart：真正的内容开始到达，此时必须打点
+	// 空内容块不是有效内容，不能提前打点。
 	ok = cs.forward(bamboosdk.StreamEvent{
 		Type:         bamboosdk.EventContentBlockStart,
 		Index:        0,
 		ContentBlock: bamboosdk.NewTextBlock(""),
 	})
 	require.True(t, ok)
-	assert.False(t, relayInfo.FirstResponseTime.IsZero(), "EventContentBlockStart 到达时必须打上首字时间")
+	assert.True(t, relayInfo.FirstResponseTime.IsZero(), "空 content_block_start 不应打点")
+	require.True(t, cs.forward(bamboosdk.StreamEvent{
+		Type:  bamboosdk.EventContentBlockDelta,
+		Delta: &bamboosdk.StreamDelta{Type: bamboosdk.DeltaTextDelta, Text: "hello"},
+	}))
+	assert.False(t, relayInfo.FirstResponseTime.IsZero(), "有效内容成功写出后必须打点")
 }

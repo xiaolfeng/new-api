@@ -1,4 +1,5 @@
 import { useEffect, useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
 import { api } from '@/lib/api'
@@ -226,7 +227,7 @@ export function TokenHeatmap() {
       </div>
 
       <div className='flex items-start'>
-        <div className='text-muted-foreground flex flex-col gap-[3px] pt-[18px] pr-2 text-[10px] leading-none'>
+        <div className='text-muted-foreground flex flex-col gap-[3px] pt-[16px] pr-2 text-[10px] leading-none'>
           <span className='flex h-[12px] items-center'>{monLabel}</span>
           <span className='h-[12px]' />
           <span className='flex h-[12px] items-center'>{wedLabel}</span>
@@ -236,7 +237,7 @@ export function TokenHeatmap() {
         </div>
 
         <div className='overflow-x-auto'>
-          <div className='flex gap-[3px] pb-1'>
+          <div className='flex h-[12px] gap-[3px] pb-1'>
             {Array.from({ length: 52 }).map((_, i) => {
               const label = monthLabels.find((l) => l.weekIndex === i)
               return (
@@ -278,9 +279,10 @@ export function TokenHeatmap() {
         </p>
       )}
 
-      {hovered && tooltipPos && (
-        <div
-          role='tooltip'
+      {hovered && tooltipPos &&
+        createPortal(
+          <div
+            role='tooltip'
           className='bg-foreground text-background pointer-events-none fixed z-50 min-w-[160px] rounded-md px-3 py-2 text-xs shadow-lg'
           style={{
             left: tooltipPos.x,
@@ -317,8 +319,9 @@ export function TokenHeatmap() {
               {t('No token usage data in this period')}
             </div>
           )}
-        </div>
-      )}
+          </div>,
+          document.body,
+        )}
     </div>
   )
 }

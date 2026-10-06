@@ -33,6 +33,7 @@ import { formatLogQuota, formatTimestampToDate } from '@/lib/format'
 
 import type { UsageLog } from '../data/schema'
 import { formatModelName, parseLogOther } from '../lib/format'
+import { getLogTiming } from '../lib/timing'
 import {
   getLogTypeConfig,
   isDisplayableLogType,
@@ -67,6 +68,7 @@ export function CommonLogMobileCard<TData>(props: {
   const [selectedField, setSelectedField] = useState<FieldName | null>(null)
   const log = props.log
   const other = parseLogOther(log.other)
+  const metrics = getLogTiming(log, other)
   const displayable = isDisplayableLogType(log.type)
   const timing = isTimingLogType(log.type)
   const model = formatModelName(log)
@@ -197,43 +199,17 @@ export function CommonLogMobileCard<TData>(props: {
                   isStream={log.is_stream}
                   isTask={other?.is_task === true}
                   isSyncTask={other?.task_sync === true}
-                  tokensPerSecond={
-                    log.use_time > 0 && log.completion_tokens > 0
-                      ? log.completion_tokens / log.use_time
-                      : null
-                  }
+                  tokensPerSecond={metrics.mobileTokensPerSecond}
+                  deliveryTiming={!metrics.legacy}
                   streamStatus={other?.stream_status}
                 />
               )}
               {props.cells.has('use_time') && (
                 <TimingMetricsCell
-                  useTimeSec={log.use_time}
-                  completionTokens={log.completion_tokens}
-                  frtMs={other?.frt}
-                  isStream={log.is_stream}
+                  log={log}
+                  other={other}
                   indicator='dot'
                   compact
-                  phaseTiming={
-                    other?.bamboo_timing
-                      ? {
-                          thinkingMs:
-                            typeof other.bamboo_timing.thinking_ms === 'number' &&
-                            other.bamboo_timing.thinking_ms > 0
-                              ? other.bamboo_timing.thinking_ms
-                              : null,
-                          contentMs:
-                            typeof other.bamboo_timing.content_ms === 'number' &&
-                            other.bamboo_timing.content_ms > 0
-                              ? other.bamboo_timing.content_ms
-                              : null,
-                          toolMs:
-                            typeof other.bamboo_timing.tool_ms === 'number' &&
-                            other.bamboo_timing.tool_ms > 0
-                              ? other.bamboo_timing.tool_ms
-                              : null,
-                        }
-                      : undefined
-                  }
                   className='min-h-6 max-w-full min-w-0 items-center justify-end [&>div]:justify-end'
                 />
               )}

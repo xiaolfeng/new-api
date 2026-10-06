@@ -188,6 +188,12 @@ export function useUsageLogsContext() {
   return context
 }
 
+// 可选上下文：详情弹层等可能在 Provider 外复用的组件使用，
+// 缺省时自动降级为无操作，避免强耦合页面级 Provider。
+export function useOptionalUsageLogsContext() {
+  return useContext(UsageLogsContext)
+}
+
 /**
  * Resolves the effective admin scope for usage logs: whether the current
  * user is allowed to view all users' logs (`canManageScope`), and whether

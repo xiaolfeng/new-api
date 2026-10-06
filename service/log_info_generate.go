@@ -167,6 +167,7 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	appendParamOverrideInfo(relayInfo, other)
 	appendStreamStatus(relayInfo, other)
 	appendBambooTiming(relayInfo, other)
+	appendDeliveryTiming(ctx, relayInfo, other)
 	return other
 }
 
@@ -348,7 +349,27 @@ func appendBambooTiming(relayInfo *relaycommon.RelayInfo, other *model.LogOther)
 	if bt.IsZero() {
 		return
 	}
-	timing := map[string]interface{}{
+	timing := bambooTimingLog(bt)
+	// 推荐兜底：如果外部因异步调度导致 frt 为 0，而 bamboo_timing 有高精度 ttft_ms，
+	// 可用 ttft_ms 对齐回填 other["frt"]，保证前端两处展示完全吻合
+	if relayInfo.DeliveryTiming == nil && bt.Stats.FirstByteDuration > 0 {
+		other.SetPublic("frt", float64(bt.Stats.FirstByteDuration.Milliseconds()))
+	}
+
+	other.SetPublic("bamboo_timing", timing)
+	if len(relayInfo.BambooTimingHops) > 0 {
+		hops := make([]map[string]any, 0, len(relayInfo.BambooTimingHops))
+		for i, hop := range relayInfo.BambooTimingHops {
+			item := bambooTimingLog(&hop)
+			item["hop_index"] = i + 1
+			hops = append(hops, item)
+		}
+		other.SetPublic("bamboo_timing_hops", hops)
+	}
+}
+
+func bambooTimingLog(bt *relaycommon.BambooTimingResult) map[string]any {
+	return map[string]any{
 		"total_ms":        bt.Stats.TotalDuration.Milliseconds(),
 		"ttft_ms":         bt.Stats.FirstByteDuration.Milliseconds(),
 		"thinking_ms":     bt.Stats.ThinkingDuration.Milliseconds(),
@@ -361,13 +382,43 @@ func appendBambooTiming(relayInfo *relaycommon.RelayInfo, other *model.LogOther)
 		"output_tokens":   bt.Tokens.OutputTokens,
 		"tool_tokens":     bt.Tokens.ToolTokens,
 	}
-	// 推荐兜底：如果外部因异步调度导致 frt 为 0，而 bamboo_timing 有高精度 ttft_ms，
-	// 可用 ttft_ms 对齐回填 other["frt"]，保证前端两处展示完全吻合
-	if bt.Stats.FirstByteDuration > 0 {
-		other.SetPublic("frt", float64(bt.Stats.FirstByteDuration.Milliseconds()))
-	}
+}
 
-	other.SetPublic("bamboo_timing", timing)
+func appendDeliveryTiming(ctx *gin.Context, info *relaycommon.RelayInfo, other *model.LogOther) {
+	if info.DeliveryTiming == nil {
+		return
+	}
+	result, valid := info.DeliveryTiming.Result()
+	if !valid {
+		logger.LogWarn(ctx, "invalid server delivery timing: TTFT must be between zero and total duration")
+		other.SetPublic("delivery_timing_invalid", true)
+		other.SetPublic("frt", float64(0))
+		return
+	}
+	if result == nil {
+		return
+	}
+	other.SetPublic("delivery_timing", result)
+	frt := float64(0)
+	if result.TTFTMs != nil {
+		frt = float64(*result.TTFTMs)
+	}
+	other.SetPublic("frt", frt)
+}
+
+// calculateTextLogTPS 使用和新版展示相同的交付分母，旧路径保留原有算法。
+func calculateTextLogTPS(info *relaycommon.RelayInfo, tokens, useTimeSeconds int) (float64, bool) {
+	if info.DeliveryTiming != nil {
+		result, valid := info.DeliveryTiming.Result()
+		if !valid {
+			return 0, false
+		}
+		if result != nil {
+			return result.AverageTPS(tokens, info.IsStream)
+		}
+	}
+	frt := float64(info.FirstResponseTime.UnixMilli() - info.StartTime.UnixMilli())
+	return CalculateTPS(tokens, useTimeSeconds, frt, info.IsStream)
 }
 
 func appendBillingInfo(relayInfo *relaycommon.RelayInfo, other *model.LogOther) {

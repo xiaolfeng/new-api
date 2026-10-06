@@ -30,10 +30,10 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { formatUseTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 import { getFirstResponseTimeColor, getResponseTimeColor } from '../lib/format'
+import { getLogTiming, LEGACY_TIMING_NOTE, type TimingLog } from '../lib/timing'
 import type { LogOtherData } from '../types'
 
 /**
@@ -57,10 +57,8 @@ interface PhaseTiming {
 }
 
 interface TimingMetricsCellProps {
-  useTimeSec: number
-  completionTokens: number
-  frtMs?: number
-  isStream: boolean
+  log: TimingLog
+  other?: LogOtherData | null
   className?: string
   /**
    * `bar` (default) draws a full-height color segment beside the labels,
@@ -70,33 +68,30 @@ interface TimingMetricsCellProps {
    */
   indicator?: 'bar' | 'dot'
   compact?: boolean
-  /**
-   * Optional per-phase breakdown (thinking / output / tool) sourced from
-   * `other.bamboo_timing`. When any segment is present the cell is wrapped in
-   * a tooltip revealing the phase durations.
-   */
-  phaseTiming?: PhaseTiming
 }
 
 export function TimingMetricsCell(props: TimingMetricsCellProps) {
   const { t } = useTranslation()
   const indicator = props.indicator ?? 'bar'
-  const showFirstToken = props.isStream
+  const metrics = getLogTiming(props.log, props.other)
+  const showFirstToken = props.log.is_stream
   const firstTokenSeconds =
-    props.frtMs != null && props.frtMs > 0 ? props.frtMs / 1000 : null
+    metrics.firstMs == null ? null : metrics.firstMs / 1000
   const firstTokenVariant: StatusVariant =
     firstTokenSeconds == null
       ? 'neutral'
       : getFirstResponseTimeColor(firstTokenSeconds)
-  const totalTimeVariant = getResponseTimeColor(
-    props.useTimeSec,
-    props.completionTokens
-  )
-  const firstTokenLabel =
-    firstTokenSeconds == null ? t('N/A') : formatUseTime(firstTokenSeconds)
-  const totalTimeLabel = formatUseTime(props.useTimeSec)
+  const totalTimeVariant: StatusVariant =
+    metrics.totalMs === null
+      ? 'neutral'
+      : getResponseTimeColor(
+          metrics.totalMs / 1000,
+          props.log.completion_tokens
+        )
+  const firstTokenLabel = metrics.firstLabel ?? t('N/A')
+  const totalTimeLabel = metrics.totalLabel ?? t('N/A')
 
-  const phase = props.phaseTiming
+  const phase: PhaseTiming | undefined = metrics.phaseTiming
   const thinkingMs =
     typeof phase?.thinkingMs === 'number' && phase.thinkingMs > 0
       ? phase.thinkingMs
@@ -152,6 +147,11 @@ export function TimingMetricsCell(props: TimingMetricsCellProps) {
           {totalTimeLabel}
         </span>
       </div>
+      {metrics.legacy && (
+        <span className='text-muted-foreground/60 basis-full text-[10px] leading-tight whitespace-normal'>
+          {t(LEGACY_TIMING_NOTE)}
+        </span>
+      )}
     </div>
   )
 
@@ -221,6 +221,7 @@ function PhaseTimingTooltipContent({
   return (
     <TooltipContent side='bottom' className='max-w-[220px] p-2'>
       <div className='space-y-1 text-xs'>
+        <p className='text-muted-foreground'>{t('Upstream timing')}</p>
         {thinkingMs != null && (
           <div className='flex items-center gap-1.5'>
             <span className='text-violet-500 dark:text-violet-400'>◆</span>
@@ -261,6 +262,7 @@ interface StreamTpsCellProps {
   /** The task request returned its result inline, so it is a synchronous call. */
   isSyncTask?: boolean
   tokensPerSecond?: number | null
+  deliveryTiming?: boolean
   streamStatus?: LogOtherData['stream_status']
   className?: string
 }
@@ -269,10 +271,13 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
   const { t } = useTranslation()
   const showStreamError =
     props.isStream && props.streamStatus && props.streamStatus.status !== 'ok'
-  const tpsLabel =
-    props.tokensPerSecond != null
-      ? `${Math.round(props.tokensPerSecond)} t/s`
-      : '—'
+  let tpsLabel = props.deliveryTiming ? t('N/A') : '—'
+  if (props.tokensPerSecond != null) {
+    const rate = props.deliveryTiming
+      ? props.tokensPerSecond.toFixed(1)
+      : Math.round(props.tokensPerSecond)
+    tpsLabel = `${rate} t/s`
+  }
   let streamLabel = props.isStream ? t('Stream') : t('Non-stream')
   if (props.isTask) {
     streamLabel = props.isSyncTask ? t('Sync') : t('Async')
@@ -317,6 +322,7 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
         )}
       </span>
       {(!props.compact ||
+        props.deliveryTiming ||
         (props.isStream && props.tokensPerSecond != null)) && (
         <span className='text-muted-foreground/60 px-0.5 tabular-nums'>
           {tpsLabel}

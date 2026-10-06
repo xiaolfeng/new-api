@@ -35,10 +35,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import {
-  HostToolInternalDash,
-  InteractionTypeCell,
-} from '../interaction-type-cell'
 import { usePricingData } from '@/features/pricing/hooks/use-pricing-data'
 import {
   normalizeTierLabel,
@@ -70,6 +66,9 @@ import {
   isViolationFeeLog,
   renderAuditContent,
 } from '../../lib/format'
+import { parseLogSession } from '../../lib/session-parser'
+import { parseClientSource } from '../../lib/source-parser'
+import { getLogTiming } from '../../lib/timing'
 import {
   isDisplayableLogType,
   isTimingLogType,
@@ -77,9 +76,11 @@ import {
   isPerCallBilling,
 } from '../../lib/utils'
 import type { LogOtherData } from '../../types'
-import { parseLogSession } from '../../lib/session-parser'
-import { parseClientSource } from '../../lib/source-parser'
 import { DetailsDialog } from '../dialogs/details-dialog'
+import {
+  HostToolInternalDash,
+  InteractionTypeCell,
+} from '../interaction-type-cell'
 import { LogCostDisplay } from '../log-cost-display'
 import { ModelBadge } from '../model-badge'
 import { TimingMetricsCell } from '../timing-metrics-cell'
@@ -705,7 +706,10 @@ export function useCommonLogsColumns(
 
           try {
             const other = parseLogOther(log.other)
-            if (other?.client_source && typeof other.client_source === 'string') {
+            if (
+              other?.client_source &&
+              typeof other.client_source === 'string'
+            ) {
               const color = stringToHslColor(other.client_source)
               return (
                 <div className='flex justify-center'>
@@ -764,8 +768,9 @@ export function useCommonLogsColumns(
           if (!isDisplayableLogType(log.type)) return null
 
           const session = parseLogSession(log)
-          const hasParent =
-            Boolean(session.parentSessionName || session.parentSessionId)
+          const hasParent = Boolean(
+            session.parentSessionName || session.parentSessionId
+          )
           const mainSessionName = hasParent
             ? session.parentSessionName
             : session.sessionName
@@ -857,8 +862,7 @@ export function useCommonLogsColumns(
           if (other?.host_tool_internal) {
             return <HostToolInternalDash />
           }
-          const tps = other?.tps
-          const hasValidTps = typeof tps === 'number' && tps > 0
+          const metrics = getLogTiming(log, other)
 
           const bt = other?.bamboo_timing
           const thinkingTps =
@@ -876,34 +880,8 @@ export function useCommonLogsColumns(
           const hasBambooRates =
             thinkingTps != null || outputTps != null || toolTps != null
 
-          const useTime = log.use_time
-          const ttftSec = (() => {
-            const btTtft = bt?.ttft_ms
-            if (typeof btTtft === 'number' && btTtft > 0) return btTtft / 1000
-            const frtVal = other?.frt
-            if (typeof frtVal === 'number' && frtVal > 0) return frtVal / 1000
-            return 0
-          })()
-
-          let completionTokens = log.completion_tokens
-          if (
-            completionTokens <= 0 &&
-            typeof bt?.output_tokens === 'number' &&
-            bt.output_tokens > 0
-          ) {
-            completionTokens = bt.output_tokens
-          }
-
-          const genTime =
-            log.is_stream && ttftSec > 0 ? useTime - ttftSec : useTime
-          const avgTps =
-            genTime > 0 && completionTokens > 0
-              ? completionTokens / genTime
-              : null
-
-          if (!hasValidTps && avgTps == null && !hasBambooRates) return null
-
-          const displayTps = hasValidTps ? (tps as number) : avgTps
+          const avgTps = metrics.averageTps
+          const displayTps = metrics.tokensPerSecond
 
           let colorClass = 'text-red-600 dark:text-red-400'
           if (displayTps != null) {
@@ -919,35 +897,36 @@ export function useCommonLogsColumns(
           let rateRow: ReactNode = null
           if (hasBambooRates) {
             rateRow = (
-              <div className="flex items-center gap-2 text-[11px]">
+              <div className='flex items-center gap-2 text-[11px]'>
+                <span className='text-muted-foreground'>{t('Upstream')}</span>
                 {thinkingTps != null && (
-                  <span className="flex items-center gap-0.5">
-                    <span className="text-violet-500/80 dark:text-violet-400/70">
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-violet-500/80 dark:text-violet-400/70'>
                       ◆
                     </span>
-                    <span className="font-mono text-violet-600/80 tabular-nums dark:text-violet-400/70">
+                    <span className='font-mono text-violet-600/80 tabular-nums dark:text-violet-400/70'>
                       {thinkingTps < 0 ? '~' : ''}
                       {Math.abs(thinkingTps).toFixed(1)}
                     </span>
                   </span>
                 )}
                 {outputTps != null && (
-                  <span className="flex items-center gap-0.5">
-                    <span className="text-sky-500/80 dark:text-sky-400/70">
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-sky-500/80 dark:text-sky-400/70'>
                       ◆
                     </span>
-                    <span className="font-mono text-sky-600/80 tabular-nums dark:text-sky-400/70">
+                    <span className='font-mono text-sky-600/80 tabular-nums dark:text-sky-400/70'>
                       {outputTps < 0 ? '~' : ''}
                       {Math.abs(outputTps).toFixed(1)}
                     </span>
                   </span>
                 )}
                 {toolTps != null && (
-                  <span className="flex items-center gap-0.5">
-                    <span className="text-amber-500/80 dark:text-amber-400/70">
+                  <span className='flex items-center gap-0.5'>
+                    <span className='text-amber-500/80 dark:text-amber-400/70'>
                       ◆
                     </span>
-                    <span className="font-mono text-amber-600/80 tabular-nums dark:text-amber-400/70">
+                    <span className='font-mono text-amber-600/80 tabular-nums dark:text-amber-400/70'>
                       {toolTps < 0 ? '~' : ''}
                       {Math.abs(toolTps).toFixed(1)}
                     </span>
@@ -955,21 +934,26 @@ export function useCommonLogsColumns(
                 )}
               </div>
             )
-          } else if (avgTps != null) {
+          } else if (metrics.legacy && avgTps != null) {
             rateRow = (
-              <span className="text-muted-foreground/60 font-mono text-[11px] tabular-nums">
+              <span className='text-muted-foreground/60 font-mono text-[11px] tabular-nums'>
                 {Math.round(avgTps)}
               </span>
             )
           }
 
           return (
-            <div className="flex flex-col gap-0.5">
+            <div className='flex flex-col gap-0.5'>
               {displayTps != null && (
                 <span
                   className={`font-mono text-sm font-medium tabular-nums ${colorClass}`}
                 >
                   {displayTps.toFixed(1)}
+                </span>
+              )}
+              {displayTps == null && (
+                <span className='text-muted-foreground text-xs'>
+                  {t('N/A')}
                 </span>
               )}
               {rateRow}
@@ -1039,7 +1023,7 @@ export function useCommonLogsColumns(
           }
           const summary = getCacheRateSummary(log.prompt_tokens || 0, other)
           if (summary.rate === null || summary.rate === 0) {
-            return <span className="text-muted-foreground text-xs">-</span>
+            return <span className='text-muted-foreground text-xs'>-</span>
           }
 
           return (
@@ -1047,38 +1031,38 @@ export function useCommonLogsColumns(
               <Tooltip>
                 <TooltipTrigger
                   render={
-                    <span className="font-mono text-xs font-medium text-emerald-600 tabular-nums dark:text-emerald-400">
+                    <span className='font-mono text-xs font-medium text-emerald-600 tabular-nums dark:text-emerald-400'>
                       {summary.rate.toFixed(1)}%
                     </span>
                   }
                 />
-                <TooltipContent side="top" className="max-w-[220px] p-2">
-                  <div className="flex flex-col gap-0.5 text-xs">
+                <TooltipContent side='top' className='max-w-[220px] p-2'>
+                  <div className='flex flex-col gap-0.5 text-xs'>
                     {summary.cacheReadTokens > 0 && (
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
+                      <div className='flex items-center justify-between gap-3'>
+                        <span className='text-muted-foreground'>
                           {t('Cache Read')}
                         </span>
-                        <span className="font-mono tabular-nums">
+                        <span className='font-mono tabular-nums'>
                           {summary.cacheReadTokens.toLocaleString()}
                         </span>
                       </div>
                     )}
                     {summary.cacheWriteTokens > 0 && (
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">
+                      <div className='flex items-center justify-between gap-3'>
+                        <span className='text-muted-foreground'>
                           {t('Cache Write')}
                         </span>
-                        <span className="font-mono tabular-nums">
+                        <span className='font-mono tabular-nums'>
                           {summary.cacheWriteTokens.toLocaleString()}
                         </span>
                       </div>
                     )}
-                    <div className="flex items-center justify-between gap-3 border-t pt-1">
-                      <span className="text-muted-foreground">
+                    <div className='flex items-center justify-between gap-3 border-t pt-1'>
+                      <span className='text-muted-foreground'>
                         {t('Input Total')}
                       </span>
-                      <span className="font-mono tabular-nums">
+                      <span className='font-mono tabular-nums'>
                         {summary.totalInput.toLocaleString()}
                       </span>
                     </div>
@@ -1117,36 +1101,9 @@ export function useCommonLogsColumns(
           const log = row.original
           if (!isTimingLogType(log.type)) return null
 
-          const useTime = row.getValue('use_time') as number
           const other = parseLogOther(log.other)
-          const bt = other?.bamboo_timing
 
-          return (
-            <TimingMetricsCell
-              useTimeSec={useTime}
-              completionTokens={log.completion_tokens}
-              frtMs={other?.frt}
-              isStream={log.is_stream}
-              phaseTiming={
-                bt
-                  ? {
-                      thinkingMs:
-                        typeof bt.thinking_ms === 'number' && bt.thinking_ms > 0
-                          ? bt.thinking_ms
-                          : null,
-                      contentMs:
-                        typeof bt.content_ms === 'number' && bt.content_ms > 0
-                          ? bt.content_ms
-                          : null,
-                      toolMs:
-                        typeof bt.tool_ms === 'number' && bt.tool_ms > 0
-                          ? bt.tool_ms
-                          : null,
-                    }
-                  : undefined
-              }
-            />
-          )
+          return <TimingMetricsCell log={log} other={other} />
         },
       },
 
@@ -1156,6 +1113,8 @@ export function useCommonLogsColumns(
         cell: function DetailsCell({ row }) {
           const { t, i18n } = useTranslation()
           const [dialogOpen, setDialogOpen] = useState(false)
+          // 懒挂载：首次点击详情才渲染 DetailsDialog，避免整页行解析大字段。
+          const [detailMounted, setDetailMounted] = useState(false)
           const log = row.original
           const other = parseLogOther(log.other)
 
@@ -1218,18 +1177,23 @@ export function useCommonLogsColumns(
               <button
                 type='button'
                 className='group flex max-w-[200px] items-center gap-1 text-left text-xs'
-                onClick={() => setDialogOpen(true)}
+                onClick={() => {
+                  setDetailMounted(true)
+                  setDialogOpen(true)
+                }}
                 title={t('Click to view full details')}
               >
                 {detailPreview}
               </button>
-              <DetailsDialog
-                log={log}
-                isAdmin={isAdmin}
-                isRoot={isRoot}
-                open={dialogOpen}
-                onOpenChange={setDialogOpen}
-              />
+              {detailMounted && (
+                <DetailsDialog
+                  log={log}
+                  isAdmin={isAdmin}
+                  isRoot={isRoot}
+                  open={dialogOpen}
+                  onOpenChange={setDialogOpen}
+                />
+              )}
             </>
           )
         },

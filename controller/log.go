@@ -99,6 +99,38 @@ func GetLogByKey(c *gin.Context) {
 		"data":    logs,
 	})
 }
+func GetLogDetail(c *gin.Context) {
+	requestId := c.Query("request_id")
+	if requestId == "" {
+		common.ApiErrorMsg(c, "request_id is required")
+		return
+	}
+	logEntry, err := model.GetLogByRequestId(requestId)
+	if err != nil {
+		common.ApiErrorMsg(c, "日志不存在")
+		return
+	}
+	role := c.GetInt("role")
+	if role < common.RoleAdminUser && logEntry.UserId != c.GetInt("id") {
+		common.ApiErrorMsg(c, "无权查看该日志")
+		return
+	}
+
+	logList := []*model.Log{logEntry}
+	switch {
+	case role >= common.RoleRootUser:
+		model.FormatRootLogs(logList)
+	case role >= common.RoleAdminUser:
+		model.FormatAdminLogs(logList)
+	default:
+		viewer := &model.User{Role: common.RoleCommonUser}
+		if user, userErr := model.GetUserById(logEntry.UserId, false); userErr == nil {
+			viewer = user
+		}
+		model.FormatUserLogs(logList, viewer)
+	}
+	common.ApiSuccess(c, logEntry)
+}
 
 func GetLogsStat(c *gin.Context) {
 	logType, _ := strconv.Atoi(c.Query("type"))
