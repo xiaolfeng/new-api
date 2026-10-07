@@ -61,6 +61,79 @@ func TestRecordRelayResultRecordsNormal(t *testing.T) {
 	}
 }
 
+func TestRecordRelayResultCommittedWithoutFirstResponseDoesNotPoisonMetrics(t *testing.T) {
+	hotBuckets.Clear()
+	t.Cleanup(func() { hotBuckets.Clear() })
+
+	testModel := "poison-model-" + t.Name()
+	now := time.Now()
+
+	timing := relaycommon.NewDeliveryTiming(now)
+	timing.MarkCommitted()
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName:         testModel,
+		UsingGroup:              "default",
+		IsStream:                true,
+		StartTime:               now,
+		DeliveryTiming:          timing,
+		PerformanceOutputTokens: 100,
+		// FirstResponseTime is time.Time{} (zero)
+	}
+
+	apiErr := types.NewError(errors.New("upstream failure"), types.ErrorCodeBadResponseBody)
+	RecordRelayResult(context.Background(), info, apiErr)
+
+	var recorded counters
+	found := false
+	hotBuckets.Range(func(key, val any) bool {
+		if key.(bucketKey).model == testModel {
+			found = true
+			recorded = val.(*atomicBucket).snapshot()
+		}
+		return true
+	})
+
+	require.True(t, found, "sample should be recorded")
+	assert.Equal(t, int64(0), recorded.ttftCount, "ttftCount must be 0 when no first response occurred")
+	assert.Equal(t, int64(0), recorded.ttftSumMs, "ttftSumMs must be 0")
+	assert.LessOrEqual(t, recorded.generationMs, int64(10000), "generationMs must not be year-1 offset (~6.4e13 ms)")
+}
+
+func TestRecordRelayResultRecordsValidTTFTAndGeneration(t *testing.T) {
+	hotBuckets.Clear()
+	t.Cleanup(func() { hotBuckets.Clear() })
+
+	testModel := "valid-model-" + t.Name()
+	now := time.Now()
+
+	info := &relaycommon.RelayInfo{
+		OriginModelName:         testModel,
+		UsingGroup:              "default",
+		IsStream:                true,
+		StartTime:               now,
+		FirstResponseTime:       now.Add(250 * time.Millisecond),
+		PerformanceOutputTokens: 100,
+	}
+
+	RecordRelayResult(context.Background(), info, nil)
+
+	var recorded counters
+	found := false
+	hotBuckets.Range(func(key, val any) bool {
+		if key.(bucketKey).model == testModel {
+			found = true
+			recorded = val.(*atomicBucket).snapshot()
+		}
+		return true
+	})
+
+	require.True(t, found, "sample should be recorded")
+	assert.Equal(t, int64(1), recorded.ttftCount, "ttftCount must be 1 for valid stream")
+	assert.Equal(t, int64(250), recorded.ttftSumMs, "ttftSumMs must be 250ms")
+	assert.GreaterOrEqual(t, recorded.generationMs, int64(0))
+}
+
 func TestClassifyRelayOutcome(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()

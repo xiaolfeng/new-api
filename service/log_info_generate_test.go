@@ -4,6 +4,9 @@ import (
 	"testing"
 	"time"
 
+	"net/http/httptest"
+
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -214,4 +217,61 @@ func TestDeliveryTimingLogMissingAndZeroFirstContent(t *testing.T) {
 			assert.Nil(t, result["ttft_ms"])
 		}
 	}
+}
+
+func TestGenerateTextOtherInfoWithZeroFirstResponseTimeDoesNotEmitNegativeFRT(t *testing.T) {
+	start := time.Unix(100, 0)
+	info := &relaycommon.RelayInfo{
+		StartTime:   start,
+		IsStream:    true,
+		ChannelMeta: &relaycommon.ChannelMeta{},
+		// FirstResponseTime is zero (time.Time{})
+	}
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	other := GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, 1)
+	snap := other.Snapshot()
+	assert.Equal(t, float64(0), snap["frt"], "frt must not be negative year-1 offset")
+}
+
+func TestCalculateTPSWithNegativeOrZeroFRTDoesNotCorruptGenerationTime(t *testing.T) {
+	// With 10 tokens and 5 seconds, but negative frt (due to zero FirstResponseTime)
+	tps, valid := CalculateTPS(10, 5, -63875596800000, true)
+	require.True(t, valid)
+	assert.Equal(t, float64(2), tps, "negative frt should fall back to useTimeSeconds rather than producing ~0 tps")
+
+	// calculateTextLogTPS with zero FirstResponseTime
+	start := time.Unix(100, 0)
+	info := &relaycommon.RelayInfo{
+		StartTime: start,
+		IsStream:  true,
+		// FirstResponseTime is zero
+	}
+	tps2, valid2 := calculateTextLogTPS(info, 10, 5)
+	require.True(t, valid2)
+	assert.Equal(t, float64(2), tps2)
+}
+
+func TestGenerateTextOtherInfoWithValidFRTAndNilChannelMeta(t *testing.T) {
+	start := time.Unix(100, 0)
+	info := &relaycommon.RelayInfo{
+		StartTime:         start,
+		FirstResponseTime: start.Add(1250 * time.Millisecond),
+		IsStream:          true,
+		ChannelMeta:       nil, // verify no nil dereference
+	}
+	rec := httptest.NewRecorder()
+	ctx, _ := gin.CreateTestContext(rec)
+	ctx.Request = httptest.NewRequest("POST", "/v1/chat/completions", nil)
+	other := GenerateTextOtherInfo(ctx, info, 1, 1, 1, 0, 0, 0, 1)
+	snap := other.Snapshot()
+	assert.Equal(t, float64(1250), snap["frt"])
+}
+
+func TestCalculateTPSNormalStreamCalculation(t *testing.T) {
+	// 100 tokens, 5s total, 1000ms (1s) FRT -> generation = 4s -> TPS = 25
+	tps, valid := CalculateTPS(100, 5, 1000, true)
+	require.True(t, valid)
+	assert.Equal(t, float64(25), tps)
 }

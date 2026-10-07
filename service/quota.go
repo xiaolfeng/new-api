@@ -238,7 +238,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	// 计算 TPS (Tokens Per Second)
 	var tpsValue float64
-	frt := float64(relayInfo.FirstResponseTime.UnixMilli() - relayInfo.StartTime.UnixMilli())
+	frt := relayInfo.FirstResponseDurationMs()
 	if tps, valid := CalculateTPS(usage.OutputTokens, int(useTimeSeconds), frt, relayInfo.IsStream); valid {
 		other.SetPublic("tps", tps)
 		tpsValue = tps
@@ -385,7 +385,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		completionRatio.InexactFloat64(), audioRatio.InexactFloat64(), audioCompletionRatio.InexactFloat64(), modelPrice, relayInfo.PriceData.GroupRatioInfo.GroupSpecialRatio)
 	// 计算 TPS (Tokens Per Second)
 	var tpsValue float64
-	frt := float64(relayInfo.FirstResponseTime.UnixMilli() - relayInfo.StartTime.UnixMilli())
+	frt := relayInfo.FirstResponseDurationMs()
 	if tps, valid := CalculateTPS(usage.CompletionTokens, int(useTimeSeconds), frt, relayInfo.IsStream); valid {
 		other.SetPublic("tps", tps)
 		tpsValue = tps

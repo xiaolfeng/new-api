@@ -32,12 +32,12 @@ func CalculateTPS(completionTokens int, useTimeSeconds int, frtMs float64, isStr
 	}
 
 	var generationTime float64
-	if isStream {
-		// 流式请求：计算生成时间（秒）= 总用时 - 首字用时
+	if isStream && frtMs > 0 {
+		// 流式请求且有有效首字用时：计算生成时间（秒）= 总用时 - 首字用时
 		frtSeconds := frtMs / 1000.0
 		generationTime = float64(useTimeSeconds) - frtSeconds
 	} else {
-		// 非流式请求：直接使用总用时
+		// 非流式请求或无有效首字用时：直接使用总用时
 		generationTime = float64(useTimeSeconds)
 	}
 
@@ -140,11 +140,11 @@ func GenerateTextOtherInfo(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, m
 	other.SetPublic("cache_ratio", cacheRatio)
 	other.SetPublic("model_price", modelPrice)
 	other.SetPublic("user_group_ratio", userGroupRatio)
-	other.SetPublic("frt", float64(relayInfo.FirstResponseTime.UnixMilli()-relayInfo.StartTime.UnixMilli()))
+	other.SetPublic("frt", relayInfo.FirstResponseDurationMs())
 	if relayInfo.ReasoningEffort != "" {
 		other.SetPublic("reasoning_effort", relayInfo.ReasoningEffort)
 	}
-	if relayInfo.IsModelMapped {
+	if relayInfo.ChannelMeta != nil && relayInfo.IsModelMapped {
 		other.SetPublic("is_model_mapped", true)
 		other.SetPublic("upstream_model_name", relayInfo.UpstreamModelName)
 	}
@@ -417,7 +417,7 @@ func calculateTextLogTPS(info *relaycommon.RelayInfo, tokens, useTimeSeconds int
 			return result.AverageTPS(tokens, info.IsStream)
 		}
 	}
-	frt := float64(info.FirstResponseTime.UnixMilli() - info.StartTime.UnixMilli())
+	frt := info.FirstResponseDurationMs()
 	return CalculateTPS(tokens, useTimeSeconds, frt, info.IsStream)
 }
 

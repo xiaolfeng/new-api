@@ -1101,6 +1101,14 @@ func (info *RelayInfo) HasSendResponse() bool {
 	return info.FirstResponseTime.After(info.StartTime)
 }
 
+// FirstResponseDurationMs 返回自请求开始到收到首字/首包的毫秒数；未发生首字响应或时间异常时返回 0。
+func (info *RelayInfo) FirstResponseDurationMs() float64 {
+	if info == nil || info.FirstResponseTime.IsZero() || !info.FirstResponseTime.After(info.StartTime) {
+		return 0
+	}
+	return float64(info.FirstResponseTime.Sub(info.StartTime).Milliseconds())
+}
+
 type OriginTaskRef struct {
 	TaskID         string
 	UpstreamTaskID string

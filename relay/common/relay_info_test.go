@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/constant"
@@ -432,4 +433,19 @@ func TestInitChannelMetaResetsPerAttemptStreamStateAndPreservesRequestState(t *t
 
 func ptr[T any](value T) *T {
 	return &value
+}
+
+func TestRelayInfoFirstResponseDurationMs(t *testing.T) {
+	var nilInfo *RelayInfo
+	assert.Equal(t, float64(0), nilInfo.FirstResponseDurationMs())
+
+	now := time.Now()
+	infoZero := &RelayInfo{StartTime: now}
+	assert.Equal(t, float64(0), infoZero.FirstResponseDurationMs())
+
+	infoBefore := &RelayInfo{StartTime: now, FirstResponseTime: now.Add(-time.Second)}
+	assert.Equal(t, float64(0), infoBefore.FirstResponseDurationMs())
+
+	infoValid := &RelayInfo{StartTime: now, FirstResponseTime: now.Add(350 * time.Millisecond)}
+	assert.Equal(t, float64(350), infoValid.FirstResponseDurationMs())
 }
