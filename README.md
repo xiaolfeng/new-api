@@ -4,311 +4,270 @@
 
 # New API
 
-**An AI gateway for models, applications, and agents**
+**XiaoLFeng Edition —— 带协议归一化中继内核、真实交付计时与深度会话观测的 AI 网关**
 
 <p align="center">
-  <a href="./README.zh_CN.md">简体中文</a> |
-  <a href="./README.zh_TW.md">繁體中文</a> |
-  <strong>English</strong> |
-  <a href="./README.fr.md">Français</a> |
-  <a href="./README.ja.md">日本語</a>
-</p>
-
-<p align="center">
-  <a href="https://raw.githubusercontent.com/Calcium-Ion/new-api/main/LICENSE">
-    <img src="https://img.shields.io/github/license/Calcium-Ion/new-api?color=brightgreen" alt="license">
+  <a href="./LICENSE">
+    <img src="https://img.shields.io/badge/license-AGPLv3-brightgreen" alt="license">
   </a><!--
-  --><a href="https://github.com/Calcium-Ion/new-api/releases/latest">
-    <img src="https://img.shields.io/github/v/release/Calcium-Ion/new-api?color=brightgreen&include_prereleases" alt="release">
+  --><a href="https://github.com/xiaolfeng/new-api/releases/latest">
+    <img src="https://img.shields.io/github/v/release/xiaolfeng/new-api?color=brightgreen&include_prereleases" alt="release">
   </a><!--
-  --><a href="https://hub.docker.com/r/CalciumIon/new-api">
-    <img src="https://img.shields.io/badge/docker-dockerHub-blue" alt="docker">
-  </a>
-  <a href="https://atomgit.com/QuantumNous/new-api" target="_blank">
-    <img alt="AtomGit G-Star" src="https://atomgit.com/QuantumNous/new-api/star/badge.svg"/>
+  --><a href="https://github.com/xiaolfeng/new-api/commits/newapi-xlf-v2">
+    <img src="https://img.shields.io/badge/branch-newapi--xlf--v2-blue" alt="branch">
   </a>
 </p>
 
 <p align="center">
-  <a href="https://trendshift.io/repositories/20180" target="_blank">
-    <img src="https://trendshift.io/api/badge/repositories/20180" alt="QuantumNous%2Fnew-api | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/>
-  </a>
-  <br>
-  <a href="https://hellogithub.com/repository/QuantumNous/new-api" target="_blank">
-    <img src="https://api.hellogithub.com/v1/widgets/recommend.svg?rid=539ac4217e69431684ad4a0bab768811&claim_uid=tbFPfKIDHpc4TzR" alt="Featured｜HelloGitHub" style="width: 250px; height: 54px;" width="250" height="54" />
-  </a><!--
-  -->
-  <a href="https://atomgit.com/QuantumNous/new-api" target="_blank">
-    <img alt="AtomGit G-Star" src="https://atomgit.com/QuantumNous/new-api/star/new_badge.svg" width="250" height="55" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="#capabilities">Capabilities</a> •
-  <a href="#quick-start">Quick start</a> •
-  <a href="#deployment">Deployment</a> •
-  <a href="#development">Development</a> •
-  <a href="#documentation">Documentation</a>
+  <a href="#版本核心特性">版本核心特性</a> •
+  <a href="#基础能力">基础能力</a> •
+  <a href="#快速开始">快速开始</a> •
+  <a href="#部署">部署</a> •
+  <a href="#开发">开发</a> •
+  <a href="#文档">文档</a> •
+  <a href="#上游与许可">上游与许可</a>
 </p>
 
 </div>
 
 ---
 
-## 📝 Project Description
+## 项目简介
 
-New API is a self-hosted AI gateway for applications, agents, and teams. Connect upstream model services, expose a consistent API to your clients, and manage routing, access, usage, and costs in one place.
+这是由 **XiaoLFeng** 深度定制并独立维护的 New API 版本（分支 `newapi-xlf-v2`）：一个自托管的 AI 网关，面向应用、Agent 与团队。它在完整保留基础平台能力（多供应商路由、配额计费、访问控制、Web 控制台）的同时，围绕**协议归一化、真实请求计时与 Agent 级会话观测**构建了一套自研子系统。
 
-Use it to share authorized model access across a team, switch providers without configuring every client again, or operate a private multi-model service with a web console. Upstreams include OpenAI, Anthropic, Google Gemini, Azure OpenAI, AWS Bedrock, Vertex AI, DeepSeek, Qwen, and other compatible services.
+接入上游模型服务，对客户端暴露统一 API，在一个控制台里管理路由、访问、用量与成本。支持的上游包括 OpenAI、Anthropic、Google Gemini、Azure OpenAI、AWS Bedrock、Vertex AI、DeepSeek、Qwen、Grok 等兼容服务。
+
+> [!NOTE]
+> 本版本的全部变更历史（278+ 次提交）、上游合并防冲突矩阵与同步 SOP，见 [XLF-CHANGELOG.md](./XLF-CHANGELOG.md)。
 
 > [!IMPORTANT]
-> - This project is intended solely for lawful and authorized AI API gateway, organization-level authentication, multi-model management, usage analytics, cost accounting, and private deployment scenarios.
-> - Users must lawfully obtain upstream API keys, accounts, model services, and interface permissions, and must comply with upstream terms of service and applicable laws and regulations.
-> - Users should ensure their use complies with upstream terms of service and applicable laws and regulations.
-> - When providing generative AI services to the public, users should comply with applicable regulatory requirements and fulfill all filing, licensing, content safety, real-name verification, log retention, tax, and upstream authorization obligations required by their jurisdiction.
-
-<!-- -->
-
-> [!WARNING]
-> When operating this project as a public generative AI service or API resale service, users should first complete all required filing, licensing, content safety, real-name verification, log retention, tax, payment, and upstream authorization obligations.
+> - 本项目仅用于合法授权的 AI API 网关、组织级鉴权、多模型管理、用量分析与成本核算等私有部署场景。
+> - 使用者须合法获取上游 API Key、账号与接口权限，并遵守上游服务条款及所在司法辖区的法律法规。
+> - 对公众提供生成式 AI 服务时，应完成所在辖区要求的备案、许可、内容安全、实名核验、日志留存与纳税等义务。
 
 ---
 
-## 🤝 Trusted Partners
+## 版本核心特性
 
-<p align="center">
-  <em>No particular order</em>
-</p>
+在基础平台之上，本版本构建了六个自研子系统，均有测试与文档覆盖：
 
-<p align="center">
-  <a href="https://www.cherry-ai.com/" target="_blank">
-    <img src="./docs/images/cherry-studio.png" alt="Cherry Studio" height="80" />
-  </a><!--
-  --><a href="https://github.com/iOfficeAI/AionUi/" target="_blank">
-    <img src="./docs/images/aionui.png" alt="Aion UI" height="80" />
-  </a><!--
-  --><a href="https://bda.pku.edu.cn/" target="_blank">
-    <img src="./docs/images/pku.png" alt="Peking University" height="80" />
-  </a><!--
-  --><a href="https://www.compshare.cn/?ytag=GPU_yy_gh_newapi" target="_blank">
-    <img src="./docs/images/ucloud.png" alt="UCloud" height="80" />
-  </a><!--
-  --><a href="https://www.aliyun.com/" target="_blank">
-    <img src="./docs/images/aliyun.png" alt="Alibaba Cloud" height="80" />
-  </a><!--
-  --><a href="https://io.net/" target="_blank">
-    <img src="./docs/images/io-net.png" alt="IO.NET" height="80" />
-  </a>
-</p>
+### 1. Bamboo 协议归一化中继内核
 
----
+`relay/bamboo/` 是本版本的第二个中继内核：将四大文本协议（OpenAI Chat、OpenAI Responses、Anthropic Messages、Gemini）先归一化为一条结构化事件流，再按客户端入口格式重新序列化。上游经由 `bamboo-messages` SDK 接入，提供：
 
-## 🙏 Special Thanks
+- 渠道级参数覆盖（SDK 拦截器实现）；
+- 结构化流式事件（thinking / text / tool_use），不再从字符串反解析；
+- **宿主侧工具**：服务端执行的 Web Search / Web Fetch / 识图，以工具调用进度流式回传给客户端（设计见 `docs/rfc/RFC-0001~0003`）；
+- 空响应检测与自动重试，包括上游返回 200 的静默空流；
+- 流式中断降级策略（DegradedReason）与渠道级 `StripThinkTags` 内联思考标签剥离；
+- Grok 客户端工具与搜索结果信封透传、Gemini 原生 WebSearch 适配为宿主工具。
 
-<p align="center">
-  <a href="https://www.jetbrains.com/?from=new-api" target="_blank">
-    <img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png" alt="JetBrains Logo" width="120" />
-  </a>
-</p>
+当供应商不被 Bamboo 支持时，中继自动回退到经典适配器链路，渠道配置无需任何改动。
 
-<p align="center">
-  <strong>Thanks to <a href="https://www.jetbrains.com/?from=new-api">JetBrains</a> for providing free open-source development license for this project</strong>
-</p>
+### 2. 服务端真实交付计时
 
----
+告别整秒粒度的 `use_time`，每个请求都在真实写出边界计时：
 
-<a id="capabilities"></a>
-
-## Capabilities
-
-| Area | What you can do |
+| 字段 | 含义 |
 | --- | --- |
-| Model access | Use OpenAI Chat Completions, Responses, Anthropic Messages, and Gemini APIs; stream responses and use tools, reasoning, and multimodal inputs where supported |
-| Routing | Configure model mappings, channel priorities and weights, retries, channel affinity, and multiple upstream keys |
-| Usage and costs | Manage quotas, subscriptions, usage logs, cache accounting, and expression-based pricing for different usage tiers |
-| Access control | Manage users, groups, fine-grained permissions, and API key restrictions; use OAuth/OIDC, passkeys, two-factor authentication, and login session management |
-| Asynchronous tasks | Extend image, video, and other task APIs with JavaScript plugins, including task status and output retrieval |
-| Web console | Configure channels and models, inspect usage and audit logs, and try models in the playground; available in English, Simplified Chinese, Traditional Chinese, French, Japanese, Russian, and Vietnamese |
+| `delivery_timing.ttft_ms` | 首个**含有效内容**的字节实际刷出给客户端的耗时（毫秒） |
+| `delivery_timing.total_ms` | 服务端完整交付耗时（毫秒） |
+| `delivery_timing.status` | `completed` / `cancelled` / `write_error` / `upstream_error` |
+| `bamboo_timing_hops[]` | 每次尝试的上游计时（总耗时、首字、thinking/输出/工具分段、分段 token 速率） |
 
-### Protocols and endpoints
+计时模型严格区分「响应头已提交」与「内容已交付」，跨重试与多跳中继保持同一请求级时钟；并内置零值时钟防护——无首字的失败流不会再以公元元年偏移污染 TTFT 与吞吐指标（`FirstResponseDurationMs()` 对异常时间安全返回 0）。
 
-| Interface | Common endpoints |
+### 3. Agent 与会话感知
+
+`common/client_profile.go` 对客户端做特征指纹并从请求体提取会话结构，使用日志可以直接回答「哪个 Agent、哪个会话、哪一跳」：
+
+- Claude Code（Agent + Session + 主线程/SubAgent 映射）、Codex、ZCode、OpenCode、Pi；
+- 会话亲和与子 Agent 识别以「来源 / 会话」列直接展示在控制台；
+- 内部宿主工具请求被打标，不计入 TPS 与缓存命中率统计。
+
+### 4. 面向运营的可观测性
+
+- **Token 热力图**（model-log）：周一对齐的 7×24 小时 TPS 网格，tooltip Portal 挂载杜绝漂移，支持分段计时（thinking / 输出 / 工具）；
+- **结构化日志详情**：Claude / OpenAI / Responses 的请求与响应解析为可读块，工具调用与正文分离，深层内容截断加横向滚动；
+- **分阶段 TPS 趋势**：父级一次聚合、多图共享，不再重复计算；
+- 日志列表响应剥离 `record` / `full_log` 大字段，详情弹窗按需经 `GET /api/log/detail`（以 `request_id` 定位）懒加载。
+
+### 5. 真实数据库下的可靠性加固
+
+所有修复均在 SQLite、MySQL ≥ 5.7.8、PostgreSQL ≥ 9.6 三库验证，ClickHouse 可作为独立日志库：
+
+- 计数查询以子查询封顶（`LIMIT 10001`），管理端日志搜索不会对大表全表扫描；
+- 批量删除使用 `id IN (SELECT id … LIMIT n)`——裸 `DELETE … LIMIT` 在 SQLite/PG 上会被静默忽略；
+- 失败计数采用 CAS 乐观锁重试循环，并发失败永不互相覆盖；
+- 看板缓存条目在落库失败时保留并在下次以累计差值补写；
+- ClickHouse 建表补齐 `record` / `full_log` / `tps` 列与 `token_record` 表。
+
+### 6. 前端体验打磨
+
+周一对齐热力图、tooltip Portal 到 `document.body`（免疫动画 `filter` 建立的包含块）、基于 `request_id` 的稳定行 ID、详情弹窗打开期间自动暂停刷新、统计 query key 不随翻页重复请求、移动端日志卡片与桌面端一致的计时指标。
+
+---
+
+## 基础能力
+
+| 领域 | 能做什么 |
 | --- | --- |
-| OpenAI Chat / Responses | `POST /v1/chat/completions`, `POST /v1/responses` |
+| 模型接入 | OpenAI Chat Completions / Responses、Anthropic Messages、Gemini API；流式、工具调用、推理、多模态按上游能力开放 |
+| 路由 | 模型映射、渠道优先级与权重、重试、渠道亲和、多上游 Key |
+| 用量与成本 | 配额、订阅、用量日志、缓存计费、表达式阶梯计费 |
+| 访问控制 | 用户 / 分组 / 细粒度权限 / API Key 限制；OAuth/OIDC、Passkey、两步验证、会话管理 |
+| 异步任务 | 以 JavaScript 插件扩展图像、视频等任务 API，含任务状态与产物获取 |
+| Web 控制台 | 渠道与模型配置、用量与审计日志、Playground；支持英文、简中、繁中、法、日、俄、越 |
+
+### 协议与端点
+
+| 接口 | 常用端点 |
+| --- | --- |
+| OpenAI Chat / Responses | `POST /v1/chat/completions`、`POST /v1/responses` |
 | Anthropic Messages | `POST /v1/messages` |
-| Gemini | `POST /v1beta/models/{model}:generateContent`, `POST /v1beta/models/{model}:streamGenerateContent` |
-| Realtime / Responses WebSocket | `GET /v1/realtime`, `GET /v1/responses` (WebSocket upgrade) |
-| Images / audio | `/v1/images/generations`, `/v1/images/edits`, `/v1/audio/speech`, `/v1/audio/transcriptions`, `/v1/audio/translations` |
-| Embeddings / rerank | `POST /v1/embeddings`, `POST /v1/rerank` |
-| Task plugins | `POST /v1/tasks/{pluginKey}`, `GET /v1/tasks/{taskId}`, plus routes declared by each plugin |
+| Gemini | `POST /v1beta/models/{model}:generateContent`、`POST /v1beta/models/{model}:streamGenerateContent` |
+| Realtime / Responses WebSocket | `GET /v1/realtime`、`GET /v1/responses`（WebSocket 升级） |
+| 图像 / 音频 | `/v1/images/generations`、`/v1/images/edits`、`/v1/audio/speech`、`/v1/audio/transcriptions`、`/v1/audio/translations` |
+| Embeddings / 重排 | `POST /v1/embeddings`、`POST /v1/rerank` |
+| 任务插件 | `POST /v1/tasks/{pluginKey}`、`GET /v1/tasks/{taskId}` 及各插件声明的路由 |
 
-[RelayKit](./relaykit/README.md) provides request, response, and streaming conversion between the four text protocols. Available features depend on the channel, upstream model, and conversion path; protocol-specific tools and fields may not map exactly. WebSocket support also requires a compatible upstream and channel configuration.
+[RelayKit](./relaykit/README.md) 负责四大文本协议间的请求 / 响应 / 流式转换，Bamboo 内核构建于其上。实际可用能力取决于渠道、上游模型与转换路径；协议特有字段与工具可能无法精确映射。WebSocket 需上游与渠道配置同时支持。
 
-This README describes the current source tree. Check the release notes for the version you deploy.
+---
 
-<a id="quick-start"></a>
+## 快速开始
 
-## Quick start
-
-### Try locally with Docker
-
-This starts a single instance with SQLite and binds it to localhost:
+本版本通过本仓库的 tag（`v2.1.7`、`v2.3.x`、`v2.4.x` …）经 [alpha 镜像工作流](./.github/workflows/docker-image-alpha.yml) 发布（镜像名 `<dockerhub-namespace>/newapi-fix`）。要运行本版本代码，请从源码构建——上游官方镜像**不包含**本版改动：
 
 ```bash
-mkdir -p data
-docker run --name new-api -d --restart unless-stopped \
-  -p 127.0.0.1:3000:3000 \
-  -e TZ=Asia/Shanghai \
-  -v "$(pwd)/data:/data" \
-  calciumion/new-api:latest
+git clone -b newapi-xlf-v2 https://github.com/xiaolfeng/new-api.git
+cd new-api
+
+# 构建前端（会嵌入 Go 二进制）
+cd web && bun install --frozen-lockfile && bun run build && cd ..
+
+# 以 SQLite 启动
+go run .
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and complete the setup wizard to create the administrator account. The `data` directory persists the SQLite database across container replacements.
+打开 [http://localhost:3000](http://localhost:3000)，按引导完成管理员账号初始化。
 
-### Make your first request
+### 发起第一个请求
 
-1. Add a channel with your upstream API key, available models, and group assignment; run a channel test.
-2. Configure model pricing and ensure the user has quota or a valid subscription.
-3. Create an API key in the console with access to the same group and models.
-4. Set your client's base URL to `http://localhost:3000/v1` for OpenAI-compatible clients and use the **New API-issued key**.
-
-Set `NEW_API_KEY` in your shell to that key. List the models accessible to it:
+1. 添加渠道：填入上游 API Key、可用模型与分组，跑一次渠道测试；
+2. 配置模型价格，确保用户有配额或有效订阅；
+3. 在控制台创建可访问同分组与模型的 API Key；
+4. OpenAI 兼容客户端把 Base URL 设为 `http://localhost:3000/v1`，使用**本网关签发的 Key**。
 
 ```bash
+export NEW_API_KEY=sk-...
 curl --fail-with-body http://localhost:3000/v1/models \
   -H "Authorization: Bearer ${NEW_API_KEY}"
-```
 
-Then call Responses, replacing `your-enabled-model` with an enabled model that supports this interface:
-
-```bash
 curl --fail-with-body http://localhost:3000/v1/responses \
   -H "Authorization: Bearer ${NEW_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{"model":"your-enabled-model","input":"Hello!"}'
 ```
 
-<a id="deployment"></a>
+---
 
-## Deployment
+## 部署
 
-### Docker Compose
+仓库自带的 [Compose 配置](./docker-compose.yml) 默认启动 **New API + PostgreSQL + Redis**，并含 MySQL 与独立 ClickHouse 日志库的示例。
 
-The repository's [Compose configuration](./docker-compose.yml) starts **New API + PostgreSQL + Redis** by default. It also contains examples for MySQL and a separate ClickHouse log database.
-
-```bash
-git clone https://github.com/QuantumNous/new-api.git
-cd new-api
-```
-
-Before starting, edit `docker-compose.yml`: replace the database and Redis example passwords in both the services and connection strings, and set a persistent random `SESSION_SECRET` (generate one with `openssl rand -hex 32`). For an HTTPS console, configure `SESSION_COOKIE_SECURE=true` and `SESSION_COOKIE_TRUSTED_URL` with its exact public HTTPS origin.
+启动前编辑 `docker-compose.yml`：替换数据库与 Redis 的示例密码（服务与连接串两处都要改），并设置持久随机的 `SESSION_SECRET`（可用 `openssl rand -hex 32` 生成）。控制台走 HTTPS 时，配置 `SESSION_COOKIE_SECURE=true` 与精确公网 HTTPS 源的 `SESSION_COOKIE_TRUSTED_URL`。
 
 ```bash
 docker compose up -d
 docker compose logs -f new-api
 ```
 
-### Storage and configuration
+### 存储与配置
 
-| Component | Options |
+| 组件 | 选项 |
 | --- | --- |
-| Main database | SQLite, MySQL ≥ 5.7.8, or PostgreSQL ≥ 9.6 |
-| Separate log database | Configure with `LOG_SQL_DSN`; also supports ClickHouse |
-| Cache | Optional Redis plus in-memory caching; use shared Redis when application nodes need shared rate limits |
-| Container platforms | Linux amd64 / arm64 |
+| 主数据库 | SQLite、MySQL ≥ 5.7.8、PostgreSQL ≥ 9.6 |
+| 独立日志库 | `LOG_SQL_DSN` 配置；支持 ClickHouse |
+| 缓存 | 可选 Redis + 内存缓存；多节点共享限流时使用共享 Redis |
+| 容器平台 | Linux amd64 / arm64 |
 
-| Variable | Purpose |
+| 变量 | 用途 |
 | --- | --- |
-| `SQL_DSN` | Main database connection; unset uses SQLite |
-| `LOG_SQL_DSN` | Optional separate log database connection |
-| `REDIS_CONN_STRING` | Redis connection string |
-| `SESSION_SECRET` | Persistent authentication secret; all nodes must use the same value |
-| `CRYPTO_SECRET` | Defaults to `SESSION_SECRET`; nodes sharing Redis must use the same effective value |
-| `SESSION_COOKIE_SECURE` | Set to `true` for an HTTPS console; enables Secure refresh cookies and strict refresh/logout origin checks |
-| `SESSION_COOKIE_TRUSTED_URL` | Required in Secure mode: comma-separated exact HTTPS origins, without paths or wildcards; leave unset for local HTTP |
-| `TRUSTED_PROXIES` | Trusted reverse-proxy IPs/CIDRs, or `none`; explicitly configure for your network |
+| `SQL_DSN` | 主库连接串；不设则使用 SQLite |
+| `LOG_SQL_DSN` | 独立日志库连接串 |
+| `REDIS_CONN_STRING` | Redis 连接串 |
+| `SESSION_SECRET` | 持久化认证密钥；所有节点必须一致 |
+| `CRYPTO_SECRET` | 默认取 `SESSION_SECRET`；共享 Redis 的节点必须一致 |
+| `SESSION_COOKIE_SECURE` | HTTPS 控制台设为 `true`；启用 Secure 刷新 Cookie 与严格的刷新/登出源校验 |
+| `SESSION_COOKIE_TRUSTED_URL` | Secure 模式必填：精确 HTTPS 源逗号分隔，不带路径与通配符；本地 HTTP 留空 |
+| `TRUSTED_PROXIES` | 受信反代 IP/CIDR 或 `none`；按网络环境显式配置 |
 
-See the [environment example](./.env.example), [environment reference](https://docs.newapi.ai/en/docs/installation/config-maintenance/environment-variables), and [authentication and session guide](./docs/authentication.md) for full configuration. Configure container variables in Compose's `environment` or `env_file`; copying `.env.example` alone does not inject variables into the container.
+完整配置见[环境变量示例](./.env.example)、上游[环境变量参考](https://docs.newapi.ai/en/docs/installation/config-maintenance/environment-variables)与[认证与会话指南](./docs/authentication.md)。
 
-For production, put the console behind HTTPS and configure your reverse proxy for streaming and WebSocket upgrades. Persist and back up the database and mounted data. Multi-node deployments must share the main database and authentication secrets; separate Redis instances or in-memory rate limiters count limits independently per node. The session guide describes propagation behavior for each topology.
+生产环境请将控制台置于 HTTPS 之后，并为流式与 WebSocket 升级正确配置反代。多节点部署必须共享主数据库与认证密钥。升级前务必备份数据库与挂载数据，并评估迁移与兼容性。
 
-Pin an image version from [Releases](https://github.com/QuantumNous/new-api/releases), review its upgrade notes, and back up before upgrading. The `latest` tag follows published builds and can change; migrations and compatibility must be assessed for your existing installation.
+### 同步上游主线
 
-<a id="development"></a>
-
-## Development and extensions
-
-The backend uses Go and Gin. The web console uses React 19, TypeScript, Rsbuild, TanStack, and Tailwind CSS 4. Use Bun for frontend dependencies and scripts; see [go.mod](./go.mod) for the Go language baseline and [Dockerfile](./Dockerfile) for the container build toolchain.
-
-Build the frontend before starting the backend, which embeds `web/dist`:
-
-```bash
-# Repository root
-cd web
-bun install --frozen-lockfile
-bun run build
-cd ..
-go run .
-```
-
-In a second terminal, start the frontend development server:
-
-```bash
-cd web
-bun run dev -- --port 5173
-```
-
-Open [http://localhost:5173](http://localhost:5173); the development server proxies API requests to the backend on port 3000. For a containerized development backend, see [docker-compose.dev.yml](./docker-compose.dev.yml) and the `make dev` target in [makefile](./makefile).
-
-| Location | Responsibility |
-| --- | --- |
-| `router/`, `middleware/`, `controller/` | HTTP routes, access checks, and API handlers |
-| `relay/` | Upstream adapters and request routing |
-| `service/`, `model/` | Business logic and persistence |
-| [relaykit/](./relaykit/README.md) | Independently buildable Go module for protocol DTOs and conversions |
-| [plugins/tasks/](./plugins/tasks/) | JavaScript task plugins; see [Task Plugin API v1](./docs/plugin-api/v1.md) for authoring and host boundaries |
-| `web/` | Web console; see [frontend conventions](./web/AGENTS.md) |
-| [electron/](./electron/README.md) | Desktop wrapper and packaging |
-
-Read [AGENTS.md](./AGENTS.md) before contributing. Run checks appropriate to your change, including `make test` for the Go modules and `bun run typecheck`, `bun run lint`, `bun run test`, and `bun run build` in `web/` for frontend changes. Changes to RelayKit must also pass `GOWORK=off go build ./...` from `relaykit/`.
-
-<a id="documentation"></a>
-
-## Documentation and community
-
-| Resource | Link |
-| --- | --- |
-| Official documentation | [Guides](https://docs.newapi.ai/en/docs) · [Installation](https://docs.newapi.ai/en/docs/installation) · [API reference](https://docs.newapi.ai/en/docs/api) |
-| Project exploration | [DeepWiki](https://deepwiki.com/QuantumNous/new-api) |
-| Questions and discussion | [FAQ](https://docs.newapi.ai/en/docs/support/faq) · [Community](https://docs.newapi.ai/en/docs/support/community-interaction) |
-| Bugs and feature requests | [GitHub Issues](https://github.com/QuantumNous/new-api/issues) |
-| Security reports | Follow the [security policy](./.github/SECURITY.md) for private reporting |
-
-For bug reports, include the version, deployment method, reproduction steps, and redacted logs. Documentation, translations, provider integrations, and focused regression tests are all welcome contributions.
+本版本会定期合并上游主线。自行同步前，务必先读 [XLF-CHANGELOG.md](./XLF-CHANGELOG.md#2-主线同步标准作业程序-upstream-sync-sop) 中的**防冲突矩阵与合并 SOP**——其中列出了六个必须穿越合并存活下来的子系统不变量，以及合并后必须全数通过的构建 / 测试关卡。
 
 ---
 
-## 🔗 Related Projects
+## 开发
 
-### Upstream Projects
+后端为 Go + Gin；控制台为 React 19、TypeScript、Rsbuild、TanStack、Tailwind CSS 4。前端依赖与脚本一律使用 Bun；Go 语言基线见 [go.mod](./go.mod)，容器构建工具链见 [Dockerfile](./Dockerfile)。
 
-| Project | Description |
-|------|------|
-| [One API](https://github.com/songquanpeng/one-api) | Original project base |
-| [Midjourney-Proxy](https://github.com/novicezk/midjourney-proxy) | Midjourney interface support |
+```bash
+# 后端（仓库根目录）
+go build ./...
+go test ./...
+make test
 
-### Supporting Tools
+# RelayKit 必须独立于 workspace 构建
+cd relaykit && GOWORK=off go build ./...
 
-| Project | Description |
-|------|------|
-| [new-api-key-tool](https://github.com/Calcium-Ion/new-api-key-tool) | Key quota query tool |
-| [new-api-horizon](https://github.com/Calcium-Ion/new-api-horizon) | New API high-performance optimized version |
+# 前端
+cd web
+bun install
+bun run dev -- --port 5173   # API 代理到 :3000 后端
+bun run typecheck && bun run lint && bun run test && bun run build
+```
+
+| 位置 | 职责 |
+| --- | --- |
+| `router/`、`middleware/`、`controller/` | HTTP 路由、访问校验、API 处理器 |
+| `relay/` | 上游适配器与请求路由 |
+| `relay/bamboo/` | 本版归一化中继内核与宿主工具（见 `relay/bamboo/AGENTS.md`） |
+| `service/`、`model/` | 业务逻辑与持久化 |
+| [relaykit/](./relaykit/README.md) | 可独立构建的协议 DTO 与转换 Go 模块 |
+| [plugins/tasks/](./plugins/tasks/) | JavaScript 任务插件；见[任务插件 API v1](./docs/plugin-api/v1.md) |
+| `web/` | Web 控制台；见[前端约定](./web/AGENTS.md) |
+| [electron/](./electron/README.md) | 桌面封装与打包 |
+| [XLF-CHANGELOG.md](./XLF-CHANGELOG.md) | 版本变更台账、防冲突矩阵与合并 SOP |
+
+贡献前先读 [AGENTS.md](./AGENTS.md)——它是项目知识库索引，并载有项目治理策略。
 
 ---
 
-## 📜 License
+## 文档
 
-This project is licensed under the [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE).
+| 资源 | 链接 |
+| --- | --- |
+| 本版变更与合并 SOP | [XLF-CHANGELOG.md](./XLF-CHANGELOG.md) |
+| 项目知识库 | [AGENTS.md](./AGENTS.md) 及各目录 `AGENTS.md` |
+| 本版设计记录 | `docs/rfc/`（宿主工具、客户端画像搜索回传、Gemini WebSearch）、`docs/superpowers/`（Bamboo 中继桥设计） |
+| 基础平台文档 | [指南](https://docs.newapi.ai/en/docs) · [安装](https://docs.newapi.ai/en/docs/installation) · [API 参考](https://docs.newapi.ai/en/docs/api) |
+| 缺陷与功能反馈（本 fork） | [GitHub Issues](https://github.com/xiaolfeng/new-api/issues) |
+| 安全报告 | 按上游[安全策略](./.github/SECURITY.md)私下报告 |
+
+---
+
+## 上游与许可
+
+本版本是 **[QuantumNous/new-api](https://github.com/QuantumNous/new-api)** 的深度 fork；上游又基于 [One API](https://github.com/songquanpeng/one-api)（MIT License）开发。基础平台的网关核心、Web 控制台与供应商适配器来自上游项目及其贡献者，本仓库的版本层由 XiaoLFeng 维护。本版特有的问题请[在本仓库提 Issue](https://github.com/xiaolfeng/new-api/issues)，勿向上游提交。
+
+本项目采用 [GNU Affero General Public License v3.0 (AGPLv3)](./LICENSE) 授权。
 
 Additional terms under AGPLv3 Section 7 apply. Modified versions must preserve
 the author attribution notice `Frontend design and development by New API
@@ -318,32 +277,16 @@ legal, footer, or attribution location presented by the user interface.
 Modified versions that present a user interface must also preserve a visible
 link to the original project: <https://github.com/QuantumNous/new-api>.
 
-This is an open-source project developed based on [One API](https://github.com/songquanpeng/one-api) (MIT License).
-
-If your organization's policies do not permit the use of AGPLv3-licensed software, or if you wish to avoid the open-source obligations of AGPLv3, please contact us at: [support@quantumnous.com](mailto:support@quantumnous.com)
-
-See [NOTICE](./NOTICE) and [third-party licenses](./THIRD-PARTY-LICENSES.md) for attribution and dependency notices.
-
----
-
-## 🌟 Star History
-
-<div align="center">
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Calcium-Ion/new-api&type=Date)](https://star-history.com/#Calcium-Ion/new-api&Date)
-
-</div>
+署名与依赖许可另见 [NOTICE](./NOTICE) 与 [THIRD-PARTY-LICENSES.md](./THIRD-PARTY-LICENSES.md)。
 
 ---
 
 <div align="center">
 
-### 💖 Thank you for using New API
+### 感谢使用 New API
 
-If this project is helpful to you, welcome to give us a ⭐️ Star！
+**[版本变更台账](./XLF-CHANGELOG.md)** • **[问题反馈](https://github.com/xiaolfeng/new-api/issues)** • **[最新发布](https://github.com/xiaolfeng/new-api/releases)**
 
-**[Official Documentation](https://docs.newapi.ai/en/docs)** • **[Issue Feedback](https://github.com/Calcium-Ion/new-api/issues)** • **[Latest Release](https://github.com/Calcium-Ion/new-api/releases)**
-
-<sub>Built with ❤️ by QuantumNous</sub>
+<sub>版本层由 XiaoLFeng 维护 · 基础平台来自 QuantumNous 与 New API contributors</sub>
 
 </div>
