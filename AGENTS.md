@@ -41,6 +41,7 @@ new-api/
 ├── logger/              # 日志初始化
 ├── web/                 # 前端（见 web/AGENTS.md）
 ├── docs/ / bin/ / electron/
+├── XLF-CHANGELOG.md     # XiaoLFeng 定制版变更与合并防冲突台账
 ├── makefile
 └── Dockerfile*
 ```
@@ -62,6 +63,7 @@ new-api/
 | 前端页面 | `web/src/features/<feature>/` | 见 [web 知识库](./web/AGENTS.md) |
 | 国际化 | 后端 `i18n/`；前端 `web/src/i18n/locales/` | 前端键为英文源文案 |
 | 共享工具 | `common/` | JSON、配额换算、Redis、env |
+| 定制变更 / 防冲突 | `XLF-CHANGELOG.md` | XiaoLFeng 定制版变更历史、防冲突矩阵与主线同步 SOP |
 
 ## 代码地图
 
@@ -264,3 +266,4 @@ docker compose -f docker-compose.dev.yml up
 - [relay/bamboo](./relay/bamboo/AGENTS.md) — 协议归一化内核
 - [relaykit](./relaykit/AGENTS.md) — 独立协议 DTO 与转换
 - [web](./web/AGENTS.md) — 前端技术栈、feature 组织、i18n、测试
+- [XLF-CHANGELOG](./XLF-CHANGELOG.md) — XiaoLFeng 定制版变更历史与主线防冲突台账
