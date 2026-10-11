@@ -32,6 +32,7 @@ import {
 } from '@/components/ui/select'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Switch } from '@/components/ui/switch'
+import { toIntlLocale } from '@/i18n/languages'
 
 import { ModelFilter } from './components/model-filter'
 import { ModelLogCharts } from './components/model-log-charts'
@@ -39,7 +40,8 @@ import { SummaryCards } from './components/summary-cards'
 import { TokenHeatmap } from './components/token-heatmap'
 import { SORT_OPTIONS } from './constants'
 import { useModelLogData } from './hooks/use-model-log-data'
-import { getChartColors } from './lib/chart-colors'
+import { buildStableModelColorMap } from './lib/chart-colors'
+import { sortModelLogItems } from './lib/chart-specs'
 import type { SortField, TokenRecordRecentItem } from './types'
 
 const TIME_RANGE_OPTIONS = [
@@ -48,43 +50,6 @@ const TIME_RANGE_OPTIONS = [
   { value: '24', labelKey: '24h' },
   { value: '168', labelKey: '7d' },
 ]
-
-function sortItems(
-  items: TokenRecordRecentItem[],
-  sortField: SortField,
-  sortDirection: 'asc' | 'desc'
-): TokenRecordRecentItem[] {
-  const sorted = [...items]
-  const multiplier = sortDirection === 'asc' ? 1 : -1
-
-  sorted.sort((a, b) => {
-    let aVal: number, bVal: number
-
-    switch (sortField) {
-      case 'total_tokens':
-        aVal = a.summary.completion_tokens || 0
-        bVal = b.summary.completion_tokens || 0
-        break
-      case 'failed_rate':
-        aVal = a.summary.failed_rate || 0
-        bVal = b.summary.failed_rate || 0
-        break
-      case 'avg_tps':
-        aVal = a.summary.avg_tps || 0
-        bVal = b.summary.avg_tps || 0
-        break
-      default:
-        return 0
-    }
-
-    if (aVal === bVal) {
-      return a.model_name.localeCompare(b.model_name) * multiplier
-    }
-    return (aVal - bVal) * multiplier
-  })
-
-  return sorted
-}
 
 const SUMMARY_SKELETON_KEYS = ['requests', 'input', 'output', 'models']
 
@@ -105,7 +70,8 @@ function SummaryCardsSkeleton() {
 }
 
 export function ModelLogPage() {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage ?? i18n.language)
   const {
     loading,
     refreshing,
@@ -125,7 +91,7 @@ export function ModelLogPage() {
   const [selectedModels, setSelectedModels] = useState<Set<string> | null>(null)
 
   const sortedItems = useMemo(
-    () => sortItems(items, sortField, sortDirection),
+    () => sortModelLogItems(items, sortField, sortDirection),
     [items, sortField, sortDirection]
   )
 
@@ -139,19 +105,27 @@ export function ModelLogPage() {
     return new Set(modelNames)
   }, [selectedModels, modelNames])
 
-  const colorRange = useMemo(
-    () => getChartColors(modelNames.length),
-    [modelNames.length]
+  const [stableColorState, setStableColorState] = useState<{
+    sourceItems: TokenRecordRecentItem[]
+    map: Map<string, string>
+  }>(() => ({
+    sourceItems: items,
+    map: buildStableModelColorMap(items.map((item) => item.model_name)),
+  }))
+
+  let modelColorMap = stableColorState.map
+  if (stableColorState.sourceItems !== items) {
+    modelColorMap = buildStableModelColorMap(
+      items.map((item) => item.model_name),
+      stableColorState.map
+    )
+    setStableColorState({ sourceItems: items, map: modelColorMap })
+  }
+
+  const modelSummaries = useMemo(
+    () => new Map(items.map((item) => [item.model_name, item.summary])),
+    [items]
   )
-
-  const modelColorMap = useMemo(() => {
-    const map = new Map<string, string>()
-    modelNames.forEach((name, idx) => {
-      map.set(name, colorRange[idx])
-    })
-    return map
-  }, [modelNames, colorRange])
-
   const handleToggleModel = useCallback(
     (model: string) => {
       setSelectedModels((prev) => {
@@ -216,10 +190,15 @@ export function ModelLogPage() {
           onSelectAll={handleSelectAll}
           onDeselectAll={handleDeselectAll}
           modelColorMap={modelColorMap}
+          modelSummaries={modelSummaries}
+          sortField={sortField}
+          locale={locale}
         />
         <ModelLogCharts
           sortedItems={sortedItems}
           selectedModels={effectiveSelected}
+          modelColorMap={modelColorMap}
+          locale={locale}
         />
       </div>
     )

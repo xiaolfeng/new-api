@@ -501,7 +501,30 @@ func migrateClickHouseLogDB() error {
 	if err := LOG_DB.Exec(clickHouseTokenRecordCreateTableSQL()).Error; err != nil {
 		return err
 	}
+	for _, stmt := range clickHouseIncrementalColumnMigrations() {
+		if err := LOG_DB.Exec(stmt).Error; err != nil {
+			return err
+		}
+	}
 	return syncClickHouseLogTTL(ttlDays)
+}
+
+func clickHouseIncrementalColumnMigrations() []string {
+	return []string{
+		"ALTER TABLE logs ADD COLUMN IF NOT EXISTS log_entry_id String DEFAULT ''",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS tps_sample_count Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS tps_completion_tokens Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS tps_duration_ms Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS thinking_sample_count Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS thinking_valid_tokens Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS thinking_valid_duration_ms Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS output_sample_count Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS output_valid_tokens Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS output_valid_duration_ms Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS tool_sample_count Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS tool_valid_tokens Int64 DEFAULT 0",
+		"ALTER TABLE token_record ADD COLUMN IF NOT EXISTS tool_valid_duration_ms Int64 DEFAULT 0",
+	}
 }
 
 func clickHouseLogTTLDays() int {
@@ -547,6 +570,7 @@ CREATE TABLE IF NOT EXISTS logs (
 	token_id Int32 DEFAULT 0,
 	`+"`group`"+` String DEFAULT '',
 	ip String DEFAULT '',
+	log_entry_id String DEFAULT '',
 	request_id String DEFAULT '',
 	upstream_request_id String DEFAULT '',
 	other String DEFAULT '',
@@ -573,12 +597,24 @@ func clickHouseTokenRecordCreateTableSQL() string {
 	completion_tokens Int64 DEFAULT 0,
 	total_tokens Int64 DEFAULT 0,
 	total_use_time Int64 DEFAULT 0,
+	tps_sample_count Int64 DEFAULT 0,
+	tps_completion_tokens Int64 DEFAULT 0,
+	tps_duration_ms Int64 DEFAULT 0,
+	thinking_sample_count Int64 DEFAULT 0,
 	thinking_tokens Int64 DEFAULT 0,
 	thinking_duration_ms Int64 DEFAULT 0,
+	thinking_valid_tokens Int64 DEFAULT 0,
+	thinking_valid_duration_ms Int64 DEFAULT 0,
+	output_sample_count Int64 DEFAULT 0,
 	output_tokens Int64 DEFAULT 0,
 	output_duration_ms Int64 DEFAULT 0,
+	output_valid_tokens Int64 DEFAULT 0,
+	output_valid_duration_ms Int64 DEFAULT 0,
+	tool_sample_count Int64 DEFAULT 0,
 	tool_tokens Int64 DEFAULT 0,
 	tool_duration_ms Int64 DEFAULT 0,
+	tool_valid_tokens Int64 DEFAULT 0,
+	tool_valid_duration_ms Int64 DEFAULT 0,
 	failed_count Int64 DEFAULT 0,
 	failed_detail String DEFAULT '',
 	first_used_at Int64 DEFAULT 0,

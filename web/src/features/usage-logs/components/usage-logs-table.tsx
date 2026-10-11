@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useQuery } from '@tanstack/react-query'
 import { getRouteApi } from '@tanstack/react-router'
 import type { ColumnDef } from '@tanstack/react-table'
-import { useCallback } from 'react'
+import { useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import {
@@ -45,12 +45,21 @@ import {
 import { shouldShowBillingSource } from '../lib/billing-source'
 import { useColumnsByCategory } from '../lib/columns'
 import { parseLogOther } from '../lib/format'
-import { fetchLogsByCategory, getLogRowId } from '../lib/utils'
+import {
+  ensureUniqueLogRowKeys,
+  fetchLogsByCategory,
+  getLogRowId,
+  type LogRowIdentityRecord,
+} from '../lib/utils'
 import type { LogCategory } from '../types'
 import { CommonLogsFilterBar } from './common-logs-filter-bar'
 import { TaskLogsFilterBar } from './task-logs-filter-bar'
 import { UsageLogsMobileList } from './usage-logs-mobile-card'
-import { useLogsViewScope, useUsageLogsContext, type LogsViewAccess } from './usage-logs-provider'
+import {
+  useLogsViewScope,
+  useUsageLogsContext,
+  type LogsViewAccess,
+} from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
@@ -86,10 +95,13 @@ interface UsageLogsTableProps {
 
 export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   const { t } = useTranslation()
-  const getColumnClassName = useCallback(
-    () => (logCategory === 'common' ? 'py-2' : 'py-3.5'),
-    [logCategory]
-  )
+  const { disableAutoRefresh, compactMode } = useUsageLogsContext()
+  const getColumnClassName = useCallback(() => {
+    if (logCategory !== 'common') {
+      return 'py-3.5'
+    }
+    return compactMode ? 'py-1 whitespace-nowrap' : 'py-2'
+  }, [logCategory, compactMode])
   const {
     isAdminView: isAdmin,
     isRootView: isRoot,
@@ -97,7 +109,6 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
   } = useLogsViewScope()
   const isMobile = useMediaQuery('(max-width: 640px)')
   const searchParams = route.useSearch()
-  const { disableAutoRefresh } = useUsageLogsContext()
   const userId = useAuthStore((state) => state.auth.user?.id)
   const { data: showBillingSource = false } = useQuery({
     queryKey: ['usage-log-billing-source', isAdmin, userId],
@@ -178,8 +189,8 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
       pagination.pageSize,
       columnFilters,
       searchParams,
-      t,
     ],
+    gcTime: 60_000,
     queryFn: async () => {
       const result = await fetchLogsByCategory({
         logCategory,
@@ -207,17 +218,26 @@ export function UsageLogsTable({ logCategory }: UsageLogsTableProps) {
     },
   })
 
-  const logs = data?.items || []
+  const logs = useMemo(
+    () =>
+      ensureUniqueLogRowKeys(
+        (data?.items || []) as unknown as Array<
+          LogRowIdentityRecord & Record<string, unknown>
+        >
+      ),
+    [data?.items]
+  )
   const columns = useColumnsByCategory(
     logCategory,
     isAdmin,
     isRoot,
-    showBillingSource
+    showBillingSource,
+    logCategory === 'common' && compactMode
   )
   const isLoadingData = isLoading || (isFetching && !data)
 
   const { table } = useDataTable({
-    data: logs as Record<string, unknown>[],
+    data: logs as unknown as Record<string, unknown>[],
     columns: columns as ColumnDef<Record<string, unknown>>[],
     columnFilters,
     columnVisibilityStorageKey: getColumnVisibilityStorageKey(

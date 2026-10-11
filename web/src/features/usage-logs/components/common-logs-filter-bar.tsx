@@ -56,7 +56,11 @@ import {
   LogsFilterInput,
   LogsFilterToolbar,
 } from './logs-filter-toolbar'
-import { useLogsViewScope, useUsageLogsContext } from './usage-logs-provider'
+import {
+  useLogsViewScope,
+  useUsageLogsContext,
+  useUsageLogsCountdown,
+} from './usage-logs-provider'
 
 const route = getRouteApi('/_authenticated/usage-logs/$section')
 
@@ -116,6 +120,15 @@ interface CommonLogsFilterBarProps<TData> {
   table: Table<TData>
 }
 
+function AutoRefreshCountdown() {
+  const countdown = useUsageLogsCountdown()
+  return (
+    <span className='text-muted-foreground/60 font-mono text-xs tabular-nums'>
+      {countdown}s
+    </span>
+  )
+}
+
 export function CommonLogsFilterBar<TData>(
   props: CommonLogsFilterBarProps<TData>
 ) {
@@ -128,9 +141,10 @@ export function CommonLogsFilterBar<TData>(
   const {
     sensitiveVisible,
     setSensitiveVisible,
+    compactMode,
+    setCompactMode,
     autoRefresh,
     setAutoRefresh,
-    countdown,
   } = useUsageLogsContext()
   const fetchingLogs = useIsFetching({ queryKey: ['logs'] })
   const { data: adminGroups } = useQuery({
@@ -152,8 +166,9 @@ export function CommonLogsFilterBar<TData>(
       .map((group) => ({ label: group, value: group }))
   }, [isAdmin, adminGroups, userGroups])
 
+  const [defaultTimeRange, setDefaultTimeRange] = useState(getDefaultTimeRange)
   const searchState = useMemo<CommonLogDraft>(() => {
-    const { start, end } = getDefaultTimeRange()
+    const { start, end } = defaultTimeRange
     const sourceValues = {
       startTime: searchParams.startTime,
       endTime: searchParams.endTime,
@@ -185,6 +200,7 @@ export function CommonLogsFilterBar<TData>(
       logType: getLogTypeValue(searchParams.type),
     }
   }, [
+    defaultTimeRange,
     searchParams.startTime,
     searchParams.endTime,
     searchParams.channel,
@@ -218,25 +234,30 @@ export function CommonLogsFilterBar<TData>(
   )
 
   const handleApply = useCallback(
-    (nextFilters: CommonLogFilters = filters) => {
+    async (nextFilters: CommonLogFilters = filters) => {
       const filterParams = buildSearchParams(nextFilters, 'common')
-      navigate({
-        to: '/usage-logs/$section',
-        params: { section: 'common' },
-        search: {
-          ...filterParams,
-          type: [logType],
-          page: 1,
-        },
-      })
-      queryClient.invalidateQueries({ queryKey: ['logs'] })
-      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+      await Promise.resolve(
+        navigate({
+          to: '/usage-logs/$section',
+          params: { section: 'common' },
+          search: {
+            ...filterParams,
+            type: [logType],
+            page: 1,
+          },
+        })
+      )
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['logs'] }),
+        queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] }),
+      ])
     },
     [filters, logType, navigate, queryClient]
   )
 
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
     const { start, end } = getDefaultTimeRange()
+    setDefaultTimeRange({ start, end })
     const resetFilters: CommonLogFilters = { startTime: start, endTime: end }
     const resetSearch = {
       type: [LOG_TYPE_ALL_VALUE],
@@ -249,16 +270,20 @@ export function CommonLogsFilterBar<TData>(
       logType: LOG_TYPE_ALL_VALUE,
     })
 
-    navigate({
-      to: '/usage-logs/$section',
-      params: { section: 'common' },
-      search: {
-        page: 1,
-        ...resetSearch,
-      },
-    })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
-    queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] })
+    await Promise.resolve(
+      navigate({
+        to: '/usage-logs/$section',
+        params: { section: 'common' },
+        search: {
+          page: 1,
+          ...resetSearch,
+        },
+      })
+    )
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['logs'] }),
+      queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] }),
+    ])
   }, [navigate, queryClient])
 
   const handleKeyDown = useCallback(
@@ -305,7 +330,7 @@ export function CommonLogsFilterBar<TData>(
 
   const statsBar = <CommonLogsStats />
   const sensitiveToggle = (
-    <div className='flex items-center gap-2'>
+    <div className='flex items-center gap-3'>
       <Tooltip>
         <TooltipTrigger
           render={
@@ -324,21 +349,30 @@ export function CommonLogsFilterBar<TData>(
           {sensitiveVisible ? t('Hide') : t('Show')}
         </TooltipContent>
       </Tooltip>
-      <div className='hidden sm:flex items-center gap-1.5'>
+      <div className='hidden items-center gap-1.5 sm:flex'>
+        <Switch
+          size='sm'
+          tabIndex={-1}
+          checked={compactMode}
+          onCheckedChange={setCompactMode}
+          aria-label={t('Minimal display')}
+        />
+        <span className='text-muted-foreground text-xs'>
+          {t('Minimal display')}
+        </span>
+      </div>
+      <div className='hidden items-center gap-1.5 sm:flex'>
         <Switch
           size='sm'
           tabIndex={-1}
           checked={autoRefresh}
           onCheckedChange={setAutoRefresh}
+          aria-label={t('Auto refresh')}
         />
         <span className='text-muted-foreground text-xs'>
           {t('Auto refresh')}
         </span>
-        {autoRefresh && (
-          <span className='text-muted-foreground/60 font-mono text-xs tabular-nums'>
-            {countdown}s
-          </span>
-        )}
+        {autoRefresh && <AutoRefreshCountdown />}
       </div>
     </div>
   )

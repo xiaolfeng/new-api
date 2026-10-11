@@ -44,7 +44,10 @@ afterEach(() => {
   cleanup()
 })
 
-if (typeof globalThis.localStorage === 'undefined' || !globalThis.localStorage) {
+if (
+  typeof globalThis.localStorage === 'undefined' ||
+  !globalThis.localStorage
+) {
   const store = new Map<string, string>()
   const localStorageMock: Storage = {
     get length() {

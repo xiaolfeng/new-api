@@ -17,12 +17,13 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 /* eslint-disable react-refresh/only-export-components */
-import { useQueryClient } from '@tanstack/react-query'
+import { useQueryClient, type QueryClient } from '@tanstack/react-query'
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -31,6 +32,7 @@ import {
 import { ROLE } from '@/lib/roles'
 import { useAuthStore } from '@/stores/auth-store'
 
+import { clearParsedLogOtherCache } from '../lib/format'
 import type { ChannelAffinityInfo } from '../types'
 
 const AUTO_REFRESH_INTERVAL_SECONDS = 30
@@ -46,6 +48,36 @@ export function resolveLogsViewAccess(
   return role === ROLE.SUPER_ADMIN ? 'root' : 'admin'
 }
 
+/**
+ * Releases stale query cache entries and parsed-JSON caches accumulated during
+ * auto-refresh cycles to prevent unbounded memory growth over long monitoring sessions.
+ */
+export function releaseUsageLogsMemory(queryClient: QueryClient): void {
+  clearParsedLogOtherCache()
+  queryClient.removeQueries({ queryKey: ['logs'], type: 'inactive' })
+  queryClient.removeQueries({
+    queryKey: ['usage-logs-stats'],
+    type: 'inactive',
+  })
+  queryClient.removeQueries({ queryKey: ['log-detail'], type: 'inactive' })
+  queryClient.setQueriesData<{ pages: unknown[]; pageParams: unknown[] }>(
+    { queryKey: ['logs', 'mobile'], type: 'active' },
+    (oldData) => {
+      if (
+        !oldData ||
+        !Array.isArray(oldData.pages) ||
+        oldData.pages.length <= 1
+      ) {
+        return oldData
+      }
+      return {
+        pages: oldData.pages.slice(0, 1),
+        pageParams: oldData.pageParams.slice(0, 1),
+      }
+    }
+  )
+}
+
 interface UsageLogsContextValue {
   selectedUserId: number | null
   setSelectedUserId: (userId: number | null) => void
@@ -57,6 +89,8 @@ interface UsageLogsContextValue {
   setAffinityDialogOpen: (open: boolean) => void
   sensitiveVisible: boolean
   setSensitiveVisible: (visible: boolean) => void
+  compactMode: boolean
+  setCompactMode: (compact: boolean) => void
   autoRefresh: boolean
   setAutoRefresh: (enabled: boolean) => void
   countdown: number
@@ -70,6 +104,9 @@ interface UsageLogsContextValue {
 const UsageLogsContext = createContext<UsageLogsContextValue | undefined>(
   undefined
 )
+const UsageLogsCountdownContext = createContext<number>(
+  AUTO_REFRESH_INTERVAL_SECONDS
+)
 
 export function UsageLogsProvider({ children }: { children: ReactNode }) {
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
@@ -78,6 +115,7 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
     useState<ChannelAffinityInfo | null>(null)
   const [affinityDialogOpen, setAffinityDialogOpen] = useState(false)
   const [sensitiveVisible, setSensitiveVisible] = useState(true)
+  const [compactMode, setCompactMode] = useState(false)
   const [autoRefresh, setAutoRefreshState] = useState(false)
   const [countdown, setCountdown] = useState(AUTO_REFRESH_INTERVAL_SECONDS)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
@@ -87,17 +125,22 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
   const isPausedRef = useRef(false)
   const [viewScope, setViewScope] = useState<LogsViewScope>('all')
 
-  const setAutoRefresh = useCallback((enabled: boolean) => {
-    setAutoRefreshState(enabled)
-    if (!enabled) {
+  const setAutoRefresh = useCallback(
+    (enabled: boolean) => {
+      setAutoRefreshState(enabled)
       setCountdown(AUTO_REFRESH_INTERVAL_SECONDS)
-    }
-  }, [])
+      if (!enabled) {
+        releaseUsageLogsMemory(queryClient)
+      }
+    },
+    [queryClient]
+  )
 
   const disableAutoRefresh = useCallback(() => {
     setAutoRefreshState(false)
     setCountdown(AUTO_REFRESH_INTERVAL_SECONDS)
-  }, [])
+    releaseUsageLogsMemory(queryClient)
+  }, [queryClient])
 
   useEffect(() => {
     isPausedRef.current = isDetailOpen || !pageVisible
@@ -110,18 +153,23 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
+    return () => {
+      releaseUsageLogsMemory(queryClient)
+    }
+  }, [queryClient])
+
+  useEffect(() => {
     if (!autoRefresh) return
-
-    setCountdown(AUTO_REFRESH_INTERVAL_SECONDS)
-
     const refreshIntervalId = setInterval(() => {
       if (isPausedRef.current) return
+      releaseUsageLogsMemory(queryClient)
       Promise.all([
         queryClient.invalidateQueries({ queryKey: ['logs'] }),
         queryClient.invalidateQueries({ queryKey: ['usage-logs-stats'] }),
       ])
         .then(() => {
           consecutiveFailuresRef.current = 0
+          releaseUsageLogsMemory(queryClient)
         })
         .catch(() => {
           const next = consecutiveFailuresRef.current + 1
@@ -152,32 +200,55 @@ export function UsageLogsProvider({ children }: { children: ReactNode }) {
     }
   }, [autoRefresh, queryClient])
 
+  const contextValue = useMemo<UsageLogsContextValue>(
+    () => ({
+      selectedUserId,
+      setSelectedUserId,
+      userInfoDialogOpen,
+      setUserInfoDialogOpen,
+      affinityTarget,
+      setAffinityTarget,
+      affinityDialogOpen,
+      setAffinityDialogOpen,
+      sensitiveVisible,
+      setSensitiveVisible,
+      compactMode,
+      setCompactMode,
+      autoRefresh,
+      setAutoRefresh,
+      countdown: AUTO_REFRESH_INTERVAL_SECONDS,
+      disableAutoRefresh,
+      isDetailOpen,
+      setIsDetailOpen,
+      viewScope,
+      setViewScope,
+    }),
+    [
+      selectedUserId,
+      userInfoDialogOpen,
+      affinityTarget,
+      affinityDialogOpen,
+      sensitiveVisible,
+      compactMode,
+      autoRefresh,
+      setAutoRefresh,
+      disableAutoRefresh,
+      isDetailOpen,
+      viewScope,
+    ]
+  )
+
   return (
-    <UsageLogsContext.Provider
-      value={{
-        selectedUserId,
-        setSelectedUserId,
-        userInfoDialogOpen,
-        setUserInfoDialogOpen,
-        affinityTarget,
-        setAffinityTarget,
-        affinityDialogOpen,
-        setAffinityDialogOpen,
-        sensitiveVisible,
-        setSensitiveVisible,
-        autoRefresh,
-        setAutoRefresh,
-        countdown,
-        disableAutoRefresh,
-        isDetailOpen,
-        setIsDetailOpen,
-        viewScope,
-        setViewScope,
-      }}
-    >
-      {children}
+    <UsageLogsContext.Provider value={contextValue}>
+      <UsageLogsCountdownContext.Provider value={countdown}>
+        {children}
+      </UsageLogsCountdownContext.Provider>
     </UsageLogsContext.Provider>
   )
+}
+
+export function useUsageLogsCountdown() {
+  return useContext(UsageLogsCountdownContext)
 }
 
 export function useUsageLogsContext() {

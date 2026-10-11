@@ -79,7 +79,7 @@ describe('UserHeatmap tooltip positioning', () => {
       </I18nextProvider>
     )
 
-    ;(await screen.findAllByRole('gridcell'))
+    await screen.findAllByRole('gridcell')
     const firstCell = screen.getAllByRole('gridcell')[0]
     // 第一行标签是 Monday：首个日期必须是周一，行序才与星期标签一致。
     const label = firstCell.getAttribute('aria-label') ?? ''

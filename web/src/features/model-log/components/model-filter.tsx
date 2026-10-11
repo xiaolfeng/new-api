@@ -2,6 +2,10 @@ import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { formatNumber, formatTokenUnits } from '@/lib/format'
+
+import { formatModelTpsSummary } from '../lib/chart-specs'
+import type { SortField, TokenRecordSummary } from '../types'
 
 interface ModelFilterProps {
   models: string[]
@@ -9,7 +13,10 @@ interface ModelFilterProps {
   onToggleModel: (model: string) => void
   onSelectAll: () => void
   onDeselectAll: () => void
-  modelColorMap: Map<string, string>
+  modelColorMap: ReadonlyMap<string, string>
+  modelSummaries?: ReadonlyMap<string, TokenRecordSummary>
+  sortField?: SortField
+  locale?: string
 }
 
 export function ModelFilter({
@@ -19,6 +26,9 @@ export function ModelFilter({
   onSelectAll,
   onDeselectAll,
   modelColorMap,
+  modelSummaries,
+  sortField,
+  locale,
 }: ModelFilterProps) {
   const { t } = useTranslation()
 
@@ -37,10 +47,19 @@ export function ModelFilter({
         {models.map((model) => {
           const isSelected = selectedModels.has(model)
           const color = modelColorMap.get(model)
+          const summary = modelSummaries?.get(model)
+          const avgTpsLabel = summary
+            ? formatModelTpsSummary(summary.avg_tps, summary.tps_sample_count)
+            : 'N/A'
+          const badgeTitle = summary
+            ? `${model} · ${t('Output Tokens')}: ${formatTokenUnits(summary.completion_tokens)} (${formatNumber(summary.completion_tokens, locale)}) · ${t('Average TPS')}: ${avgTpsLabel}`
+            : model
           return (
             <Badge
               key={model}
               variant='outline'
+              title={badgeTitle}
+              data-avg-tps={avgTpsLabel}
               className='cursor-pointer transition-opacity hover:opacity-80'
               style={{
                 opacity: isSelected ? 1 : 0.4,
@@ -49,7 +68,12 @@ export function ModelFilter({
               }}
               onClick={() => onToggleModel(model)}
             >
-              {model}
+              <span>{model}</span>
+              {summary && sortField === 'avg_tps' && (
+                <span className='ml-1 text-[10px] opacity-80'>
+                  ({avgTpsLabel})
+                </span>
+              )}
             </Badge>
           )
         })}

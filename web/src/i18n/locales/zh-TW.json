@@ -7002,7 +7002,8 @@
     "Length": "長度",
     "Code User": "程式碼使用者",
     "Expand all": "全部展開",
-    "Delete model \"{{name}}\"? This cannot be undone.": "刪除模型「{{name}}」？此操作無法復原。"
+    "Delete model \"{{name}}\"? This cannot be undone.": "刪除模型「{{name}}」？此操作無法復原。",
+    "Minimal display": "最小化顯示"
   },
   "Total Input": "Total Input"
 }

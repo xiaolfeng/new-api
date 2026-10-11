@@ -14,27 +14,39 @@ import (
 )
 
 type TokenRecord struct {
-	Id                 int    `json:"id"`
-	BucketStartAt      int64  `json:"bucket_start_at" gorm:"bigint;uniqueIndex:idx_token_record_bucket_model,priority:1;index:idx_token_record_bucket_start,priority:1"`
-	BucketEndAt        int64  `json:"bucket_end_at" gorm:"bigint"`
-	ModelName          string `json:"model_name" gorm:"size:255;default:'';uniqueIndex:idx_token_record_bucket_model,priority:2;index:idx_token_record_model_name"`
-	RequestCount       int64  `json:"request_count" gorm:"default:0"`
-	PromptTokens       int64  `json:"prompt_tokens" gorm:"default:0"`
-	CompletionTokens   int64  `json:"completion_tokens" gorm:"default:0"`
-	TotalTokens        int64  `json:"total_tokens" gorm:"default:0"`
-	TotalUseTime       int64  `json:"total_use_time" gorm:"default:0"`
-	ThinkingTokens     int64  `json:"thinking_tokens" gorm:"default:0"`
-	ThinkingDurationMs int64  `json:"thinking_duration_ms" gorm:"default:0"`
-	OutputTokens       int64  `json:"output_tokens" gorm:"default:0"`
-	OutputDurationMs   int64  `json:"output_duration_ms" gorm:"default:0"`
-	ToolTokens         int64  `json:"tool_tokens" gorm:"default:0"`
-	ToolDurationMs     int64  `json:"tool_duration_ms" gorm:"default:0"`
-	FailedCount        int64  `json:"failed_count" gorm:"default:0"`
-	FailedDetail       string `json:"failed_detail" gorm:"type:text"` // JSON: {"429":2,"500":1}
-	FirstUsedAt        int64  `json:"first_used_at" gorm:"bigint"`
-	LastUsedAt         int64  `json:"last_used_at" gorm:"bigint"`
-	CreatedAt          int64  `json:"created_at" gorm:"bigint"`
-	UpdatedAt          int64  `json:"updated_at" gorm:"bigint"`
+	Id                      int    `json:"id"`
+	BucketStartAt           int64  `json:"bucket_start_at" gorm:"bigint;uniqueIndex:idx_token_record_bucket_model,priority:1;index:idx_token_record_bucket_start,priority:1"`
+	BucketEndAt             int64  `json:"bucket_end_at" gorm:"bigint"`
+	ModelName               string `json:"model_name" gorm:"size:255;default:'';uniqueIndex:idx_token_record_bucket_model,priority:2;index:idx_token_record_model_name"`
+	RequestCount            int64  `json:"request_count" gorm:"default:0"`
+	PromptTokens            int64  `json:"prompt_tokens" gorm:"default:0"`
+	CompletionTokens        int64  `json:"completion_tokens" gorm:"default:0"`
+	TotalTokens             int64  `json:"total_tokens" gorm:"default:0"`
+	TotalUseTime            int64  `json:"total_use_time" gorm:"default:0"`
+	TpsSampleCount          int64  `json:"tps_sample_count" gorm:"column:tps_sample_count;default:0"`
+	TpsCompletionTokens     int64  `json:"tps_completion_tokens" gorm:"column:tps_completion_tokens;default:0"`
+	TpsDurationMs           int64  `json:"tps_duration_ms" gorm:"column:tps_duration_ms;default:0"`
+	ThinkingSampleCount     int64  `json:"thinking_sample_count" gorm:"column:thinking_sample_count;default:0"`
+	ThinkingTokens          int64  `json:"thinking_tokens" gorm:"default:0"`
+	ThinkingDurationMs      int64  `json:"thinking_duration_ms" gorm:"default:0"`
+	ThinkingValidTokens     int64  `json:"thinking_valid_tokens" gorm:"column:thinking_valid_tokens;default:0"`
+	ThinkingValidDurationMs int64  `json:"thinking_valid_duration_ms" gorm:"column:thinking_valid_duration_ms;default:0"`
+	OutputSampleCount       int64  `json:"output_sample_count" gorm:"column:output_sample_count;default:0"`
+	OutputTokens            int64  `json:"output_tokens" gorm:"default:0"`
+	OutputDurationMs        int64  `json:"output_duration_ms" gorm:"default:0"`
+	OutputValidTokens       int64  `json:"output_valid_tokens" gorm:"column:output_valid_tokens;default:0"`
+	OutputValidDurationMs   int64  `json:"output_valid_duration_ms" gorm:"column:output_valid_duration_ms;default:0"`
+	ToolSampleCount         int64  `json:"tool_sample_count" gorm:"column:tool_sample_count;default:0"`
+	ToolTokens              int64  `json:"tool_tokens" gorm:"default:0"`
+	ToolDurationMs          int64  `json:"tool_duration_ms" gorm:"default:0"`
+	ToolValidTokens         int64  `json:"tool_valid_tokens" gorm:"column:tool_valid_tokens;default:0"`
+	ToolValidDurationMs     int64  `json:"tool_valid_duration_ms" gorm:"column:tool_valid_duration_ms;default:0"`
+	FailedCount             int64  `json:"failed_count" gorm:"default:0"`
+	FailedDetail            string `json:"failed_detail" gorm:"type:text"` // JSON: {"429":2,"500":1}
+	FirstUsedAt             int64  `json:"first_used_at" gorm:"bigint"`
+	LastUsedAt              int64  `json:"last_used_at" gorm:"bigint"`
+	CreatedAt               int64  `json:"created_at" gorm:"bigint"`
+	UpdatedAt               int64  `json:"updated_at" gorm:"bigint"`
 }
 
 func (TokenRecord) TableName() string {
@@ -49,47 +61,59 @@ type TokenRecordHourMeta struct {
 }
 
 type TokenRecordHourCell struct {
-	BucketStartAt      int64            `json:"bucket_start_at"`
-	BucketEndAt        int64            `json:"bucket_end_at"`
-	RequestCount       int64            `json:"request_count"`
-	PromptTokens       int64            `json:"prompt_tokens"`
-	CompletionTokens   int64            `json:"completion_tokens"`
-	TotalTokens        int64            `json:"total_tokens"`
-	TotalUseTime       int64            `json:"total_use_time"`
-	AvgTPS             float64          `json:"avg_tps"`
-	ThinkingTokens     int64            `json:"thinking_tokens"`
-	ThinkingDurationMs int64            `json:"thinking_duration_ms"`
-	AvgThinkingTPS     float64          `json:"avg_thinking_tps"`
-	OutputTokens       int64            `json:"output_tokens"`
-	OutputDurationMs   int64            `json:"output_duration_ms"`
-	AvgOutputTPS       float64          `json:"avg_output_tps"`
-	ToolTokens         int64            `json:"tool_tokens"`
-	ToolDurationMs     int64            `json:"tool_duration_ms"`
-	AvgToolTPS         float64          `json:"avg_tool_tps"`
-	FailedCount        int64            `json:"failed_count"`
-	FailedDetail       map[string]int64 `json:"failed_detail"`
-	IsCurrent          bool             `json:"is_current"`
+	BucketStartAt       int64            `json:"bucket_start_at"`
+	BucketEndAt         int64            `json:"bucket_end_at"`
+	RequestCount        int64            `json:"request_count"`
+	PromptTokens        int64            `json:"prompt_tokens"`
+	CompletionTokens    int64            `json:"completion_tokens"`
+	TotalTokens         int64            `json:"total_tokens"`
+	TotalUseTime        int64            `json:"total_use_time"`
+	TpsSampleCount      int64            `json:"tps_sample_count"`
+	TpsCompletionTokens int64            `json:"tps_completion_tokens"`
+	TpsDurationMs       int64            `json:"tps_duration_ms"`
+	AvgTPS              *float64         `json:"avg_tps"`
+	ThinkingSampleCount int64            `json:"thinking_sample_count"`
+	ThinkingTokens      int64            `json:"thinking_tokens"`
+	ThinkingDurationMs  int64            `json:"thinking_duration_ms"`
+	AvgThinkingTPS      *float64         `json:"avg_thinking_tps"`
+	OutputSampleCount   int64            `json:"output_sample_count"`
+	OutputTokens        int64            `json:"output_tokens"`
+	OutputDurationMs    int64            `json:"output_duration_ms"`
+	AvgOutputTPS        *float64         `json:"avg_output_tps"`
+	ToolSampleCount     int64            `json:"tool_sample_count"`
+	ToolTokens          int64            `json:"tool_tokens"`
+	ToolDurationMs      int64            `json:"tool_duration_ms"`
+	AvgToolTPS          *float64         `json:"avg_tool_tps"`
+	FailedCount         int64            `json:"failed_count"`
+	FailedDetail        map[string]int64 `json:"failed_detail"`
+	IsCurrent           bool             `json:"is_current"`
 }
 
 type TokenRecordSummary struct {
-	RequestCount       int64            `json:"request_count"`
-	PromptTokens       int64            `json:"prompt_tokens"`
-	CompletionTokens   int64            `json:"completion_tokens"`
-	TotalTokens        int64            `json:"total_tokens"`
-	TotalUseTime       int64            `json:"total_use_time"`
-	AvgTPS             float64          `json:"avg_tps"`
-	ThinkingTokens     int64            `json:"thinking_tokens"`
-	ThinkingDurationMs int64            `json:"thinking_duration_ms"`
-	AvgThinkingTPS     float64          `json:"avg_thinking_tps"`
-	OutputTokens       int64            `json:"output_tokens"`
-	OutputDurationMs   int64            `json:"output_duration_ms"`
-	AvgOutputTPS       float64          `json:"avg_output_tps"`
-	ToolTokens         int64            `json:"tool_tokens"`
-	ToolDurationMs     int64            `json:"tool_duration_ms"`
-	AvgToolTPS         float64          `json:"avg_tool_tps"`
-	FailedCount        int64            `json:"failed_count"`
-	FailedRate         float64          `json:"failed_rate"`
-	FailedDetail       map[string]int64 `json:"failed_detail"`
+	RequestCount        int64            `json:"request_count"`
+	PromptTokens        int64            `json:"prompt_tokens"`
+	CompletionTokens    int64            `json:"completion_tokens"`
+	TotalTokens         int64            `json:"total_tokens"`
+	TotalUseTime        int64            `json:"total_use_time"`
+	TpsSampleCount      int64            `json:"tps_sample_count"`
+	TpsCompletionTokens int64            `json:"tps_completion_tokens"`
+	TpsDurationMs       int64            `json:"tps_duration_ms"`
+	AvgTPS              *float64         `json:"avg_tps"`
+	ThinkingSampleCount int64            `json:"thinking_sample_count"`
+	ThinkingTokens      int64            `json:"thinking_tokens"`
+	ThinkingDurationMs  int64            `json:"thinking_duration_ms"`
+	AvgThinkingTPS      *float64         `json:"avg_thinking_tps"`
+	OutputSampleCount   int64            `json:"output_sample_count"`
+	OutputTokens        int64            `json:"output_tokens"`
+	OutputDurationMs    int64            `json:"output_duration_ms"`
+	AvgOutputTPS        *float64         `json:"avg_output_tps"`
+	ToolSampleCount     int64            `json:"tool_sample_count"`
+	ToolTokens          int64            `json:"tool_tokens"`
+	ToolDurationMs      int64            `json:"tool_duration_ms"`
+	AvgToolTPS          *float64         `json:"avg_tool_tps"`
+	FailedCount         int64            `json:"failed_count"`
+	FailedRate          float64          `json:"failed_rate"`
+	FailedDetail        map[string]int64 `json:"failed_detail"`
 }
 
 type TokenRecordRecentItem struct {
@@ -136,46 +160,47 @@ func getTokenRecordHourBucket(createdAt int64) (int64, int64) {
 	return bucketStartAt, bucketStartAt + 3599
 }
 
-func calcTokenRecordAvgTPS(outputTokens int64, totalUseTime int64) float64 {
-	if outputTokens <= 0 || totalUseTime <= 0 {
-		return 0
+const minReliablePhaseDurationMs int64 = 100
+
+func calcTokenRecordVerifiedTPS(sampleCount int64, tokens int64, durationMs int64, minDurationMs int64) *float64 {
+	if sampleCount <= 0 || tokens <= 0 || durationMs <= 0 || durationMs < minDurationMs {
+		return nil
 	}
-	return math.Round((float64(outputTokens)/float64(totalUseTime))*100) / 100
+	val := math.Round((float64(tokens)*1000.0/float64(durationMs))*100) / 100
+	if math.IsNaN(val) || math.IsInf(val, 0) || val <= 0 {
+		return nil
+	}
+	return &val
 }
 
 type TokenRecordTiming struct {
-	ThinkingTokens     int64
-	ThinkingDurationMs int64
-	OutputTokens       int64
-	OutputDurationMs   int64
-	ToolTokens         int64
-	ToolDurationMs     int64
-}
-
-func calcTokenRecordPhaseTPS(tokens int64, durationMs int64) float64 {
-	if tokens <= 0 || durationMs <= 0 {
-		return 0
-	}
-	return math.Round((float64(tokens)/(float64(durationMs)/1000))*100) / 100
+	TpsSampleCount      int64
+	TpsCompletionTokens int64
+	TpsDurationMs       int64
+	ThinkingTokens      int64
+	ThinkingDurationMs  int64
+	OutputTokens        int64
+	OutputDurationMs    int64
+	ToolTokens          int64
+	ToolDurationMs      int64
 }
 
 func sanitizeTokenRecordTiming(timing TokenRecordTiming) TokenRecordTiming {
-	if timing.ThinkingTokens < 0 {
-		timing.ThinkingTokens = 0
+	if timing.TpsSampleCount <= 0 || timing.TpsCompletionTokens <= 0 || timing.TpsDurationMs <= 0 {
+		timing.TpsSampleCount = 0
+		timing.TpsCompletionTokens = 0
+		timing.TpsDurationMs = 0
 	}
-	if timing.ThinkingDurationMs < 0 {
+	if timing.ThinkingTokens <= 0 || timing.ThinkingDurationMs < minReliablePhaseDurationMs {
+		timing.ThinkingTokens = 0
 		timing.ThinkingDurationMs = 0
 	}
-	if timing.OutputTokens < 0 {
+	if timing.OutputTokens <= 0 || timing.OutputDurationMs < minReliablePhaseDurationMs {
 		timing.OutputTokens = 0
-	}
-	if timing.OutputDurationMs < 0 {
 		timing.OutputDurationMs = 0
 	}
-	if timing.ToolTokens < 0 {
+	if timing.ToolTokens <= 0 || timing.ToolDurationMs < minReliablePhaseDurationMs {
 		timing.ToolTokens = 0
-	}
-	if timing.ToolDurationMs < 0 {
 		timing.ToolDurationMs = 0
 	}
 	return timing
@@ -200,6 +225,19 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 		totalUseTime = 0
 	}
 
+	var thinkingSampleCount int64
+	if timing.ThinkingTokens > 0 && timing.ThinkingDurationMs >= minReliablePhaseDurationMs {
+		thinkingSampleCount = 1
+	}
+	var outputSampleCount int64
+	if timing.OutputTokens > 0 && timing.OutputDurationMs >= minReliablePhaseDurationMs {
+		outputSampleCount = 1
+	}
+	var toolSampleCount int64
+	if timing.ToolTokens > 0 && timing.ToolDurationMs >= minReliablePhaseDurationMs {
+		toolSampleCount = 1
+	}
+
 	record := TokenRecord{
 		BucketStartAt:    bucketStartAt,
 		BucketEndAt:      bucketEndAt,
@@ -208,18 +246,30 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 		PromptTokens:     inputTokens,
 		CompletionTokens: outputTokens,
 		// model-log 看板中的 total_tokens 口径为“输出 Token”
-		TotalTokens:        outputTokens,
-		TotalUseTime:       totalUseTime,
-		ThinkingTokens:     timing.ThinkingTokens,
-		ThinkingDurationMs: timing.ThinkingDurationMs,
-		OutputTokens:       timing.OutputTokens,
-		OutputDurationMs:   timing.OutputDurationMs,
-		ToolTokens:         timing.ToolTokens,
-		ToolDurationMs:     timing.ToolDurationMs,
-		FirstUsedAt:        createdAt,
-		LastUsedAt:         createdAt,
-		CreatedAt:          createdAt,
-		UpdatedAt:          createdAt,
+		TotalTokens:             outputTokens,
+		TotalUseTime:            totalUseTime,
+		TpsSampleCount:          timing.TpsSampleCount,
+		TpsCompletionTokens:     timing.TpsCompletionTokens,
+		TpsDurationMs:           timing.TpsDurationMs,
+		ThinkingSampleCount:     thinkingSampleCount,
+		ThinkingTokens:          timing.ThinkingTokens,
+		ThinkingDurationMs:      timing.ThinkingDurationMs,
+		ThinkingValidTokens:     timing.ThinkingTokens,
+		ThinkingValidDurationMs: timing.ThinkingDurationMs,
+		OutputSampleCount:       outputSampleCount,
+		OutputTokens:            timing.OutputTokens,
+		OutputDurationMs:        timing.OutputDurationMs,
+		OutputValidTokens:       timing.OutputTokens,
+		OutputValidDurationMs:   timing.OutputDurationMs,
+		ToolSampleCount:         toolSampleCount,
+		ToolTokens:              timing.ToolTokens,
+		ToolDurationMs:          timing.ToolDurationMs,
+		ToolValidTokens:         timing.ToolTokens,
+		ToolValidDurationMs:     timing.ToolDurationMs,
+		FirstUsedAt:             createdAt,
+		LastUsedAt:              createdAt,
+		CreatedAt:               createdAt,
+		UpdatedAt:               createdAt,
 	}
 
 	return LOG_DB.Clauses(clause.OnConflict{
@@ -228,20 +278,32 @@ func RecordTokenRecord(modelName string, promptTokens int, completionTokens int,
 			{Name: "model_name"},
 		},
 		DoUpdates: clause.Assignments(map[string]interface{}{
-			"bucket_end_at":        bucketEndAt,
-			"request_count":        buildTokenRecordIncrementExpr("request_count", 1),
-			"prompt_tokens":        buildTokenRecordIncrementExpr("prompt_tokens", inputTokens),
-			"completion_tokens":    buildTokenRecordIncrementExpr("completion_tokens", outputTokens),
-			"total_tokens":         buildTokenRecordIncrementExpr("total_tokens", outputTokens),
-			"total_use_time":       buildTokenRecordIncrementExpr("total_use_time", totalUseTime),
-			"thinking_tokens":      buildTokenRecordIncrementExpr("thinking_tokens", timing.ThinkingTokens),
-			"thinking_duration_ms": buildTokenRecordIncrementExpr("thinking_duration_ms", timing.ThinkingDurationMs),
-			"output_tokens":        buildTokenRecordIncrementExpr("output_tokens", timing.OutputTokens),
-			"output_duration_ms":   buildTokenRecordIncrementExpr("output_duration_ms", timing.OutputDurationMs),
-			"tool_tokens":          buildTokenRecordIncrementExpr("tool_tokens", timing.ToolTokens),
-			"tool_duration_ms":     buildTokenRecordIncrementExpr("tool_duration_ms", timing.ToolDurationMs),
-			"last_used_at":         createdAt,
-			"updated_at":           createdAt,
+			"bucket_end_at":              bucketEndAt,
+			"request_count":              buildTokenRecordIncrementExpr("request_count", 1),
+			"prompt_tokens":              buildTokenRecordIncrementExpr("prompt_tokens", inputTokens),
+			"completion_tokens":          buildTokenRecordIncrementExpr("completion_tokens", outputTokens),
+			"total_tokens":               buildTokenRecordIncrementExpr("total_tokens", outputTokens),
+			"total_use_time":             buildTokenRecordIncrementExpr("total_use_time", totalUseTime),
+			"tps_sample_count":           buildTokenRecordIncrementExpr("tps_sample_count", timing.TpsSampleCount),
+			"tps_completion_tokens":      buildTokenRecordIncrementExpr("tps_completion_tokens", timing.TpsCompletionTokens),
+			"tps_duration_ms":            buildTokenRecordIncrementExpr("tps_duration_ms", timing.TpsDurationMs),
+			"thinking_sample_count":      buildTokenRecordIncrementExpr("thinking_sample_count", thinkingSampleCount),
+			"thinking_tokens":            buildTokenRecordIncrementExpr("thinking_tokens", timing.ThinkingTokens),
+			"thinking_duration_ms":       buildTokenRecordIncrementExpr("thinking_duration_ms", timing.ThinkingDurationMs),
+			"thinking_valid_tokens":      buildTokenRecordIncrementExpr("thinking_valid_tokens", timing.ThinkingTokens),
+			"thinking_valid_duration_ms": buildTokenRecordIncrementExpr("thinking_valid_duration_ms", timing.ThinkingDurationMs),
+			"output_sample_count":        buildTokenRecordIncrementExpr("output_sample_count", outputSampleCount),
+			"output_tokens":              buildTokenRecordIncrementExpr("output_tokens", timing.OutputTokens),
+			"output_duration_ms":         buildTokenRecordIncrementExpr("output_duration_ms", timing.OutputDurationMs),
+			"output_valid_tokens":        buildTokenRecordIncrementExpr("output_valid_tokens", timing.OutputTokens),
+			"output_valid_duration_ms":   buildTokenRecordIncrementExpr("output_valid_duration_ms", timing.OutputDurationMs),
+			"tool_sample_count":          buildTokenRecordIncrementExpr("tool_sample_count", toolSampleCount),
+			"tool_tokens":                buildTokenRecordIncrementExpr("tool_tokens", timing.ToolTokens),
+			"tool_duration_ms":           buildTokenRecordIncrementExpr("tool_duration_ms", timing.ToolDurationMs),
+			"tool_valid_tokens":          buildTokenRecordIncrementExpr("tool_valid_tokens", timing.ToolTokens),
+			"tool_valid_duration_ms":     buildTokenRecordIncrementExpr("tool_valid_duration_ms", timing.ToolDurationMs),
+			"last_used_at":               createdAt,
+			"updated_at":                 createdAt,
 		}),
 	}).Create(&record).Error
 }
@@ -419,7 +481,17 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRec
 		hourIndexMap[hour.BucketStartAt] = i
 	}
 
+	type validPhaseTotals struct {
+		thinkingTokens     int64
+		thinkingDurationMs int64
+		outputTokens       int64
+		outputDurationMs   int64
+		toolTokens         int64
+		toolDurationMs     int64
+	}
 	itemsMap := make(map[string]*TokenRecordRecentItem)
+	validPhaseMap := make(map[string]*validPhaseTotals)
+	cellValidPhaseMap := make(map[string][]validPhaseTotals)
 	for _, record := range records {
 		hourIndex, ok := hourIndexMap[record.BucketStartAt]
 		if !ok {
@@ -433,52 +505,80 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRec
 				Cells:     buildEmptyTokenRecordCells(hoursList),
 			}
 			itemsMap[record.ModelName] = item
+			validPhaseMap[record.ModelName] = &validPhaseTotals{}
+			cellValidPhaseMap[record.ModelName] = make([]validPhaseTotals, len(hoursList))
 		}
+		validSums := validPhaseMap[record.ModelName]
+		cellValidSums := &cellValidPhaseMap[record.ModelName][hourIndex]
 
-		item.Cells[hourIndex] = TokenRecordHourCell{
-			BucketStartAt:      record.BucketStartAt,
-			BucketEndAt:        record.BucketEndAt,
-			RequestCount:       record.RequestCount,
-			PromptTokens:       record.PromptTokens,
-			CompletionTokens:   record.CompletionTokens,
-			TotalTokens:        record.TotalTokens,
-			TotalUseTime:       record.TotalUseTime,
-			AvgTPS:             calcTokenRecordAvgTPS(record.CompletionTokens, record.TotalUseTime),
-			ThinkingTokens:     record.ThinkingTokens,
-			ThinkingDurationMs: record.ThinkingDurationMs,
-			AvgThinkingTPS:     calcTokenRecordPhaseTPS(record.ThinkingTokens, record.ThinkingDurationMs),
-			OutputTokens:       record.OutputTokens,
-			OutputDurationMs:   record.OutputDurationMs,
-			AvgOutputTPS:       calcTokenRecordPhaseTPS(record.OutputTokens, record.OutputDurationMs),
-			ToolTokens:         record.ToolTokens,
-			ToolDurationMs:     record.ToolDurationMs,
-			AvgToolTPS:         calcTokenRecordPhaseTPS(record.ToolTokens, record.ToolDurationMs),
-			FailedCount:        record.FailedCount,
-			FailedDetail:       parseFailedDetail(record.FailedDetail),
-			IsCurrent:          hoursList[hourIndex].IsCurrent,
-		}
+		cell := &item.Cells[hourIndex]
+		cell.BucketStartAt = record.BucketStartAt
+		cell.BucketEndAt = hoursList[hourIndex].BucketEndAt
+		cell.IsCurrent = hoursList[hourIndex].IsCurrent
+		cell.RequestCount += record.RequestCount
+		cell.PromptTokens += record.PromptTokens
+		cell.CompletionTokens += record.CompletionTokens
+		cell.TotalTokens += record.TotalTokens
+		cell.TotalUseTime += record.TotalUseTime
+		cell.TpsSampleCount += record.TpsSampleCount
+		cell.TpsCompletionTokens += record.TpsCompletionTokens
+		cell.TpsDurationMs += record.TpsDurationMs
+		cell.AvgTPS = calcTokenRecordVerifiedTPS(cell.TpsSampleCount, cell.TpsCompletionTokens, cell.TpsDurationMs, 1)
+		cell.ThinkingSampleCount += record.ThinkingSampleCount
+		cell.ThinkingTokens += record.ThinkingTokens
+		cell.ThinkingDurationMs += record.ThinkingDurationMs
+		cellValidSums.thinkingTokens += record.ThinkingValidTokens
+		cellValidSums.thinkingDurationMs += record.ThinkingValidDurationMs
+		cell.AvgThinkingTPS = calcTokenRecordVerifiedTPS(cell.ThinkingSampleCount, cellValidSums.thinkingTokens, cellValidSums.thinkingDurationMs, minReliablePhaseDurationMs)
+		cell.OutputSampleCount += record.OutputSampleCount
+		cell.OutputTokens += record.OutputTokens
+		cell.OutputDurationMs += record.OutputDurationMs
+		cellValidSums.outputTokens += record.OutputValidTokens
+		cellValidSums.outputDurationMs += record.OutputValidDurationMs
+		cell.AvgOutputTPS = calcTokenRecordVerifiedTPS(cell.OutputSampleCount, cellValidSums.outputTokens, cellValidSums.outputDurationMs, minReliablePhaseDurationMs)
+		cell.ToolSampleCount += record.ToolSampleCount
+		cell.ToolTokens += record.ToolTokens
+		cell.ToolDurationMs += record.ToolDurationMs
+		cellValidSums.toolTokens += record.ToolValidTokens
+		cellValidSums.toolDurationMs += record.ToolValidDurationMs
+		cell.AvgToolTPS = calcTokenRecordVerifiedTPS(cell.ToolSampleCount, cellValidSums.toolTokens, cellValidSums.toolDurationMs, minReliablePhaseDurationMs)
+		cell.FailedCount += record.FailedCount
+		cell.FailedDetail = mergeFailedDetailMaps(cell.FailedDetail, parseFailedDetail(record.FailedDetail))
 
 		item.Summary.RequestCount += record.RequestCount
 		item.Summary.PromptTokens += record.PromptTokens
 		item.Summary.CompletionTokens += record.CompletionTokens
 		item.Summary.TotalTokens += record.TotalTokens
 		item.Summary.TotalUseTime += record.TotalUseTime
+		item.Summary.TpsSampleCount += record.TpsSampleCount
+		item.Summary.TpsCompletionTokens += record.TpsCompletionTokens
+		item.Summary.TpsDurationMs += record.TpsDurationMs
+		item.Summary.ThinkingSampleCount += record.ThinkingSampleCount
 		item.Summary.ThinkingTokens += record.ThinkingTokens
 		item.Summary.ThinkingDurationMs += record.ThinkingDurationMs
+		validSums.thinkingTokens += record.ThinkingValidTokens
+		validSums.thinkingDurationMs += record.ThinkingValidDurationMs
+		item.Summary.OutputSampleCount += record.OutputSampleCount
 		item.Summary.OutputTokens += record.OutputTokens
 		item.Summary.OutputDurationMs += record.OutputDurationMs
+		validSums.outputTokens += record.OutputValidTokens
+		validSums.outputDurationMs += record.OutputValidDurationMs
+		item.Summary.ToolSampleCount += record.ToolSampleCount
 		item.Summary.ToolTokens += record.ToolTokens
 		item.Summary.ToolDurationMs += record.ToolDurationMs
+		validSums.toolTokens += record.ToolValidTokens
+		validSums.toolDurationMs += record.ToolValidDurationMs
 		item.Summary.FailedCount += record.FailedCount
 		item.Summary.FailedDetail = mergeFailedDetailMaps(item.Summary.FailedDetail, parseFailedDetail(record.FailedDetail))
 	}
 
 	items := make([]TokenRecordRecentItem, 0, len(itemsMap))
 	for _, item := range itemsMap {
-		item.Summary.AvgTPS = calcTokenRecordAvgTPS(item.Summary.CompletionTokens, item.Summary.TotalUseTime)
-		item.Summary.AvgThinkingTPS = calcTokenRecordPhaseTPS(item.Summary.ThinkingTokens, item.Summary.ThinkingDurationMs)
-		item.Summary.AvgOutputTPS = calcTokenRecordPhaseTPS(item.Summary.OutputTokens, item.Summary.OutputDurationMs)
-		item.Summary.AvgToolTPS = calcTokenRecordPhaseTPS(item.Summary.ToolTokens, item.Summary.ToolDurationMs)
+		validSums := validPhaseMap[item.ModelName]
+		item.Summary.AvgTPS = calcTokenRecordVerifiedTPS(item.Summary.TpsSampleCount, item.Summary.TpsCompletionTokens, item.Summary.TpsDurationMs, 1)
+		item.Summary.AvgThinkingTPS = calcTokenRecordVerifiedTPS(item.Summary.ThinkingSampleCount, validSums.thinkingTokens, validSums.thinkingDurationMs, minReliablePhaseDurationMs)
+		item.Summary.AvgOutputTPS = calcTokenRecordVerifiedTPS(item.Summary.OutputSampleCount, validSums.outputTokens, validSums.outputDurationMs, minReliablePhaseDurationMs)
+		item.Summary.AvgToolTPS = calcTokenRecordVerifiedTPS(item.Summary.ToolSampleCount, validSums.toolTokens, validSums.toolDurationMs, minReliablePhaseDurationMs)
 		item.Summary.FailedRate = calcFailedRate(item.Summary.FailedCount, item.Summary.RequestCount)
 		items = append(items, *item)
 	}

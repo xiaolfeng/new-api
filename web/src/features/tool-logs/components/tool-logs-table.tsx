@@ -59,8 +59,16 @@ export function ToolLogsTable() {
       { columnId: 'token_name', searchKey: 'token', type: 'string' },
       ...(isAdmin
         ? [
-            { columnId: 'channel', searchKey: 'channel', type: 'string' as const },
-            { columnId: 'username', searchKey: 'username', type: 'string' as const },
+            {
+              columnId: 'channel',
+              searchKey: 'channel',
+              type: 'string' as const,
+            },
+            {
+              columnId: 'username',
+              searchKey: 'username',
+              type: 'string' as const,
+            },
           ]
         : []),
     ],
@@ -144,7 +152,9 @@ export function ToolLogsTable() {
       tableClassName='[&_[data-slot=table]]:text-[13px] [&_[data-slot=table]_td]:text-[13px] [&_[data-slot=table]_th]:text-[13px]'
       mobile={
         <ToolLogsMobileList
-          table={table as unknown as import('@tanstack/react-table').Table<ToolLog>}
+          table={
+            table as unknown as import('@tanstack/react-table').Table<ToolLog>
+          }
           isLoading={isLoadingData}
         />
       }

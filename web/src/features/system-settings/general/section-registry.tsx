@@ -53,9 +53,13 @@ const GENERAL_SECTIONS = [
             enable_free_model_pre_consume:
               settings['quota_setting.enable_free_model_pre_consume'],
             trust_quota_usd:
-              (settings as Record<string, any>)['quota_setting.trust_quota_usd'] ?? 10,
+              (settings as Record<string, any>)[
+                'quota_setting.trust_quota_usd'
+              ] ?? 10,
             pre_consume_multiplier:
-              (settings as Record<string, any>)['quota_setting.pre_consume_multiplier'] ?? 1,
+              (settings as Record<string, any>)[
+                'quota_setting.pre_consume_multiplier'
+              ] ?? 1,
           },
         }}
       />

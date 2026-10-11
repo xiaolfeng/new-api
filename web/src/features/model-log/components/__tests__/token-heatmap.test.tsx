@@ -22,13 +22,14 @@ import { beforeEach, describe, expect, test, vi } from 'vitest'
 
 import en from '@/i18n/locales/en.json'
 
+import { SummaryCards } from '../summary-cards'
+import { TokenHeatmap } from '../token-heatmap'
+
 const apiGetMock = vi.hoisted(() => vi.fn())
 
 vi.mock('@/lib/api', () => ({
   api: { get: apiGetMock },
 }))
-
-import { TokenHeatmap } from '../token-heatmap'
 
 const i18n = createInstance()
 
@@ -43,25 +44,70 @@ beforeEach(async () => {
     data: {
       success: true,
       data: [
-        { date: '2026-10-05', prompt_tokens: 10, completion_tokens: 5, total_tokens: 15 },
+        {
+          date: '2026-10-05',
+          prompt_tokens: 100000,
+          completion_tokens: 500,
+          total_tokens: 100500,
+        },
       ],
     },
   })
 })
 
-describe('TokenHeatmap tooltip positioning', () => {
-  test('tooltip renders through a body portal, escaping ancestor containing blocks', async () => {
+describe('TokenHeatmap and SummaryCards token unit formatting', () => {
+  test('renders k/M/B token units in header and tooltip while preserving exact integers', async () => {
     const { container } = render(
       <I18nextProvider i18n={i18n}>
         <TokenHeatmap />
       </I18nextProvider>
     )
 
-    const cell = (await screen.findAllByRole('gridcell'))[0]
-    fireEvent.mouseEnter(cell)
+    // Header shows abbreviated 100.5k tokens with exact integer in title
+    const headerTotal = await screen.findByText('100.5k tokens')
+    expect(headerTotal).toHaveAttribute('title', '100,500 tokens')
+
+    const cells = await screen.findAllByRole('gridcell')
+    const activeCell = cells.find((el) =>
+      el.getAttribute('aria-label')?.startsWith('2026-10-05:')
+    )
+    expect(activeCell).toBeDefined()
+    expect(activeCell).toHaveAttribute(
+      'aria-label',
+      '2026-10-05: 100.5k (100,500) tokens'
+    )
+
+    if (!activeCell) {
+      throw new Error('Expected active heatmap cell')
+    }
+    fireEvent.mouseEnter(activeCell)
 
     const tooltip = await screen.findByRole('tooltip')
     expect(document.body.contains(tooltip)).toBe(true)
     expect(container.contains(tooltip)).toBe(false)
+    expect(tooltip).toHaveTextContent('100.5k (100,500) tokens')
+    expect(tooltip).toHaveTextContent('100k (100,000)')
+    expect(tooltip).toHaveTextContent('500')
+  })
+
+  test('formats SummaryCards input/output tokens with k/M/B and keeps request count on compact number format', () => {
+    render(
+      <I18nextProvider i18n={i18n}>
+        <SummaryCards
+          summary={{
+            total_request_count: 1200,
+            total_prompt_tokens: 10450000,
+            total_output_tokens: 2345000000,
+            active_model_count: 6,
+          }}
+        />
+      </I18nextProvider>
+    )
+
+    const inputVal = screen.getByText('10.45M')
+    expect(inputVal).toHaveAttribute('title', '10,450,000')
+
+    const outputVal = screen.getByText('2.345B')
+    expect(outputVal).toHaveAttribute('title', '2,345,000,000')
   })
 })

@@ -594,7 +594,7 @@ func PostTextConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, us
 		Record:           record,
 		FullLog:          fullLog,
 		Tps:              tpsValue,
-		TokenTiming:      BuildTokenRecordTiming(relayInfo),
+		TokenTiming:      BuildTokenRecordTimingForConsume(ctx, relayInfo, originUsage, summary.CompletionTokens, int(summary.UseTimeSeconds)),
 		Internal:         relayInfo.HostToolInternal,
 	})
 	relayInfo.PerformanceOutputTokens = int64(summary.CompletionTokens)

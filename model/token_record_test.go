@@ -87,13 +87,19 @@ func TestRecordTokenRecordAggregatesPhaseTPS(t *testing.T) {
 	cell := snapshot.Items[0].Cells[0]
 	assert.EqualValues(t, 30, cell.ThinkingTokens)
 	assert.EqualValues(t, 1000, cell.ThinkingDurationMs)
-	assert.Equal(t, 30.0, cell.AvgThinkingTPS)
+	assert.EqualValues(t, 2, cell.ThinkingSampleCount)
+	require.NotNil(t, cell.AvgThinkingTPS)
+	assert.Equal(t, 30.0, *cell.AvgThinkingTPS)
 	assert.EqualValues(t, 30, cell.OutputTokens)
 	assert.EqualValues(t, 2000, cell.OutputDurationMs)
-	assert.Equal(t, 15.0, cell.AvgOutputTPS)
+	assert.EqualValues(t, 2, cell.OutputSampleCount)
+	require.NotNil(t, cell.AvgOutputTPS)
+	assert.Equal(t, 15.0, *cell.AvgOutputTPS)
 	assert.EqualValues(t, 5, cell.ToolTokens)
 	assert.EqualValues(t, 250, cell.ToolDurationMs)
-	assert.Equal(t, 20.0, cell.AvgToolTPS)
+	assert.EqualValues(t, 1, cell.ToolSampleCount)
+	require.NotNil(t, cell.AvgToolTPS)
+	assert.Equal(t, 20.0, *cell.AvgToolTPS)
 
 	summary := snapshot.Items[0].Summary
 	assert.Equal(t, cell.AvgThinkingTPS, summary.AvgThinkingTPS)
@@ -122,8 +128,16 @@ func TestGetRecentTokenRecordSnapshotBackfillsHours(t *testing.T) {
 	currentBucketStartAt := int64(1711454400)
 	firstBucketStartAt := currentBucketStartAt - 23*3600
 
-	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 100, 50, 10, TokenRecordTiming{}, firstBucketStartAt+120))
-	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 40, 10, 5, TokenRecordTiming{}, currentBucketStartAt+120))
+	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 100, 50, 10, TokenRecordTiming{
+		TpsSampleCount:      1,
+		TpsCompletionTokens: 50,
+		TpsDurationMs:       10000,
+	}, firstBucketStartAt+120))
+	require.NoError(t, RecordTokenRecord("claude-3-7-sonnet", 40, 10, 5, TokenRecordTiming{
+		TpsSampleCount:      1,
+		TpsCompletionTokens: 10,
+		TpsDurationMs:       5000,
+	}, currentBucketStartAt+120))
 	require.NoError(t, RecordTokenRecord("gpt-5", 70, 30, 0, TokenRecordTiming{}, currentBucketStartAt+300))
 
 	snapshot, err := GetRecentTokenRecordSnapshot(currentBucketStartAt+900, 24)
@@ -146,7 +160,10 @@ func TestGetRecentTokenRecordSnapshotBackfillsHours(t *testing.T) {
 	require.EqualValues(t, 10, claudeItem.Cells[23].TotalTokens)
 	require.EqualValues(t, 60, claudeItem.Summary.TotalTokens)
 	require.EqualValues(t, 15, claudeItem.Summary.TotalUseTime)
-	require.EqualValues(t, 4, claudeItem.Summary.AvgTPS)
+	require.EqualValues(t, 2, claudeItem.Summary.TpsSampleCount)
+	require.NotNil(t, claudeItem.Summary.AvgTPS)
+	require.Equal(t, 4.0, *claudeItem.Summary.AvgTPS)
+	require.Nil(t, claudeItem.Cells[1].AvgTPS)
 
 	var gptItem *TokenRecordRecentItem
 	for i := range snapshot.Items {
@@ -157,7 +174,170 @@ func TestGetRecentTokenRecordSnapshotBackfillsHours(t *testing.T) {
 	}
 	require.NotNil(t, gptItem)
 	require.EqualValues(t, 30, gptItem.Cells[23].TotalTokens)
-	require.EqualValues(t, 0, gptItem.Cells[23].AvgTPS)
+	require.EqualValues(t, 0, gptItem.Cells[23].TpsSampleCount)
+	require.Nil(t, gptItem.Cells[23].AvgTPS)
+	require.Nil(t, gptItem.Summary.AvgTPS)
+}
+
+func TestTokenRecordVerifiedTPSExcludesInvalidSamplesAndLegacyRows(t *testing.T) {
+	setupTokenRecordTestDB(t)
+
+	currentBucket := int64(1711454400)
+	legacyBucket := currentBucket - 3600
+
+	// Legacy row pre-upgrade: has completion_tokens, total_use_time, and phase totals,
+	// but 0 verified sample counts. Must never be backfilled into AvgTPS/Avg*TPS.
+	require.NoError(t, LOG_DB.Create(&TokenRecord{
+		BucketStartAt:      legacyBucket,
+		BucketEndAt:        legacyBucket + 3599,
+		ModelName:          "deepseek-r1",
+		RequestCount:       8,
+		PromptTokens:       800,
+		CompletionTokens:   4000,
+		TotalTokens:        4000,
+		TotalUseTime:       100,
+		ThinkingTokens:     1000,
+		ThinkingDurationMs: 10000,
+		OutputTokens:       3000,
+		OutputDurationMs:   90000,
+		FirstUsedAt:        legacyBucket + 10,
+		LastUsedAt:         legacyBucket + 200,
+		CreatedAt:          legacyBucket + 10,
+		UpdatedAt:          legacyBucket + 200,
+	}).Error)
+
+	// Current bucket: mix of valid and invalid samples
+	// 1) Valid request: 120 tokens in 2400ms (50 TPS), valid thinking (40 tok / 500ms = 80 TPS),
+	//    unreliable output (< 100ms, 99ms -> excluded from phase TPS!)
+	require.NoError(t, RecordTokenRecord("deepseek-r1", 50, 120, 3, TokenRecordTiming{
+		TpsSampleCount:      1,
+		TpsCompletionTokens: 120,
+		TpsDurationMs:       2400,
+		ThinkingTokens:      40,
+		ThinkingDurationMs:  500,
+		OutputTokens:        80,
+		OutputDurationMs:    99,
+	}, currentBucket+60))
+
+	// 2) Zero-output long-duration request (0 tokens, 45s): must NOT drag down average TPS
+	require.NoError(t, RecordTokenRecord("deepseek-r1", 200, 0, 45, TokenRecordTiming{}, currentBucket+120))
+
+	// 3) Unverified/estimated output request (300 tokens, 0s): must NOT inflate average TPS
+	require.NoError(t, RecordTokenRecord("deepseek-r1", 100, 300, 0, TokenRecordTiming{}, currentBucket+180))
+
+	// 4) Boundary 100ms phase and TPS sample: 20 tokens in 100ms (200 TPS)
+	require.NoError(t, RecordTokenRecord("deepseek-r1", 30, 20, 1, TokenRecordTiming{
+		TpsSampleCount:      1,
+		TpsCompletionTokens: 20,
+		TpsDurationMs:       100,
+		OutputTokens:        20,
+		OutputDurationMs:    100,
+	}, currentBucket+240))
+
+	snapshot, err := GetRecentTokenRecordSnapshot(currentBucket+300, 2)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Items, 1)
+
+	item := snapshot.Items[0]
+	require.Len(t, item.Cells, 2)
+
+	legacyCell := item.Cells[0]
+	assert.EqualValues(t, 4000, legacyCell.TotalTokens)
+	assert.EqualValues(t, 0, legacyCell.TpsSampleCount)
+	assert.Nil(t, legacyCell.AvgTPS, "legacy bucket without verified samples must return nil AvgTPS")
+	assert.Nil(t, legacyCell.AvgThinkingTPS, "legacy bucket without verified phase samples must return nil")
+	assert.Nil(t, legacyCell.AvgOutputTPS)
+
+	curCell := item.Cells[1]
+	assert.EqualValues(t, 440, curCell.TotalTokens)
+	assert.EqualValues(t, 4, curCell.RequestCount)
+	assert.EqualValues(t, 2, curCell.TpsSampleCount)
+	// Verified TPS = (120 + 20) * 1000 / (2400 + 100) = 140000 / 2500 = 56.0
+	require.NotNil(t, curCell.AvgTPS)
+	assert.Equal(t, 56.0, *curCell.AvgTPS)
+	// Thinking TPS = 40 * 1000 / 500 = 80.0
+	assert.EqualValues(t, 1, curCell.ThinkingSampleCount)
+	require.NotNil(t, curCell.AvgThinkingTPS)
+	assert.Equal(t, 80.0, *curCell.AvgThinkingTPS)
+	// Output TPS: 99ms sample was rejected, only 100ms sample (20 tok / 100ms = 200.0) included
+	assert.EqualValues(t, 1, curCell.OutputSampleCount)
+	require.NotNil(t, curCell.AvgOutputTPS)
+	assert.Equal(t, 200.0, *curCell.AvgOutputTPS)
+	assert.Nil(t, curCell.AvgToolTPS)
+
+	// Summary across legacy + current bucket uses only verified samples
+	assert.EqualValues(t, 4440, item.Summary.TotalTokens)
+	assert.EqualValues(t, 2, item.Summary.TpsSampleCount)
+	require.NotNil(t, item.Summary.AvgTPS)
+	assert.Equal(t, 56.0, *item.Summary.AvgTPS)
+	require.NotNil(t, item.Summary.AvgThinkingTPS)
+	assert.Equal(t, 80.0, *item.Summary.AvgThinkingTPS)
+	require.NotNil(t, item.Summary.AvgOutputTPS)
+	assert.Equal(t, 200.0, *item.Summary.AvgOutputTPS)
+	assert.Nil(t, item.Summary.AvgToolTPS)
+}
+
+func TestGetRecentTokenRecordSnapshotAccumulatesDuplicateBucketRows(t *testing.T) {
+	setupTokenRecordTestDB(t)
+
+	bucketStartAt := int64(1711454400)
+	// Drop unique index in SQLite test DB to simulate ClickHouse multiple rows per (model_name, bucket_start_at)
+	require.NoError(t, LOG_DB.Exec("DROP INDEX IF EXISTS idx_token_record_model_bucket").Error)
+
+	row1 := TokenRecord{
+		BucketStartAt:         bucketStartAt,
+		BucketEndAt:           bucketStartAt + 3599,
+		ModelName:             "gpt-5",
+		RequestCount:          1,
+		PromptTokens:          100,
+		CompletionTokens:      120,
+		TotalTokens:           220,
+		TotalUseTime:          2,
+		TpsSampleCount:        1,
+		TpsCompletionTokens:   120,
+		TpsDurationMs:         2000,
+		OutputTokens:          120,
+		OutputDurationMs:      2000,
+		OutputSampleCount:     1,
+		OutputValidTokens:     120,
+		OutputValidDurationMs: 2000,
+		FirstUsedAt:           bucketStartAt + 10,
+		LastUsedAt:            bucketStartAt + 20,
+	}
+	row2 := TokenRecord{
+		BucketStartAt:         bucketStartAt,
+		BucketEndAt:           bucketStartAt + 3599,
+		ModelName:             "gpt-5",
+		RequestCount:          1,
+		PromptTokens:          50,
+		CompletionTokens:      180,
+		TotalTokens:           230,
+		TotalUseTime:          1,
+		TpsSampleCount:        1,
+		TpsCompletionTokens:   180,
+		TpsDurationMs:         1000,
+		OutputTokens:          180,
+		OutputDurationMs:      1000,
+		OutputSampleCount:     1,
+		OutputValidTokens:     180,
+		OutputValidDurationMs: 1000,
+		FirstUsedAt:           bucketStartAt + 30,
+		LastUsedAt:            bucketStartAt + 40,
+	}
+	require.NoError(t, LOG_DB.Create(&row1).Error)
+	require.NoError(t, LOG_DB.Create(&row2).Error)
+
+	snapshot, err := GetRecentTokenRecordSnapshot(bucketStartAt+120, 24)
+	require.NoError(t, err)
+	require.Len(t, snapshot.Items, 1)
+	cell := snapshot.Items[0].Cells[23]
+	assert.EqualValues(t, 2, cell.RequestCount)
+	assert.EqualValues(t, 450, cell.TotalTokens)
+	assert.EqualValues(t, 2, cell.TpsSampleCount)
+	require.NotNil(t, cell.AvgTPS)
+	assert.Equal(t, 100.0, *cell.AvgTPS)
+	require.NotNil(t, cell.AvgOutputTPS)
+	assert.Equal(t, 100.0, *cell.AvgOutputTPS)
 }
 
 func TestGetRecentTokenRecordSnapshotHonorsHoursWindow(t *testing.T) {
@@ -217,7 +397,6 @@ func TestRecordFailedTokenRecordConcurrentIncrementKeepsAllCounts(t *testing.T) 
 	t.Cleanup(func() {
 		LOG_DB.Callback().Query().Remove("test:interleave-failure-record")
 	})
-
 
 	RecordFailedTokenRecord("gpt-5", 429, bucketStartAt+60)
 

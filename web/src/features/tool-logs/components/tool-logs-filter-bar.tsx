@@ -131,14 +131,14 @@ export function ToolLogsFilterBar<TData>(props: ToolLogsFilterBarProps<TData>) {
 
   const hasActiveFilters = Boolean(
     (filters.kind && filters.kind !== TOOL_KIND_ALL) ||
-      (filters.error && filters.error !== TOOL_STATUS_ALL) ||
-      filters.model ||
-      filters.token ||
-      filters.username ||
-      filters.channel ||
-      filters.requestId ||
-      filters.group ||
-      filters.q
+    (filters.error && filters.error !== TOOL_STATUS_ALL) ||
+    filters.model ||
+    filters.token ||
+    filters.username ||
+    filters.channel ||
+    filters.requestId ||
+    filters.group ||
+    filters.q
   )
 
   return (

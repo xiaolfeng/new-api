@@ -427,3 +427,19 @@ it.each([
     ).not.toBeInTheDocument()
   }
 )
+
+it('keeps the model alias Route icon on the same non-wrapping line as the model name', () => {
+  render(
+    <ModelBadge modelName='requested-model' actualModel='upstream-real-model' />
+  )
+  const trigger = screen.getByRole('button', {
+    name: 'Model: requested-model',
+  })
+  expect(trigger).toHaveClass('flex-nowrap', 'whitespace-nowrap')
+  expect(trigger).not.toHaveClass('flex-wrap')
+
+  const inlineGroup = trigger.querySelector('span.inline-flex')
+  expect(inlineGroup).not.toBeNull()
+  expect(inlineGroup).toHaveClass('whitespace-nowrap')
+  expect(inlineGroup?.querySelector('svg')).not.toBeNull()
+})

@@ -17,18 +17,111 @@ For commercial licensing, please contact support@quantumnous.com.
 */
 import { describe, expect, test } from 'vitest'
 
-import { getLogRowId } from '../utils'
+import {
+  ensureUniqueLogRowKeys,
+  getLogRowId,
+  getServerLogRowKey,
+} from '../utils'
 
-describe('getLogRowId', () => {
-  test('prefers request_id as the stable row identity', () => {
-    expect(getLogRowId({ request_id: 'req-1', id: 5 }, 0)).toBe('req-1')
+describe('getLogRowId and ensureUniqueLogRowKeys', () => {
+  test('prefers server row_key or log_entry_id as the unique row identity', () => {
+    expect(
+      getLogRowId(
+        {
+          row_key: 'le_20261011001',
+          log_entry_id: 'le_20261011001',
+          request_id: 'req-shared',
+          id: 1,
+          type: 2,
+        },
+        0
+      )
+    ).toBe('le_20261011001')
+
+    expect(
+      getLogRowId(
+        {
+          log_entry_id: 'le_20261011002',
+          request_id: 'req-shared',
+          id: 2,
+          type: 5,
+        },
+        1
+      )
+    ).toBe('le_20261011002')
   })
 
-  test('falls back to id when request_id is missing', () => {
+  test('disambiguates legacy rows sharing request_id when row_key is missing', () => {
+    const retryFailure = {
+      id: 1,
+      request_id: 'req-shared',
+      type: 5,
+      channel: 10,
+      created_at: 1700000000,
+      model_name: 'gpt-4o',
+      content: 'upstream 502',
+    }
+    const finalSuccess = {
+      id: 2,
+      request_id: 'req-shared',
+      type: 2,
+      channel: 11,
+      created_at: 1700000001,
+      model_name: 'gpt-4o',
+      prompt_tokens: 100,
+      completion_tokens: 50,
+      content: 'ok',
+    }
+
+    const id1 = getLogRowId(retryFailure, 0)
+    const id2 = getLogRowId(finalSuccess, 1)
+    expect(id1).not.toBe('req-shared')
+    expect(id2).not.toBe('req-shared')
+    expect(id1).not.toBe(id2)
+  })
+
+  test('ensureUniqueLogRowKeys deduplicates identical same-second same-channel legacy retry rows', () => {
+    const duplicateError = {
+      id: 1,
+      request_id: 'req-dup',
+      type: 5,
+      channel: 3,
+      created_at: 1700000005,
+      model_name: 'claude-3-5-sonnet',
+      content: 'rate limit',
+    }
+    const rows = ensureUniqueLogRowKeys([
+      { ...duplicateError, id: 1 },
+      { ...duplicateError, id: 2 },
+      {
+        id: 3,
+        request_id: 'req-dup',
+        type: 2,
+        channel: 4,
+        created_at: 1700000006,
+        model_name: 'claude-3-5-sonnet',
+        content: 'succeeded',
+      },
+    ])
+
+    const rowKeys = rows.map((row, idx) => getLogRowId(row, idx))
+    expect(new Set(rowKeys).size).toBe(3)
+    expect(rowKeys[1]).toBe(`${rowKeys[0]}#2`)
+  })
+
+  test('getServerLogRowKey keeps verifiable server keys and excludes synthetic fingerprints', () => {
+    expect(getServerLogRowKey({ row_key: 'le_abc123' })).toBe('le_abc123')
+    expect(getServerLogRowKey({ row_key: 'legacy-id:42' })).toBe('legacy-id:42')
+    expect(
+      getServerLogRowKey({ row_key: 'legacy-ch:1234567890abcdef#2' })
+    ).toBeUndefined()
+    expect(
+      getServerLogRowKey({ row_key: 'legacy-client:req=req-1|t=5' })
+    ).toBeUndefined()
+  })
+
+  test('falls back to id or position when no log fields exist', () => {
     expect(getLogRowId({ id: 7 }, 1)).toBe('7')
-  })
-
-  test('falls back to position when neither exists', () => {
     expect(getLogRowId({ id: 0 }, 3)).toBe('3')
   })
 })

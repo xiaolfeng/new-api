@@ -105,7 +105,8 @@ func GetLogDetail(c *gin.Context) {
 		common.ApiErrorMsg(c, "request_id is required")
 		return
 	}
-	logEntry, err := model.GetLogByRequestId(requestId)
+	rowKey := c.Query("row_key")
+	logEntry, err := model.GetLogByRequestIdAndRowKey(requestId, rowKey)
 	if err != nil {
 		common.ApiErrorMsg(c, "日志不存在")
 		return

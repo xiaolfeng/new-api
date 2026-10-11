@@ -3,6 +3,7 @@ package service
 import (
 	"encoding/base64"
 	"fmt"
+	"math"
 	"strings"
 
 	"github.com/QuantumNous/new-api/common"
@@ -326,19 +327,123 @@ func appendStreamStatus(relayInfo *relaycommon.RelayInfo, other *model.LogOther)
 	other.SetPublic("stream_status", streamInfo)
 }
 
+const minReliableBambooPhaseDurationMs int64 = 100
+
+func isReliableBambooPhase(tokens int64, durationMs int64, rate float64) bool {
+	if tokens <= 0 || durationMs < minReliableBambooPhaseDurationMs {
+		return false
+	}
+	if math.IsNaN(rate) || math.IsInf(rate, 0) || rate <= 0 {
+		return false
+	}
+	return true
+}
+
 func BuildTokenRecordTiming(relayInfo *relaycommon.RelayInfo) model.TokenRecordTiming {
 	if relayInfo == nil || relayInfo.BambooTiming == nil {
 		return model.TokenRecordTiming{}
 	}
 	bt := relayInfo.BambooTiming
-	return model.TokenRecordTiming{
-		ThinkingTokens:     bt.Tokens.ThinkingTokens,
-		ThinkingDurationMs: bt.Stats.ThinkingDuration.Milliseconds(),
-		OutputTokens:       bt.Tokens.OutputTokens,
-		OutputDurationMs:   bt.Stats.ContentDuration.Milliseconds(),
-		ToolTokens:         bt.Tokens.ToolTokens,
-		ToolDurationMs:     bt.Stats.ToolDuration.Milliseconds(),
+	var timing model.TokenRecordTiming
+	thinkingMs := bt.Stats.ThinkingDuration.Milliseconds()
+	if isReliableBambooPhase(bt.Tokens.ThinkingTokens, thinkingMs, bt.Rates.ThinkingTokensPerSec) {
+		timing.ThinkingTokens = bt.Tokens.ThinkingTokens
+		timing.ThinkingDurationMs = thinkingMs
 	}
+	outputMs := bt.Stats.ContentDuration.Milliseconds()
+	if isReliableBambooPhase(bt.Tokens.OutputTokens, outputMs, bt.Rates.OutputTokensPerSec) {
+		timing.OutputTokens = bt.Tokens.OutputTokens
+		timing.OutputDurationMs = outputMs
+	}
+	toolMs := bt.Stats.ToolDuration.Milliseconds()
+	if isReliableBambooPhase(bt.Tokens.ToolTokens, toolMs, bt.Rates.ToolTokensPerSec) {
+		timing.ToolTokens = bt.Tokens.ToolTokens
+		timing.ToolDurationMs = toolMs
+	}
+	return timing
+}
+
+func hasConfirmedCompletionUsage(originUsage *dto.Usage) bool {
+	if originUsage == nil {
+		return false
+	}
+	if originUsage.BillingUsage != nil {
+		if originUsage.BillingUsage.Estimated {
+			return false
+		}
+		canonical, ok := originUsage.BillingUsage.CanonicalUsage()
+		return ok && canonical != nil && canonical.CompletionTokens > 0
+	}
+	return originUsage.CompletionTokens > 0
+}
+
+func resolveVerifiedTPSDurationMs(info *relaycommon.RelayInfo, completionTokens int, useTimeSeconds int) (int64, bool) {
+	if completionTokens <= 0 {
+		return 0, false
+	}
+	if info != nil && info.DeliveryTiming != nil {
+		result, valid := info.DeliveryTiming.Result()
+		if !valid || result == nil {
+			return 0, false
+		}
+		if result.Status != "" && result.Status != "completed" && result.Status != "ok" {
+			return 0, false
+		}
+		if _, ok := result.AverageTPS(completionTokens, info.IsStream); !ok {
+			return 0, false
+		}
+		ms := result.TotalMs
+		if info.IsStream {
+			ms -= *result.TTFTMs
+		}
+		if ms <= 0 {
+			return 0, false
+		}
+		return ms, true
+	}
+	if useTimeSeconds <= 0 {
+		return 0, false
+	}
+	if info != nil && info.IsStream {
+		frt := info.FirstResponseDurationMs()
+		if frt <= 0 || math.IsNaN(frt) || math.IsInf(frt, 0) {
+			return 0, false
+		}
+		ms := int64(math.Round(float64(useTimeSeconds)*1000.0 - frt))
+		if ms < minReliableBambooPhaseDurationMs {
+			return 0, false
+		}
+		return ms, true
+	}
+	return int64(useTimeSeconds) * 1000, true
+}
+
+func BuildTokenRecordTimingForConsume(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, originUsage *dto.Usage, completionTokens int, useTimeSeconds int) model.TokenRecordTiming {
+	timing := BuildTokenRecordTiming(relayInfo)
+	if completionTokens <= 0 {
+		return timing
+	}
+	if relayInfo != nil && relayInfo.HostToolInternal {
+		return timing
+	}
+	if ctx != nil && (common.GetContextKeyBool(ctx, constant.ContextKeyRelayError) || common.GetContextKeyBool(ctx, constant.ContextKeyLocalCountTokens)) {
+		return timing
+	}
+	if relayInfo != nil && relayInfo.IsStream && relayInfo.StreamStatus != nil {
+		ss := relayInfo.StreamStatus
+		if !ss.IsNormalEnd() || ss.HasErrors() || ss.ResponseFailed() {
+			return timing
+		}
+	}
+	if !hasConfirmedCompletionUsage(originUsage) {
+		return timing
+	}
+	if durationMs, ok := resolveVerifiedTPSDurationMs(relayInfo, completionTokens, useTimeSeconds); ok {
+		timing.TpsSampleCount = 1
+		timing.TpsCompletionTokens = int64(completionTokens)
+		timing.TpsDurationMs = durationMs
+	}
+	return timing
 }
 
 func appendBambooTiming(relayInfo *relaycommon.RelayInfo, other *model.LogOther) {

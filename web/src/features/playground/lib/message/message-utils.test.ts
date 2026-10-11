@@ -26,7 +26,8 @@ describe('formatMessageForAPI', () => {
       from: MESSAGE_ROLES.ASSISTANT,
       versions: [{ id: 'v1', content: 'It is a cat.' }],
       reasoning: {
-        content: '<<<image_recognition>>>\n[Image 1]\nA cat\n<<<end_image_recognition>>>',
+        content:
+          '<<<image_recognition>>>\n[Image 1]\nA cat\n<<<end_image_recognition>>>',
         duration: 1,
       },
     }

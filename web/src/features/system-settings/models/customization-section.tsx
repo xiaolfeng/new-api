@@ -631,12 +631,7 @@ export function CustomizationSection({
                           {t('Image recognition timeout (ms)')}
                         </FormLabel>
                         <FormControl>
-                          <Input
-                            type='number'
-                            min={1}
-                            max={60000}
-                            {...field}
-                          />
+                          <Input type='number' min={1} max={60000} {...field} />
                         </FormControl>
                       </FormItem>
                     )}
@@ -659,7 +654,7 @@ export function CustomizationSection({
                     control={form.control}
                     name='bamboo.image_recognize_fail_open'
                     render={({ field }) => (
-                      <FormItem className='sm:col-span-2 flex flex-row items-center justify-between gap-4 rounded-lg border p-4'>
+                      <FormItem className='flex flex-row items-center justify-between gap-4 rounded-lg border p-4 sm:col-span-2'>
                         <div className='space-y-0.5'>
                           <FormLabel className='text-base'>
                             {t('Image recognition fail open')}

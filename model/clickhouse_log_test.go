@@ -88,6 +88,7 @@ func TestClickHouseLogCreateTableSQL(t *testing.T) {
 	assert.Contains(t, withoutTTL, "record String DEFAULT ''")
 	assert.Contains(t, withoutTTL, "full_log String DEFAULT ''")
 	assert.Contains(t, withoutTTL, "tps Float64 DEFAULT 0")
+	assert.Contains(t, withoutTTL, "log_entry_id String DEFAULT ''")
 
 	withTTL := clickHouseLogCreateTableSQL(30)
 	assert.Contains(t, withTTL, "ORDER BY (created_at, request_id)")
@@ -106,9 +107,24 @@ func TestClickHouseTokenRecordCreateTableSQL(t *testing.T) {
 		"total_tokens Int64 DEFAULT 0",
 		"failed_count Int64 DEFAULT 0",
 		"failed_detail String DEFAULT ''",
+		"tps_sample_count Int64 DEFAULT 0",
+		"tps_completion_tokens Int64 DEFAULT 0",
+		"tps_duration_ms Int64 DEFAULT 0",
+		"thinking_sample_count Int64 DEFAULT 0",
+		"thinking_valid_tokens Int64 DEFAULT 0",
+		"thinking_valid_duration_ms Int64 DEFAULT 0",
+		"output_sample_count Int64 DEFAULT 0",
+		"output_valid_tokens Int64 DEFAULT 0",
+		"output_valid_duration_ms Int64 DEFAULT 0",
+		"tool_sample_count Int64 DEFAULT 0",
+		"tool_valid_tokens Int64 DEFAULT 0",
+		"tool_valid_duration_ms Int64 DEFAULT 0",
 	} {
 		assert.Contains(t, sql, column)
 	}
+	migrations := clickHouseIncrementalColumnMigrations()
+	assert.Contains(t, migrations, "ALTER TABLE logs ADD COLUMN IF NOT EXISTS log_entry_id String DEFAULT ''")
+	assert.Contains(t, migrations, "ALTER TABLE token_record ADD COLUMN IF NOT EXISTS tps_sample_count Int64 DEFAULT 0")
 }
 
 func TestClickHouseCreateTableHasTTL(t *testing.T) {
@@ -172,4 +188,39 @@ func TestAssignDisplayLogIds(t *testing.T) {
 	assert.Equal(t, []int{21, 22, 23}, []int{logs[0].Id, logs[1].Id, logs[2].Id})
 
 	assert.NotPanics(t, func() { assignDisplayLogIds(nil, 0) })
+}
+
+func TestEnsureLogEntryIdAndAssignLogRowKeys(t *testing.T) {
+	entry := &Log{}
+	ensureLogEntryId(entry)
+	require.NotEmpty(t, entry.LogEntryId)
+	assert.True(t, strings.HasPrefix(entry.LogEntryId, "le_"))
+
+	fixed := &Log{LogEntryId: "le_fixed"}
+	ensureLogEntryId(fixed)
+	assert.Equal(t, "le_fixed", fixed.LogEntryId)
+
+	// 1. Relational logs: preserve LogEntryId for new rows, deterministic legacy-id:<pk> before assignDisplayLogIds overwrites Id
+	relLogs := []*Log{
+		{Id: 501, LogEntryId: "le_new_1", RequestId: "req-shared"},
+		{Id: 500, LogEntryId: "", RequestId: "req-shared"},
+	}
+	assignLogRowKeys(relLogs)
+	assignDisplayLogIds(relLogs, 0)
+	assert.Equal(t, "le_new_1", relLogs[0].RowKey)
+	assert.Equal(t, "legacy-id:500", relLogs[1].RowKey)
+	assert.Equal(t, 1, relLogs[0].Id)
+	assert.Equal(t, 2, relLogs[1].Id)
+
+	// 2. ClickHouse legacy logs (Id == 0, empty LogEntryId): deterministic fingerprint + duplicate suffix for identical same-second retries
+	chLogs := []*Log{
+		{CreatedAt: 1711454400, Type: LogTypeError, RequestId: "req-retry", ChannelId: 3, ModelName: "gpt-5", Content: "upstream 502"},
+		{CreatedAt: 1711454400, Type: LogTypeError, RequestId: "req-retry", ChannelId: 3, ModelName: "gpt-5", Content: "upstream 502"},
+		{CreatedAt: 1711454401, Type: LogTypeConsume, RequestId: "req-retry", ChannelId: 4, ModelName: "gpt-5", CompletionTokens: 42},
+	}
+	assignLogRowKeys(chLogs)
+	assignDisplayLogIds(chLogs, 0)
+	require.True(t, strings.HasPrefix(chLogs[0].RowKey, "legacy-ch:"))
+	assert.Equal(t, chLogs[0].RowKey+"#2", chLogs[1].RowKey, "identical legacy ClickHouse rows must be disambiguated")
+	assert.NotEqual(t, chLogs[0].RowKey, chLogs[2].RowKey)
 }

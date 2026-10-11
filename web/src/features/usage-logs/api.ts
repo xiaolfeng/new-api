@@ -18,9 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api, type ApiRequestConfig } from '@/lib/api'
 
+import type { UsageLog } from './data/schema'
 import { buildQueryParams } from './lib/query-params'
 import { parseTaskArtifactsResponse } from './lib/task-artifacts'
-import type { UsageLog } from './data/schema'
 import type {
   GetLogsParams,
   GetLogsResponse,
@@ -81,10 +81,15 @@ export const getUserLogs = (
 ) => fetchLogs('/api/log', params, false)
 
 export async function getLogDetail(
-  requestId: string
+  requestId: string,
+  rowKey?: string
 ): Promise<{ success: boolean; message?: string; data?: UsageLog }> {
+  const params: Record<string, string> = { request_id: requestId }
+  if (rowKey) {
+    params.row_key = rowKey
+  }
   const res = await api.get(`/api/log/detail`, {
-  	params: { request_id: requestId },
+    params,
   })
   return res.data
 }

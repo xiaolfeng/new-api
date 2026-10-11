@@ -24,16 +24,20 @@ export interface TokenRecordHourCell {
   completion_tokens: number
   total_tokens: number
   total_use_time: number
-  avg_tps: number
+  avg_tps: number | null
+  tps_sample_count?: number
   thinking_tokens: number
   thinking_duration_ms: number
-  avg_thinking_tps: number
+  avg_thinking_tps: number | null
+  thinking_sample_count?: number
   output_tokens: number
   output_duration_ms: number
-  avg_output_tps: number
+  avg_output_tps: number | null
+  output_sample_count?: number
   tool_tokens: number
   tool_duration_ms: number
-  avg_tool_tps: number
+  avg_tool_tps: number | null
+  tool_sample_count?: number
   failed_count: number
   failed_detail: Record<string, number>
   is_current: boolean
@@ -45,16 +49,20 @@ export interface TokenRecordSummary {
   completion_tokens: number
   total_tokens: number
   total_use_time: number
-  avg_tps: number
+  avg_tps: number | null
+  tps_sample_count?: number
   thinking_tokens: number
   thinking_duration_ms: number
-  avg_thinking_tps: number
+  avg_thinking_tps: number | null
+  thinking_sample_count?: number
   output_tokens: number
   output_duration_ms: number
-  avg_output_tps: number
+  avg_output_tps: number | null
+  output_sample_count?: number
   tool_tokens: number
   tool_duration_ms: number
-  avg_tool_tps: number
+  avg_tool_tps: number | null
+  tool_sample_count?: number
   failed_count: number
   failed_rate: number
   failed_detail: Record<string, number>
@@ -86,13 +94,20 @@ export type ChartTab = 'output_tokens' | 'tps' | 'failure_rate'
 export interface ChartDataPoint {
   Time: string
   Model: string
-  Value: number
+  Value: number | null
+  SampleCount?: number
 }
 
 export type EstimatedTpsPhase = 'thinking' | 'output' | 'tool'
 
-export interface EstimatedTpsChartDataPoint extends ChartDataPoint {
+export interface EstimatedTpsChartDataPoint {
+  Time: string
+  Model: string
   Phase: EstimatedTpsPhase
+  PhaseLabel: string
+  SeriesKey: string
+  Value: number | null
+  SampleCount?: number
 }
 
 export interface TokenRecordDailyItem {

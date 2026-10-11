@@ -252,6 +252,43 @@ export function formatTokens(tokens: number): string {
   return `${(tokens / 1000000).toFixed(2)}M`
 }
 
+function trimDecimalZeros(formatted: string): string {
+  if (!formatted.includes('.')) return formatted
+  return formatted.replace(/\.?0+$/, '')
+}
+
+/**
+ * Format token counts with decimal units (k=10^3, M=10^6, B=10^9).
+ * - < 1000: integer
+ * - k: up to 1 decimal place
+ * - M: up to 2 decimal places
+ * - B: up to 3 decimal places (values above B stay in B)
+ * Trailing zeros are stripped and rounding across a boundary promotes the unit.
+ */
+export function formatTokenUnits(tokens: number | null | undefined): string {
+  if (tokens == null || !Number.isFinite(tokens) || tokens <= 0) {
+    return '0'
+  }
+  const intValue = Math.round(tokens)
+  if (intValue < 1000) {
+    return String(intValue)
+  }
+  if (tokens < 1_000_000) {
+    const kRounded = Math.round((tokens / 1_000) * 10) / 10
+    if (kRounded < 1000) {
+      return `${trimDecimalZeros(kRounded.toFixed(1))}k`
+    }
+  }
+  if (tokens < 1_000_000_000) {
+    const mRounded = Math.round((tokens / 1_000_000) * 100) / 100
+    if (mRounded < 1000) {
+      return `${trimDecimalZeros(mRounded.toFixed(2))}M`
+    }
+  }
+  const bRounded = Math.round((tokens / 1_000_000_000) * 1000) / 1000
+  return `${trimDecimalZeros(bRounded.toFixed(3))}B`
+}
+
 /**
  * Format use time in seconds with appropriate unit
  */

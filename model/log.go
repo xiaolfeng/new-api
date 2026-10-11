@@ -2,8 +2,11 @@ package model
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -76,6 +79,8 @@ type Log struct {
 	TokenId           int     `json:"token_id" gorm:"default:0;index"`
 	Group             string  `json:"group" gorm:"index"`
 	Ip                string  `json:"ip" gorm:"index;default:''"`
+	LogEntryId        string  `json:"log_entry_id,omitempty" gorm:"type:varchar(64);index:idx_logs_log_entry_id;default:''"`
+	RowKey            string  `json:"row_key,omitempty" gorm:"-"`
 	RequestId         string  `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
 	UpstreamRequestId string  `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
 	Other             string  `json:"other"`
@@ -102,13 +107,84 @@ func ensureLogRequestId(log *Log) {
 	}
 }
 
+func ensureLogEntryId(log *Log) {
+	if log == nil {
+		return
+	}
+	if log.LogEntryId == "" {
+		log.LogEntryId = "le_" + common.NewRequestId()
+	}
+	if log.RowKey == "" {
+		log.RowKey = log.LogEntryId
+	}
+}
+
 func createLog(log *Log) error {
 	ensureLogRequestId(log)
+	ensureLogEntryId(log)
 	return LOG_DB.Create(log).Error
 }
 
 func clickHouseLogOrder(prefix string) string {
 	return prefix + "created_at desc, " + prefix + "request_id desc"
+}
+
+func buildLegacyClickHouseLogFingerprint(log *Log) string {
+	if log == nil {
+		return "empty"
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%d|%d|%d|%s|%d|%s|%s|%d|%d|%d|%d|%d|%t|%s|%s|%s|%s|%s|%.2f",
+		log.CreatedAt,
+		log.Type,
+		log.UserId,
+		log.Username,
+		log.TokenId,
+		log.TokenName,
+		log.ModelName,
+		log.ChannelId,
+		log.Quota,
+		log.PromptTokens,
+		log.CompletionTokens,
+		log.UseTime,
+		log.IsStream,
+		log.Group,
+		log.Ip,
+		log.RequestId,
+		log.UpstreamRequestId,
+		log.Content,
+		log.Tps,
+	)
+	sum := sha256.Sum256([]byte(b.String()))
+	return hex.EncodeToString(sum[:12])
+}
+
+// assignLogRowKeys 为返回列表/详情的日志补齐稳定的 row_key。
+// 必须在 assignDisplayLogIds 覆盖 Id 之前、以及权限清洗改写 Other/ChannelName 之前调用。
+func assignLogRowKeys(logs []*Log) {
+	isClickHouse := common.UsingLogDatabase(common.DatabaseTypeClickHouse)
+	fingerprintCounts := make(map[string]int)
+	for i := range logs {
+		if logs[i] == nil || logs[i].RowKey != "" {
+			continue
+		}
+		if logs[i].LogEntryId != "" {
+			logs[i].RowKey = logs[i].LogEntryId
+			continue
+		}
+		if !isClickHouse && logs[i].Id > 0 {
+			logs[i].RowKey = fmt.Sprintf("legacy-id:%d", logs[i].Id)
+			continue
+		}
+		fp := buildLegacyClickHouseLogFingerprint(logs[i])
+		fingerprintCounts[fp]++
+		count := fingerprintCounts[fp]
+		if count == 1 {
+			logs[i].RowKey = "legacy-ch:" + fp
+		} else {
+			logs[i].RowKey = fmt.Sprintf("legacy-ch:%s#%d", fp, count)
+		}
+	}
 }
 
 func assignDisplayLogIds(logs []*Log, startIdx int) {
@@ -123,6 +199,7 @@ func FormatUserLogs(logs []*Log, viewer *User) {
 }
 
 func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
+	assignLogRowKeys(logs)
 	for i := range logs {
 		logs[i].ChannelName = ""
 		logs[i].Other = formatLogOtherJSON(logs[i].Other, logOtherVisibilityUser)
@@ -180,6 +257,7 @@ func formatUserLogs(logs []*Log, startIdx int, viewer *User) {
 // FormatAdminLogs removes root-only diagnostics while retaining operational
 // admin_info. Root callers must not pass their results through this formatter.
 func FormatAdminLogs(logs []*Log) {
+	assignLogRowKeys(logs)
 	for i := range logs {
 		logs[i].Other = formatLogOtherJSON(logs[i].Other, logOtherVisibilityAdmin)
 	}
@@ -188,6 +266,7 @@ func FormatAdminLogs(logs []*Log) {
 // FormatRootLogs normalizes legacy metadata into the current scoped shape
 // without removing root-only diagnostics.
 func FormatRootLogs(logs []*Log) {
+	assignLogRowKeys(logs)
 	for i := range logs {
 		logs[i].Other = formatLogOtherJSON(logs[i].Other, logOtherVisibilityRoot)
 	}
@@ -203,9 +282,54 @@ func stripLogDetailPayload(logs []*Log) {
 }
 
 func GetLogByRequestId(requestId string) (*Log, error) {
+	return GetLogByRequestIdAndRowKey(requestId, "")
+}
+
+func GetLogByRequestIdAndRowKey(requestId string, rowKey string) (*Log, error) {
 	order := "id desc"
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		order = clickHouseLogOrder("")
+	}
+	rowKey = strings.TrimSpace(rowKey)
+	if rowKey != "" {
+		if legacyIdStr, ok := strings.CutPrefix(rowKey, "legacy-id:"); ok {
+			if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
+				return nil, gorm.ErrRecordNotFound
+			}
+			legacyId, err := strconv.Atoi(legacyIdStr)
+			if err != nil || legacyId <= 0 {
+				return nil, gorm.ErrRecordNotFound
+			}
+			var logs []*Log
+			err = LOG_DB.Model(&Log{}).
+				Where("request_id = ? AND id = ?", requestId, legacyId).
+				Limit(1).
+				Find(&logs).Error
+			if err != nil {
+				return nil, err
+			}
+			if len(logs) == 0 {
+				return nil, gorm.ErrRecordNotFound
+			}
+			assignLogRowKeys(logs)
+			return logs[0], nil
+		}
+		if !strings.HasPrefix(rowKey, "legacy-") && !strings.HasPrefix(rowKey, "fallback:") {
+			var logs []*Log
+			err := LOG_DB.Model(&Log{}).
+				Where("request_id = ? AND log_entry_id = ?", requestId, rowKey).
+				Order(order).
+				Limit(1).
+				Find(&logs).Error
+			if err != nil {
+				return nil, err
+			}
+			if len(logs) == 0 {
+				return nil, gorm.ErrRecordNotFound
+			}
+			assignLogRowKeys(logs)
+			return logs[0], nil
+		}
 	}
 	var logs []*Log
 	err := LOG_DB.Model(&Log{}).Where("request_id = ?", requestId).Order(order).Limit(1).Find(&logs).Error
@@ -215,6 +339,7 @@ func GetLogByRequestId(requestId string) (*Log, error) {
 	if len(logs) == 0 {
 		return nil, gorm.ErrRecordNotFound
 	}
+	assignLogRowKeys(logs)
 	return logs[0], nil
 }
 
@@ -664,6 +789,7 @@ func GetAllLogs(logType int, startTimestamp int64, endTimestamp int64, modelName
 	if err != nil {
 		return nil, 0, err
 	}
+	assignLogRowKeys(logs)
 	if common.UsingLogDatabase(common.DatabaseTypeClickHouse) {
 		assignDisplayLogIds(logs, startIdx)
 	}

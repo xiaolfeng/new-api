@@ -47,6 +47,7 @@ const pointerCaptureDescriptor = Object.getOwnPropertyDescriptor(
 )
 
 function FilterFixture() {
+  // oxlint-disable-next-line react/incompatible-library
   const table = useReactTable({
     data: [],
     columns: [],
@@ -79,7 +80,10 @@ async function renderFilter(
     return { data: { success: true, data: { quota: 0, rpm: 0, tpm: 0 } } }
   })
   const root = createRootRoute()
-  const auth = createRoute({ getParentRoute: () => root, id: '_authenticated' })
+  const auth = createRoute({
+    getParentRoute: () => root,
+    id: '_authenticated',
+  })
   const logs = createRoute({
     getParentRoute: () => auth,
     path: '/usage-logs/$section',
@@ -104,7 +108,7 @@ async function renderFilter(
     )
   }
   await screen.findByRole('combobox', { name: 'Group' })
-  return router
+  return Object.assign(router, { queryClient: client })
 }
 
 afterEach(() => {
@@ -282,7 +286,9 @@ it.each([1, 10])(
     await userEvent.click(option)
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() =>
-      expect(router.state.location.search).toMatchObject({ group: 'auto-team' })
+      expect(router.state.location.search).toMatchObject({
+        group: 'auto-team',
+      })
     )
   }
 )
@@ -301,4 +307,44 @@ it('keeps historical auto values editable when auto is the only available group'
   await waitFor(() =>
     expect(router.state.location.search).toMatchObject({ group: 'retired' })
   )
+})
+
+it('preserves selected startTime/endTime across repeated searches and invalidates logs + stats after navigation', async () => {
+  useAuthStore.getState().auth.setUser({ id: 1, username: 'admin', role: 10 })
+  const fixedStart = 1700000000000
+  const fixedEnd = 1700003600000
+  const router = await renderFilter(
+    `/usage-logs/common?startTime=${fixedStart}&endTime=${fixedEnd}&model=gpt-4o`
+  )
+  const invalidateSpy = vi.spyOn(router.queryClient, 'invalidateQueries')
+
+  // First search with unchanged conditions
+  await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+  await waitFor(() => {
+    expect(router.state.location.search).toMatchObject({
+      startTime: fixedStart,
+      endTime: fixedEnd,
+      model: 'gpt-4o',
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['logs'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['usage-logs-stats'],
+    })
+  })
+
+  invalidateSpy.mockClear()
+
+  // Second search with unchanged conditions still triggers refresh without advancing time window
+  await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+  await waitFor(() => {
+    expect(router.state.location.search).toMatchObject({
+      startTime: fixedStart,
+      endTime: fixedEnd,
+      model: 'gpt-4o',
+    })
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['logs'] })
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ['usage-logs-stats'],
+    })
+  })
 })

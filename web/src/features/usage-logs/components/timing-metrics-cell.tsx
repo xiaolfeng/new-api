@@ -68,6 +68,7 @@ interface TimingMetricsCellProps {
    */
   indicator?: 'bar' | 'dot'
   compact?: boolean
+  singleLine?: boolean
 }
 
 export function TimingMetricsCell(props: TimingMetricsCellProps) {
@@ -105,7 +106,21 @@ export function TimingMetricsCell(props: TimingMetricsCellProps) {
   const hasPhaseTiming =
     thinkingMs != null || contentMs != null || toolMs != null
 
-  const labels = (
+  const labels = props.singleLine ? (
+    <div className='flex min-h-0 min-w-0 flex-row flex-nowrap items-center gap-1 text-xs leading-tight whitespace-nowrap'>
+      {showFirstToken && (
+        <>
+          <span className={cn('tabular-nums', textColorMap[firstTokenVariant])}>
+            {firstTokenLabel}
+          </span>
+          <span className='text-muted-foreground/40'>/</span>
+        </>
+      )}
+      <span className={cn('tabular-nums', textColorMap[totalTimeVariant])}>
+        {totalTimeLabel}
+      </span>
+    </div>
+  ) : (
     <div
       className={cn(
         'flex min-h-8 min-w-0 flex-col justify-center gap-0.5 text-xs leading-tight',

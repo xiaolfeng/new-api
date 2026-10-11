@@ -34,11 +34,7 @@ export function formatDurationMs(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`
 }
 
-export function toolTarget(
-  query: string,
-  url: string,
-  kind?: string
-): string {
+export function toolTarget(query: string, url: string, kind?: string): string {
   const q = query.trim()
   const u = url.trim()
   if (kind === 'fetch') return u || q

@@ -16,23 +16,46 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import {
+  QueryClient,
+  QueryClientProvider,
+  QueryObserver,
+} from '@tanstack/react-query'
 import {
   flexRender,
   getCoreRowModel,
   useReactTable,
 } from '@tanstack/react-table'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { createInstance } from 'i18next'
 import { I18nextProvider } from 'react-i18next'
-import { afterAll, afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from 'vitest'
 
 import en from '@/i18n/locales/en.json'
+
 import { getLogDetail } from '../../api'
 import type { UsageLog } from '../../data/schema'
+import {
+  clearParsedLogOtherCache,
+  getParsedLogOtherCacheSize,
+  parseLogOther,
+} from '../../lib/format'
 import { useCommonLogsColumns } from '../columns/common-logs-columns'
 import { DetailsDialog } from '../dialogs/details-dialog'
-import { UsageLogsProvider } from '../usage-logs-provider'
+import {
+  releaseUsageLogsMemory,
+  UsageLogsProvider,
+  useUsageLogsContext,
+  useUsageLogsCountdown,
+} from '../usage-logs-provider'
 
 vi.mock('@lobehub/icons', () => ({}))
 // 详情大字段已按需经 /api/log/detail 获取，测试直接 mock 端点返回。
@@ -111,7 +134,10 @@ function TableWrapper({ log }: { log: UsageLog }) {
           <div key={headerGroup.id} data-testid='headers'>
             {headerGroup.headers.map((header) => (
               <span key={header.id} data-testid={`col-${header.id}`}>
-                {flexRender(header.column.columnDef.header, header.getContext())}
+                {flexRender(
+                  header.column.columnDef.header,
+                  header.getContext()
+                )}
               </span>
             ))}
           </div>
@@ -159,6 +185,207 @@ describe('usage-logs common columns source and session regression tests', () => 
     // Should render session cell with 'Swift-Falcon'
     const sessionCell = screen.getByTestId('cell-session')
     expect(sessionCell).toHaveTextContent('Swift-Falcon')
+  })
+
+  test('compactMode hides secondary multi-line metadata across common columns for single-line display', () => {
+    function CompactTableWrapper({
+      log,
+      compactMode,
+    }: {
+      log: UsageLog
+      compactMode: boolean
+    }) {
+      const columns = useCommonLogsColumns(true, true, false, compactMode)
+      // oxlint-disable-next-line react/incompatible-library
+      const table = useReactTable({
+        data: [log],
+        columns,
+        getCoreRowModel: getCoreRowModel(),
+      })
+
+      return (
+        <UsageLogsProvider>
+          <div>
+            {table.getRowModel().rows.map((row) => (
+              <div key={row.id} data-testid='row'>
+                {row.getVisibleCells().map((cell) => (
+                  <div key={cell.id} data-testid={`cell-${cell.column.id}`}>
+                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </UsageLogsProvider>
+      )
+    }
+
+    const richLog = makeTestLog({
+      channel_name: 'Main Channel',
+      group: 'vip_group',
+      other: JSON.stringify({
+        client_source: 'Pi',
+        session_name: 'Swift-Falcon',
+        session_id: 'sess-123',
+        sub_session_name: 'Child-Session',
+        agent_name: 'Sub-Agent',
+        group_ratio: 1.5,
+        cache_tokens: 200,
+        cache_creation_tokens: 50,
+        frt: 320,
+        bamboo_timing: {
+          thinking_tps: 25,
+          output_tps: 48,
+          tool_tps: 15,
+        },
+      }),
+    })
+
+    const { rerender } = render(
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={client}>
+          <CompactTableWrapper log={richLog} compactMode={false} />
+        </QueryClientProvider>
+      </I18nextProvider>
+    )
+
+    // Standard mode shows secondary lines
+    expect(screen.getByTestId('cell-created_at')).toHaveTextContent('Consume')
+    expect(screen.getByTestId('cell-channel')).toHaveTextContent('Main Channel')
+    expect(screen.getByTestId('cell-token_name')).toHaveTextContent('vip_group')
+    expect(screen.getByTestId('cell-session')).toHaveTextContent('Sub-Agent')
+    expect(screen.getByTestId('cell-tps')).toHaveTextContent('Upstream')
+    expect(screen.getByTestId('cell-prompt_tokens')).toHaveTextContent('Cache↓')
+    expect(screen.getByTestId('cell-use_time')).toHaveTextContent('First token')
+    expect(screen.getByTestId('cell-use_time')).toHaveTextContent('Duration')
+
+    rerender(
+      <I18nextProvider i18n={i18n}>
+        <QueryClientProvider client={client}>
+          <CompactTableWrapper log={richLog} compactMode />
+        </QueryClientProvider>
+      </I18nextProvider>
+    )
+
+    // Compact mode keeps primary single-line info and hides secondary rows
+    expect(screen.getByTestId('cell-created_at')).not.toHaveTextContent(
+      'Consume'
+    )
+    expect(screen.getByTestId('cell-channel')).toHaveTextContent('#1')
+    expect(screen.getByTestId('cell-channel')).not.toHaveTextContent(
+      'Main Channel'
+    )
+    expect(screen.getByTestId('cell-token_name')).toHaveTextContent(
+      'test_token'
+    )
+    expect(screen.getByTestId('cell-token_name')).not.toHaveTextContent(
+      'vip_group'
+    )
+    expect(screen.getByTestId('cell-session')).toHaveTextContent('Swift-Falcon')
+    expect(screen.getByTestId('cell-session')).not.toHaveTextContent(
+      'Sub-Agent'
+    )
+    expect(screen.getByTestId('cell-tps')).not.toHaveTextContent('Upstream')
+    expect(screen.getByTestId('cell-prompt_tokens')).toHaveTextContent('100')
+    expect(screen.getByTestId('cell-prompt_tokens')).not.toHaveTextContent(
+      'Cache↓'
+    )
+    expect(screen.getByTestId('cell-use_time')).not.toHaveTextContent(
+      'First token'
+    )
+    expect(screen.getByTestId('cell-use_time')).not.toHaveTextContent(
+      'Duration'
+    )
+  })
+
+  test('releaseUsageLogsMemory clears inactive caches, trims mobile pages, and isolates countdown re-renders', () => {
+    clearParsedLogOtherCache()
+    const parsedA = parseLogOther('{"frt":120}')
+    const parsedB = parseLogOther('{"frt":120}')
+    expect(parsedA).toBe(parsedB)
+    expect(getParsedLogOtherCacheSize()).toBe(1)
+
+    // Populate inactive queries and multi-page mobile infinite query
+    client.setQueryData(['logs', 'common', 'admin', 1], { items: [{ id: 1 }] })
+    client.setQueryData(['usage-logs-stats', 'common'], { quota: 100 })
+    client.setQueryData(['log-detail', 'req-1', 'le_1'], { id: 1 })
+    client.setQueryData(['logs', 'mobile', 'common'], {
+      pages: [{ items: [{ id: 1 }] }, { items: [{ id: 2 }] }],
+      pageParams: [1, 2],
+    })
+
+    // Subscribe an observer to the mobile query so it is active, while the others are inactive
+    const observer = new QueryObserver(client, {
+      queryKey: ['logs', 'mobile', 'common'],
+    })
+    const unsubscribe = observer.subscribe(() => {})
+
+    releaseUsageLogsMemory(client)
+
+    expect(getParsedLogOtherCacheSize()).toBe(0)
+    expect(client.getQueryData(['logs', 'common', 'admin', 1])).toBeUndefined()
+    expect(client.getQueryData(['usage-logs-stats', 'common'])).toBeUndefined()
+    expect(client.getQueryData(['log-detail', 'req-1', 'le_1'])).toBeUndefined()
+
+    const mobileData = client.getQueryData<{
+      pages: unknown[]
+      pageParams: unknown[]
+    }>(['logs', 'mobile', 'common'])
+    expect(mobileData?.pages).toHaveLength(1)
+    expect(mobileData?.pageParams).toEqual([1])
+
+    unsubscribe()
+  })
+
+  test('countdown ticks do not re-render main UsageLogsContext consumers', () => {
+    vi.useFakeTimers()
+    try {
+      const onContextRender = vi.fn()
+      const onCountdownRender = vi.fn()
+
+      function ContextConsumer({ onRender }: { onRender: () => void }) {
+        const { autoRefresh, setAutoRefresh } = useUsageLogsContext()
+        onRender()
+        return (
+          <button
+            type='button'
+            data-testid='toggle-auto-refresh'
+            onClick={() => setAutoRefresh(!autoRefresh)}
+          >
+            {String(autoRefresh)}
+          </button>
+        )
+      }
+
+      function CountdownConsumer({ onRender }: { onRender: () => void }) {
+        const countdown = useUsageLogsCountdown()
+        onRender()
+        return <span data-testid='countdown'>{countdown}</span>
+      }
+
+      render(
+        <QueryClientProvider client={client}>
+          <UsageLogsProvider>
+            <ContextConsumer onRender={onContextRender} />
+            <CountdownConsumer onRender={onCountdownRender} />
+          </UsageLogsProvider>
+        </QueryClientProvider>
+      )
+
+      // Enable auto-refresh first
+      fireEvent.click(screen.getByTestId('toggle-auto-refresh'))
+      const rendersAfterEnable = onContextRender.mock.calls.length
+      expect(onCountdownRender.mock.calls.length).toBeGreaterThanOrEqual(1)
+
+      // Advance 5 seconds: countdown ticks 5 times, but ContextConsumer must not re-render
+      act(() => {
+        vi.advanceTimersByTime(5000)
+      })
+      expect(onContextRender).toHaveBeenCalledTimes(rendersAfterEnable)
+      expect(screen.getByTestId('countdown')).toHaveTextContent('25')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 
@@ -235,7 +462,9 @@ describe('DetailsDialog session and structured record regression tests', () => {
     )
 
     // Click "View Record" button（详情端点异步返回后出现）
-    const viewRecordButton = await screen.findByRole('button', { name: /View Record/i })
+    const viewRecordButton = await screen.findByRole('button', {
+      name: /View Record/i,
+    })
     expect(viewRecordButton).toBeInTheDocument()
     fireEvent.click(viewRecordButton)
 
@@ -245,7 +474,9 @@ describe('DetailsDialog session and structured record regression tests', () => {
     // It should render structured visual sections
     expect(screen.getByText('Request Headers')).toBeInTheDocument()
     expect(screen.getByText('user-agent')).toBeInTheDocument()
-    expect(screen.getAllByText('pi/0.99.0 darwin').length).toBeGreaterThanOrEqual(1)
+    expect(
+      screen.getAllByText('pi/0.99.0 darwin').length
+    ).toBeGreaterThanOrEqual(1)
     expect(screen.getByText('Tool Calls (1)')).toBeInTheDocument()
     expect(screen.getByText('calculator')).toBeInTheDocument()
   })

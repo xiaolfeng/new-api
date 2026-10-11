@@ -20,8 +20,8 @@ import { MESSAGE_ROLES, MESSAGE_STATUS } from '../../constants'
 import type { Message } from '../../types'
 import { splitHostToolContent, type HostToolSplitItem } from './host-tool-utils'
 import { splitImageRecognitionContent } from './image-recognize-utils'
-import { hasMessageImages } from './message-utils'
 import { parseThinkTags } from './message-reasoning-utils'
+import { hasMessageImages } from './message-utils'
 
 type MessageContentStateBase = {
   displayContent: string
@@ -65,8 +65,9 @@ function shouldShowMessageContent(
 ): boolean {
   const hasVisibleText =
     splitHostToolContent(
-      splitImageRecognitionContent(getRawDisplayContent(message, versionContent))
-        .rest
+      splitImageRecognitionContent(
+        getRawDisplayContent(message, versionContent)
+      ).rest
     ).rest.length > 0
   return (
     (message.from === MESSAGE_ROLES.USER || !message.isReasoningStreaming) &&
@@ -74,7 +75,10 @@ function shouldShowMessageContent(
   )
 }
 
-function getRawDisplayContent(message: Message, versionContent: string): string {
+function getRawDisplayContent(
+  message: Message,
+  versionContent: string
+): string {
   if (message.from !== MESSAGE_ROLES.ASSISTANT) {
     return versionContent
   }
@@ -88,9 +92,8 @@ function getRawDisplayContent(message: Message, versionContent: string): string 
 
 function getDisplayContent(message: Message, versionContent: string): string {
   return splitHostToolContent(
-    splitImageRecognitionContent(
-      getRawDisplayContent(message, versionContent)
-    ).rest
+    splitImageRecognitionContent(getRawDisplayContent(message, versionContent))
+      .rest
   ).rest
 }
 

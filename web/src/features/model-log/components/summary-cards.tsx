@@ -6,7 +6,12 @@ import {
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
-import { formatCompactNumber } from '@/lib/format'
+import { toIntlLocale } from '@/i18n/languages'
+import {
+  formatCompactNumber,
+  formatNumber,
+  formatTokenUnits,
+} from '@/lib/format'
 
 import type { TokenRecordOverallSummary } from '../types'
 
@@ -42,35 +47,40 @@ const CARD_STYLES = [
 ]
 
 export function SummaryCards({ summary }: SummaryCardsProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage ?? i18n.language)
+  const totalRequests = summary.total_request_count || 0
+  const promptTokens = summary.total_prompt_tokens || 0
+  const outputTokens = summary.total_output_tokens || 0
+  const activeModels = summary.active_model_count || 0
 
   const cards = [
     {
       key: 'total_request_count',
       label: t('Total Requests'),
-      value: formatCompactNumber(summary.total_request_count || 0),
-      tooltip: `${(summary.total_request_count || 0).toLocaleString()} ${t('times')}`,
+      value: formatCompactNumber(totalRequests, locale),
+      tooltip: `${formatNumber(totalRequests, locale)} ${t('times')}`,
       icon: Activity,
     },
     {
       key: 'total_prompt_tokens',
       label: t('Input Tokens'),
-      value: formatCompactNumber(summary.total_prompt_tokens || 0),
-      tooltip: (summary.total_prompt_tokens || 0).toLocaleString(),
+      value: formatTokenUnits(promptTokens),
+      tooltip: formatNumber(promptTokens, locale),
       icon: ArrowDownToLine,
     },
     {
       key: 'total_output_tokens',
       label: t('Output Tokens'),
-      value: formatCompactNumber(summary.total_output_tokens || 0),
-      tooltip: (summary.total_output_tokens || 0).toLocaleString(),
+      value: formatTokenUnits(outputTokens),
+      tooltip: formatNumber(outputTokens, locale),
       icon: ArrowUpFromLine,
     },
     {
       key: 'active_model_count',
       label: t('Active Models'),
-      value: String(summary.active_model_count || 0),
-      tooltip: `${summary.active_model_count || 0} ${t('models')}`,
+      value: String(activeModels),
+      tooltip: `${formatNumber(activeModels, locale)} ${t('models')}`,
       icon: Layers,
     },
   ]

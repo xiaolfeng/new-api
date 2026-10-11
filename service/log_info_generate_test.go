@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/model"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
@@ -107,6 +108,11 @@ func TestBuildTokenRecordTiming(t *testing.T) {
 				ContentDuration:  2 * time.Second,
 				ToolDuration:     750 * time.Millisecond,
 			},
+			Rates: relaycommon.BambooTokenRates{
+				ThinkingTokensPerSec: 20,
+				OutputTokensPerSec:   20,
+				ToolTokensPerSec:     20,
+			},
 			Tokens: relaycommon.BambooTokenCounts{
 				ThinkingTokens: 30,
 				OutputTokens:   40,
@@ -124,6 +130,97 @@ func TestBuildTokenRecordTiming(t *testing.T) {
 		ToolDurationMs:     750,
 	}, BuildTokenRecordTiming(info))
 	require.Equal(t, model.TokenRecordTiming{}, BuildTokenRecordTiming(nil))
+
+	// Unreliable phases (< 100ms or negative '~' rate) are excluded individually without dropping valid sibling phases
+	partial := &relaycommon.RelayInfo{
+		BambooTiming: &relaycommon.BambooTimingResult{
+			Stats: relaycommon.BambooTimingStats{
+				ThinkingDuration: 50 * time.Millisecond,  // < 100ms
+				ContentDuration:  100 * time.Millisecond, // exact 100ms boundary, valid
+				ToolDuration:     500 * time.Millisecond, // negative rate (~), invalid
+			},
+			Rates: relaycommon.BambooTokenRates{
+				ThinkingTokensPerSec: -200,
+				OutputTokensPerSec:   150,
+				ToolTokensPerSec:     -30,
+			},
+			Tokens: relaycommon.BambooTokenCounts{
+				ThinkingTokens: 10,
+				OutputTokens:   15,
+				ToolTokens:     15,
+			},
+		},
+	}
+	require.Equal(t, model.TokenRecordTiming{
+		OutputTokens:     15,
+		OutputDurationMs: 100,
+	}, BuildTokenRecordTiming(partial))
+}
+
+func TestBuildTokenRecordTimingForConsumeEligibility(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	start := time.Unix(1000, 0)
+
+	makeStreamRelay := func(genDuration time.Duration) *relaycommon.RelayInfo {
+		dt := relaycommon.NewDeliveryTiming(start)
+		dt.RecordContent(start.Add(200 * time.Millisecond))
+		dt.Finish(start.Add(200*time.Millisecond+genDuration), "completed")
+		return &relaycommon.RelayInfo{
+			StartTime:      start,
+			IsStream:       true,
+			DeliveryTiming: dt,
+			BambooTiming: &relaycommon.BambooTimingResult{
+				Stats:  relaycommon.BambooTimingStats{ContentDuration: 500 * time.Millisecond},
+				Rates:  relaycommon.BambooTokenRates{OutputTokensPerSec: 100},
+				Tokens: relaycommon.BambooTokenCounts{OutputTokens: 50},
+			},
+		}
+	}
+
+	confirmedUsage := &dto.Usage{
+		CompletionTokens: 80,
+		BillingUsage: &dto.BillingUsage{
+			Source:      dto.BillingUsageSourceOAIChat,
+			Semantic:    dto.BillingUsageSemanticOpenAI,
+			OpenAIUsage: &dto.Usage{PromptTokens: 10, CompletionTokens: 80, TotalTokens: 90},
+			Estimated:   false,
+		},
+	}
+
+	// 1. Valid stream sample (generation = 1000ms >= 100ms)
+	validTiming := BuildTokenRecordTimingForConsume(nil, makeStreamRelay(time.Second), confirmedUsage, 80, 1)
+	assert.EqualValues(t, 1, validTiming.TpsSampleCount)
+	assert.EqualValues(t, 80, validTiming.TpsCompletionTokens)
+	assert.EqualValues(t, 1000, validTiming.TpsDurationMs)
+	assert.EqualValues(t, 50, validTiming.OutputTokens)
+
+	// 2. Boundary 99ms vs 100ms generation duration
+	underThreshold := BuildTokenRecordTimingForConsume(nil, makeStreamRelay(99*time.Millisecond), confirmedUsage, 80, 1)
+	assert.EqualValues(t, 0, underThreshold.TpsSampleCount)
+	atThreshold := BuildTokenRecordTimingForConsume(nil, makeStreamRelay(100*time.Millisecond), confirmedUsage, 80, 1)
+	assert.EqualValues(t, 1, atThreshold.TpsSampleCount)
+	assert.EqualValues(t, 100, atThreshold.TpsDurationMs)
+
+	// 3. Estimated fallback usage excluded from verified AvgTPS, while valid Bamboo phase estimation remains in phase trend
+	estimatedUsage := &dto.Usage{
+		CompletionTokens: 80,
+		BillingUsage: &dto.BillingUsage{
+			Source:      dto.BillingUsageSourceOAIChat,
+			Semantic:    dto.BillingUsageSemanticOpenAI,
+			OpenAIUsage: &dto.Usage{PromptTokens: 10, CompletionTokens: 80, TotalTokens: 90},
+			Estimated:   true,
+		},
+	}
+	estTiming := BuildTokenRecordTimingForConsume(nil, makeStreamRelay(time.Second), estimatedUsage, 80, 1)
+	assert.EqualValues(t, 0, estTiming.TpsSampleCount, "estimated usage must not enter verified AvgTPS")
+	assert.EqualValues(t, 50, estTiming.OutputTokens, "valid phase estimation still enters phase trend")
+
+	// 4. Failed relay context excluded from verified AvgTPS
+	rec := httptest.NewRecorder()
+	errCtx, _ := gin.CreateTestContext(rec)
+	common.SetContextKey(errCtx, constant.ContextKeyRelayError, true)
+	failedTiming := BuildTokenRecordTimingForConsume(errCtx, makeStreamRelay(time.Second), confirmedUsage, 80, 1)
+	assert.EqualValues(t, 0, failedTiming.TpsSampleCount)
 }
 
 func TestAppendBambooTimingAlignsFrt(t *testing.T) {

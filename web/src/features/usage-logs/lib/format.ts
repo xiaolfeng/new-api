@@ -155,10 +155,7 @@ export function hasToolSurcharge(other: LogOtherData | null): boolean {
   )
 }
 
-export type UsageActivityTagId =
-  | 'web_search'
-  | 'web_fetch'
-  | 'image_recognize'
+export type UsageActivityTagId = 'web_search' | 'web_fetch' | 'image_recognize'
 
 export interface UsageActivityTag {
   id: UsageActivityTagId
@@ -321,7 +318,8 @@ export function getUsageActivityTagDetails(
     execMatchesHostToolTag(exec, hostTagId)
   )
   const successful = execs.filter(
-    (exec) => typeof exec?.error_code !== 'string' || exec.error_code.trim() === ''
+    (exec) =>
+      typeof exec?.error_code !== 'string' || exec.error_code.trim() === ''
   )
   const namedExecs = successful.length > 0 ? successful : execs
 
@@ -367,6 +365,17 @@ export function getUsageActivityTagDetails(
   }
 }
 
+const MAX_PARSED_LOG_OTHER_CACHE = 400
+const parsedLogOtherCache = new Map<string, LogOtherData | null>()
+
+export function clearParsedLogOtherCache(): void {
+  parsedLogOtherCache.clear()
+}
+
+export function getParsedLogOtherCacheSize(): number {
+  return parsedLogOtherCache.size
+}
+
 /**
  * Parse the 'other' field from JSON string to object.
  * Returns null for falsy input, non-object parse results, or invalid JSON.
@@ -376,18 +385,30 @@ export function parseLogOther(other: unknown): LogOtherData | null {
   if (typeof other === 'object' && !Array.isArray(other))
     return other as LogOtherData
   if (typeof other === 'string') {
+    if (parsedLogOtherCache.has(other)) {
+      return parsedLogOtherCache.get(other) ?? null
+    }
+    let result: LogOtherData | null = null
     try {
       const parsed = JSON.parse(other)
       if (
-        parsed === null ||
-        typeof parsed !== 'object' ||
-        Array.isArray(parsed)
-      )
-        return null
-      return parsed as LogOtherData
+        parsed !== null &&
+        typeof parsed === 'object' &&
+        !Array.isArray(parsed)
+      ) {
+        result = parsed as LogOtherData
+      }
     } catch {
-      return null
+      result = null
     }
+    if (parsedLogOtherCache.size >= MAX_PARSED_LOG_OTHER_CACHE) {
+      const oldestKey = parsedLogOtherCache.keys().next().value
+      if (oldestKey !== undefined) {
+        parsedLogOtherCache.delete(oldestKey)
+      }
+    }
+    parsedLogOtherCache.set(other, result)
+    return result
   }
   return null
 }

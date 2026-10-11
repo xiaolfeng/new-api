@@ -45,7 +45,10 @@ function formatDurationMs(ms: number): string {
   return `${(ms / 1000).toFixed(2)}s`
 }
 
-function hostToolNameLine(details: UsageActivityTagDetails, index: number): string {
+function hostToolNameLine(
+  details: UsageActivityTagDetails,
+  index: number
+): string {
   const name = details.names[index] ?? details.names[0]
   const canonical = details.canonicals[index] ?? details.canonicals[0]
   if (!name) return canonical ?? ''
@@ -114,7 +117,11 @@ export function UsageActivityTags(props: UsageActivityTagsProps) {
             />
           }
         >
-          <HugeiconsIcon icon={Wrench01Icon} strokeWidth={2} aria-hidden='true' />
+          <HugeiconsIcon
+            icon={Wrench01Icon}
+            strokeWidth={2}
+            aria-hidden='true'
+          />
         </TooltipTrigger>
         <TooltipContent className='max-w-xs space-y-2'>
           {tags.map((tag) => (

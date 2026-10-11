@@ -7002,7 +7002,8 @@
     "Length": "长度",
     "Code User": "代码用户",
     "Expand all": "全部展开",
-    "Delete model \"{{name}}\"? This cannot be undone.": "删除模型 \"{{name}}\"？此操作无法撤销。"
+    "Delete model \"{{name}}\"? This cannot be undone.": "删除模型 \"{{name}}\"？此操作无法撤销。",
+    "Minimal display": "最小化显示"
   },
   "Total Input": "总输入"
 }

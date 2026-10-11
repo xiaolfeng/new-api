@@ -136,9 +136,7 @@ export function PlaygroundMessageContent({
               type={
                 tool.kind === 'fetch' ? 'tool-web_fetch' : 'tool-web_search'
               }
-              state={
-                tool.isStreaming ? 'input-available' : 'output-available'
-              }
+              state={tool.isStreaming ? 'input-available' : 'output-available'}
             />
             <ToolContent>
               <ToolOutput output={tool.body} errorText={undefined} />

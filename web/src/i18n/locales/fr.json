@@ -7002,7 +7002,8 @@
     "Length": "Longueur",
     "Code User": "Utilisateur de code",
     "Expand all": "Tout développer",
-    "Delete model \"{{name}}\"? This cannot be undone.": "Supprimer le modèle « {{name}} » ? Cette action est irréversible."
+    "Delete model \"{{name}}\"? This cannot be undone.": "Supprimer le modèle « {{name}} » ? Cette action est irréversible.",
+    "Minimal display": "Affichage minimal"
   },
   "Total Input": "Entrée totale"
 }

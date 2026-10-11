@@ -22,7 +22,10 @@ import i18next from 'i18next'
 import { beforeAll, describe, expect, test } from 'vitest'
 
 import type { UsageLog } from '../../data/schema'
-import { HostToolInternalDash, InteractionTypeCell } from '../interaction-type-cell'
+import {
+  HostToolInternalDash,
+  InteractionTypeCell,
+} from '../interaction-type-cell'
 
 function createLog(overrides: Partial<UsageLog>): UsageLog {
   return {
@@ -198,9 +201,7 @@ describe('InteractionTypeCell', () => {
 
     await user.hover(screen.getByText('—'))
     expect(
-      await screen.findByText(
-        /Gateway executed this host-tool request locally/
-      )
+      await screen.findByText(/Gateway executed this host-tool request locally/)
     ).toBeInTheDocument()
   })
 })

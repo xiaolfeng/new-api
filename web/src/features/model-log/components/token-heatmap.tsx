@@ -2,9 +2,10 @@ import { useEffect, useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { useTranslation } from 'react-i18next'
 
+import { toIntlLocale } from '@/i18n/languages'
 import { api } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
-import { toIntlLocale } from '@/i18n/languages'
+import { formatNumber, formatTokenUnits } from '@/lib/format'
 
 import type { TokenRecordDailyItem } from '../types'
 
@@ -47,6 +48,7 @@ function getLevel(value: number, thresholds: number[]): number {
 
 export function TokenHeatmap() {
   const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage ?? i18n.language)
   const [data, setData] = useState<TokenRecordDailyItem[]>([])
   const [loading, setLoading] = useState(true)
   const [hovered, setHovered] = useState<DayCell | null>(null)
@@ -112,9 +114,12 @@ export function TokenHeatmap() {
     const weeks: DayCell[][] = []
     const seenMonths = new Set<string>()
     const monthLabels: { weekIndex: number; month: string }[] = []
-    const monthFormatter = new Intl.DateTimeFormat(toIntlLocale(i18n.language), {
-      month: 'short',
-    })
+    const monthFormatter = new Intl.DateTimeFormat(
+      toIntlLocale(i18n.language),
+      {
+        month: 'short',
+      }
+    )
 
     for (let week = 0; week < 52; week++) {
       const days: DayCell[] = []
@@ -164,9 +169,12 @@ export function TokenHeatmap() {
   }, [data, i18n.language])
 
   // Generate localized short weekday names (Mon, Wed, Fri equivalents)
-  const weekdayFormatter = new Intl.DateTimeFormat(toIntlLocale(i18n.language), {
-    weekday: 'short',
-  })
+  const weekdayFormatter = new Intl.DateTimeFormat(
+    toIntlLocale(i18n.language),
+    {
+      weekday: 'short',
+    }
+  )
   const monLabel = weekdayFormatter.format(new Date(2024, 0, 1)) // Jan 1, 2024 = Monday
   const wedLabel = weekdayFormatter.format(new Date(2024, 0, 3)) // Jan 3, 2024 = Wednesday
   const friLabel = weekdayFormatter.format(new Date(2024, 0, 5)) // Jan 5, 2024 = Friday
@@ -183,10 +191,17 @@ export function TokenHeatmap() {
     return Number.isNaN(d.getTime()) ? dateStr : longDateFormatter.format(d)
   }
 
-  const handleCellEnter = (day: DayCell, e: React.MouseEvent<HTMLDivElement>) => {
+  const handleCellEnter = (
+    day: DayCell,
+    e: React.MouseEvent<HTMLDivElement>
+  ) => {
     const rect = e.currentTarget.getBoundingClientRect()
     setHovered(day)
-    setTooltipPos({ x: rect.left + rect.width / 2, y: rect.top, showBelow: rect.top < 120 })
+    setTooltipPos({
+      x: rect.left + rect.width / 2,
+      y: rect.top,
+      showBelow: rect.top < 120,
+    })
   }
   const handleCellLeave = () => {
     setHovered(null)
@@ -210,17 +225,17 @@ export function TokenHeatmap() {
       <div className='mb-4 flex flex-wrap items-center justify-between gap-3'>
         <div className='flex items-baseline gap-2'>
           <h3 className='text-sm font-medium'>{t('Token Usage Heatmap')}</h3>
-          <span className='text-muted-foreground text-xs'>
-            {totalTokens.toLocaleString()} {t('tokens')}
+          <span
+            className='text-muted-foreground text-xs'
+            title={`${formatNumber(totalTokens, locale)} ${t('tokens')}`}
+          >
+            {formatTokenUnits(totalTokens)} {t('tokens')}
           </span>
         </div>
         <div className='text-muted-foreground flex items-center gap-1.5 text-[10px]'>
           <span>{t('Less')}</span>
           {HEATMAP_COLORS.map((c, i) => (
-            <div
-              key={i}
-              className={`h-[10px] w-[10px] rounded-[3px] ${c}`}
-            />
+            <div key={i} className={`h-[10px] w-[10px] rounded-[3px] ${c}`} />
           ))}
           <span>{t('More')}</span>
         </div>
@@ -262,9 +277,9 @@ export function TokenHeatmap() {
             {weeks.flat().map((day, i) => (
               <div
                 key={i}
-                className={`relative h-[12px] w-[12px] rounded-[3px] transition-[outline] duration-150 hover:z-10 hover:outline-1 hover:outline-foreground/40 ${HEATMAP_COLORS[day.level]}`}
+                className={`hover:outline-foreground/40 relative h-[12px] w-[12px] rounded-[3px] transition-[outline] duration-150 hover:z-10 hover:outline-1 ${HEATMAP_COLORS[day.level]}`}
                 role='gridcell'
-                aria-label={`${day.date}: ${day.tokens.toLocaleString()} ${t('tokens')}`}
+                aria-label={`${day.date}: ${formatTokenUnits(day.tokens)} (${formatNumber(day.tokens, locale)}) ${t('tokens')}`}
                 onMouseEnter={(e) => handleCellEnter(day, e)}
                 onMouseLeave={handleCellLeave}
               />
@@ -279,48 +294,65 @@ export function TokenHeatmap() {
         </p>
       )}
 
-      {hovered && tooltipPos &&
+      {hovered &&
+        tooltipPos &&
         createPortal(
           <div
             role='tooltip'
-          className='bg-foreground text-background pointer-events-none fixed z-50 min-w-[160px] rounded-md px-3 py-2 text-xs shadow-lg'
-          style={{
-            left: tooltipPos.x,
-            top: tooltipPos.showBelow ? tooltipPos.y + 14 : tooltipPos.y - 10,
-            transform: tooltipPos.showBelow
-              ? 'translate(-50%, 0)'
-              : 'translate(-50%, -100%)',
-          }}
-        >
-          <div className='font-medium'>{formatLongDate(hovered.date)}</div>
-          {hovered.tokens > 0 ? (
-            <div className='mt-1.5 space-y-1'>
-              <div className='flex items-center justify-between gap-3'>
-                <span className='text-background/60'>{t('Total')}</span>
-                <span className='font-medium tabular-nums'>
-                  {hovered.tokens.toLocaleString()} {t('tokens')}
-                </span>
+            className='bg-foreground text-background pointer-events-none fixed z-50 min-w-[160px] rounded-md px-3 py-2 text-xs shadow-lg'
+            style={{
+              left: tooltipPos.x,
+              top: tooltipPos.showBelow ? tooltipPos.y + 14 : tooltipPos.y - 10,
+              transform: tooltipPos.showBelow
+                ? 'translate(-50%, 0)'
+                : 'translate(-50%, -100%)',
+            }}
+          >
+            <div className='font-medium'>{formatLongDate(hovered.date)}</div>
+            {hovered.tokens > 0 ? (
+              <div className='mt-1.5 space-y-1'>
+                <div className='flex items-center justify-between gap-3'>
+                  <span className='text-background/60'>{t('Total')}</span>
+                  <span
+                    className='font-medium tabular-nums'
+                    title={`${formatNumber(hovered.tokens, locale)} ${t('tokens')}`}
+                  >
+                    {hovered.tokens >= 1000
+                      ? `${formatTokenUnits(hovered.tokens)} (${formatNumber(hovered.tokens, locale)})`
+                      : formatTokenUnits(hovered.tokens)}{' '}
+                    {t('tokens')}
+                  </span>
+                </div>
+                <div className='flex items-center justify-between gap-3'>
+                  <span className='text-background/60'>{t('Prompt')}</span>
+                  <span
+                    className='tabular-nums'
+                    title={formatNumber(hovered.promptTokens, locale)}
+                  >
+                    {hovered.promptTokens >= 1000
+                      ? `${formatTokenUnits(hovered.promptTokens)} (${formatNumber(hovered.promptTokens, locale)})`
+                      : formatTokenUnits(hovered.promptTokens)}
+                  </span>
+                </div>
+                <div className='flex items-center justify-between gap-3'>
+                  <span className='text-background/60'>{t('Completion')}</span>
+                  <span
+                    className='tabular-nums'
+                    title={formatNumber(hovered.completionTokens, locale)}
+                  >
+                    {hovered.completionTokens >= 1000
+                      ? `${formatTokenUnits(hovered.completionTokens)} (${formatNumber(hovered.completionTokens, locale)})`
+                      : formatTokenUnits(hovered.completionTokens)}
+                  </span>
+                </div>
               </div>
-              <div className='flex items-center justify-between gap-3'>
-                <span className='text-background/60'>{t('Prompt')}</span>
-                <span className='tabular-nums'>
-                  {hovered.promptTokens.toLocaleString()}
-                </span>
+            ) : (
+              <div className='text-background/60 mt-1'>
+                {t('No token usage data in this period')}
               </div>
-              <div className='flex items-center justify-between gap-3'>
-                <span className='text-background/60'>{t('Completion')}</span>
-                <span className='tabular-nums'>
-                  {hovered.completionTokens.toLocaleString()}
-                </span>
-              </div>
-            </div>
-          ) : (
-            <div className='text-background/60 mt-1'>
-              {t('No token usage data in this period')}
-            </div>
-          )}
+            )}
           </div>,
-          document.body,
+          document.body
         )}
     </div>
   )

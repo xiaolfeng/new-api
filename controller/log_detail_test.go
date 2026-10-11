@@ -21,6 +21,7 @@ package controller
 import (
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/QuantumNous/new-api/common"
@@ -53,12 +54,16 @@ func setupLogDetailTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-func runGetLogDetail(t *testing.T, db *gorm.DB, role int, userId int, requestId string) *httptest.ResponseRecorder {
+func runGetLogDetail(t *testing.T, db *gorm.DB, role int, userId int, requestId string, rowKey ...string) *httptest.ResponseRecorder {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	recorder := httptest.NewRecorder()
 	c, _ := gin.CreateTestContext(recorder)
-	c.Request = httptest.NewRequest(http.MethodGet, "/api/log/detail?request_id="+requestId, nil)
+	targetURL := "/api/log/detail?request_id=" + requestId
+	if len(rowKey) > 0 && rowKey[0] != "" {
+		targetURL += "&row_key=" + rowKey[0]
+	}
+	c.Request = httptest.NewRequest(http.MethodGet, targetURL, nil)
 	c.Set("role", role)
 	c.Set("id", userId)
 	GetLogDetail(c)
@@ -154,5 +159,82 @@ func TestLogListOmitsDetailPayload(t *testing.T) {
 	for _, row := range selfLogs {
 		assert.Empty(t, row.Record)
 		assert.Empty(t, row.FullLog)
+		assert.NotEmpty(t, row.RowKey)
+	}
+}
+
+func TestGetLogDetailDisambiguatesSharedRequestIdByRowKey(t *testing.T) {
+	db := setupLogDetailTestDB(t)
+
+	errLog1 := model.Log{
+		UserId: 7, CreatedAt: 1711454400, Type: model.LogTypeError,
+		RequestId: "req-shared-retry", LogEntryId: "le_err_1",
+		Content: "attempt 1 failed", FullLog: `{"attempt":1}`,
+	}
+	errLog2 := model.Log{
+		UserId: 7, CreatedAt: 1711454400, Type: model.LogTypeError,
+		RequestId: "req-shared-retry", LogEntryId: "",
+		Content: "attempt 2 legacy row", FullLog: `{"attempt":2}`,
+	}
+	consumeLog := model.Log{
+		UserId: 7, CreatedAt: 1711454401, Type: model.LogTypeConsume,
+		RequestId: "req-shared-retry", LogEntryId: "le_consume_3",
+		Record: `{"completion":"final answer"}`, FullLog: `{"attempt":3}`,
+	}
+	require.NoError(t, db.Create(&errLog1).Error)
+	require.NoError(t, db.Create(&errLog2).Error)
+	require.NoError(t, db.Create(&consumeLog).Error)
+
+	// Fetch exact error log 1 by its log_entry_id row_key
+	rec1 := runGetLogDetail(t, db, common.RoleAdminUser, 999, "req-shared-retry", "le_err_1")
+	require.Equal(t, http.StatusOK, rec1.Code)
+	var resp1 struct {
+		Success bool      `json:"success"`
+		Data    model.Log `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(rec1.Body.Bytes(), &resp1))
+	require.True(t, resp1.Success)
+	assert.Equal(t, `{"attempt":1}`, resp1.Data.FullLog)
+
+	// Fetch legacy relational row by legacy-id:<pk>
+	rec2 := runGetLogDetail(t, db, common.RoleAdminUser, 999, "req-shared-retry", "legacy-id:"+strconv.Itoa(errLog2.Id))
+	require.Equal(t, http.StatusOK, rec2.Code)
+	var resp2 struct {
+		Success bool      `json:"success"`
+		Data    model.Log `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(rec2.Body.Bytes(), &resp2))
+	require.True(t, resp2.Success)
+	assert.Equal(t, `{"attempt":2}`, resp2.Data.FullLog)
+
+	// Legacy caller without row_key still receives latest entry for request_id
+	recLatest := runGetLogDetail(t, db, common.RoleAdminUser, 999, "req-shared-retry")
+	require.Equal(t, http.StatusOK, recLatest.Code)
+	var respLatest struct {
+		Success bool      `json:"success"`
+		Data    model.Log `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recLatest.Body.Bytes(), &respLatest))
+	require.True(t, respLatest.Success)
+	assert.Equal(t, `{"attempt":3}`, respLatest.Data.FullLog)
+
+	// Synthetic row_key cannot bypass ownership check for another user
+	recDenied := runGetLogDetail(t, db, common.RoleCommonUser, 8, "req-shared-retry", "le_err_1")
+	require.Equal(t, http.StatusOK, recDenied.Code)
+	var respDenied struct {
+		Success bool `json:"success"`
+	}
+	require.NoError(t, common.Unmarshal(recDenied.Body.Bytes(), &respDenied))
+	assert.False(t, respDenied.Success)
+
+	// Unmatched or malformed non-ClickHouse row_key must not fall back to latest entry
+	for _, badRowKey := range []string{"le_nonexistent", "legacy-id:999999", "legacy-id:notanumber"} {
+		recMissing := runGetLogDetail(t, db, common.RoleAdminUser, 999, "req-shared-retry", badRowKey)
+		require.Equal(t, http.StatusOK, recMissing.Code)
+		var respMissing struct {
+			Success bool `json:"success"`
+		}
+		require.NoError(t, common.Unmarshal(recMissing.Body.Bytes(), &respMissing))
+		assert.False(t, respMissing.Success, "expected failure for row_key=%s", badRowKey)
 	}
 }

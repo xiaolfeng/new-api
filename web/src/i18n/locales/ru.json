@@ -7002,7 +7002,8 @@
     "Length": "Длина",
     "Code User": "Пользователь кода",
     "Expand all": "Развернуть все",
-    "Delete model \"{{name}}\"? This cannot be undone.": "Удалить модель «{{name}}»? Это действие нельзя отменить."
+    "Delete model \"{{name}}\"? This cannot be undone.": "Удалить модель «{{name}}»? Это действие нельзя отменить.",
+    "Minimal display": "Минимальный вид"
   },
   "Total Input": "Общий ввод"
 }

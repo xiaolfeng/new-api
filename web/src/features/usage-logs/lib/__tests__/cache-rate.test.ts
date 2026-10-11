@@ -47,7 +47,7 @@ describe('getCacheRateSummary', () => {
       claude: false,
     })
     expect(summary.totalInput).toBe(150)
-    expect(summary.rate).toBeCloseTo(50 / 150 * 100)
+    expect(summary.rate).toBeCloseTo((50 / 150) * 100)
   })
 
   it('returns null when there is no cache read', () => {

@@ -7002,7 +7002,8 @@
     "Length": "Length",
     "Code User": "Code User",
     "Expand all": "Expand all",
-    "Delete model \"{{name}}\"? This cannot be undone.": "Delete model \"{{name}}\"? This cannot be undone."
+    "Delete model \"{{name}}\"? This cannot be undone.": "Delete model \"{{name}}\"? This cannot be undone.",
+    "Minimal display": "Minimal display"
   },
   "Total Input": "Total Input"
 }

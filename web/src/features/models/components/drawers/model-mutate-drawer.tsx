@@ -102,7 +102,6 @@ export function ModelMutateDrawer(props: {
   const hasModelName = Boolean(currentRow?.model_name)
   const [section, setSection] = useState<string>(
     props.initialSection ?? 'metadata'
-
   )
   const [pricingName, setPricingName] = useState('')
   const [pricingVisited, setPricingVisited] = useState(
@@ -262,7 +261,6 @@ export function ModelMutateDrawer(props: {
             <SheetDescription>
               {t(
                 'Manage metadata, pricing, and channel connections. Each section saves separately.'
-
               )}
             </SheetDescription>
           </SheetHeader>

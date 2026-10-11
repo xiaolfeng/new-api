@@ -27,19 +27,20 @@ import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
 
 import { CHART_TABS } from '../constants'
-import { getChartColors } from '../lib/chart-colors'
+import { buildStableModelColorMap } from '../lib/chart-colors'
 import {
+  buildEstimatedTpsChartSpec,
   buildLineChartSpec,
   transformChartData,
   transformEstimatedTpsData,
 } from '../lib/chart-specs'
 import type { ChartTab, TokenRecordRecentItem } from '../types'
 
-const ESTIMATED_PHASE_COLORS = ['#8b5cf6', '#0ea5e9', '#f59e0b']
-
 interface ModelLogChartsProps {
   sortedItems: TokenRecordRecentItem[]
   selectedModels: Set<string>
+  modelColorMap?: ReadonlyMap<string, string>
+  locale?: string
 }
 
 interface TpsChartPanelProps {
@@ -84,7 +85,9 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
   const { t } = useTranslation()
   const { resolvedTheme } = useTheme()
   const [activeTab, setActiveTab] = useState<ChartTab>('output_tokens')
-  const [themeReady, setThemeReady] = useState(false)
+  const targetTheme = resolvedTheme === 'dark' ? 'dark' : 'light'
+  const [readyTheme, setReadyTheme] = useState<'dark' | 'light' | null>(null)
+  const themeReady = readyTheme === targetTheme
   const themeManagerRef = useRef<
     (typeof import('@visactor/vchart'))['ThemeManager'] | null
   >(null)
@@ -95,26 +98,27 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
       const vchart = await import('@visactor/vchart')
       if (cancelled) return
       themeManagerRef.current = vchart.ThemeManager
-      vchart.ThemeManager.setCurrentTheme(
-        resolvedTheme === 'dark' ? 'dark' : 'light'
-      )
-      setThemeReady(true)
+      vchart.ThemeManager.setCurrentTheme(targetTheme)
+      setReadyTheme(targetTheme)
     }
-    setThemeReady(false)
     void load()
     return () => {
       cancelled = true
     }
-  }, [resolvedTheme])
+  }, [targetTheme])
 
   const modelNames = useMemo(
     () => props.sortedItems.map((item) => item.model_name),
     [props.sortedItems]
   )
+  const resolvedColorMap = useMemo(
+    () => props.modelColorMap ?? buildStableModelColorMap(modelNames),
+    [props.modelColorMap, modelNames]
+  )
   const colorDomain = useMemo(() => [...modelNames], [modelNames])
   const colorRange = useMemo(
-    () => getChartColors(modelNames.length),
-    [modelNames.length]
+    () => modelNames.map((name) => resolvedColorMap.get(name) ?? '#0ea5e9'),
+    [modelNames, resolvedColorMap]
   )
 
   const { outputTokenData, averageTpsData, failureRateData } = useMemo(
@@ -140,31 +144,51 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
     [props.sortedItems, props.selectedModels, phaseLabels]
   )
 
+  const isDark = resolvedTheme === 'dark'
+
   const specs = useMemo(
     () => ({
       output_tokens: buildLineChartSpec(
         'outputTokenData',
         outputTokenData,
         colorDomain,
-        colorRange
+        colorRange,
+        {
+          valueFormat: 'tokens',
+          locale: props.locale,
+          isDark,
+        }
       ),
       average_tps: buildLineChartSpec(
         'averageTpsData',
         averageTpsData,
         colorDomain,
-        colorRange
+        colorRange,
+        {
+          valueFormat: 'tps',
+          locale: props.locale,
+          isDark,
+        }
       ),
-      estimated_tps: buildLineChartSpec(
+      estimated_tps: buildEstimatedTpsChartSpec(
         'estimatedTpsData',
         estimatedTpsData,
-        [phaseLabels.thinking, phaseLabels.output, phaseLabels.tool],
-        ESTIMATED_PHASE_COLORS
+        resolvedColorMap,
+        {
+          locale: props.locale,
+          isDark,
+        }
       ),
       failure_rate: buildLineChartSpec(
         'failureRateData',
         failureRateData,
         colorDomain,
-        colorRange
+        colorRange,
+        {
+          valueFormat: 'percent',
+          locale: props.locale,
+          isDark,
+        }
       ),
     }),
     [
@@ -174,7 +198,9 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
       failureRateData,
       colorDomain,
       colorRange,
-      phaseLabels,
+      resolvedColorMap,
+      props.locale,
+      isDark,
     ]
   )
 

@@ -96,7 +96,9 @@ export function ToolResultDialog(props: ToolResultDialogProps) {
             <Alert>
               <AlertTitle>{t('Result truncated')}</AlertTitle>
               <AlertDescription>
-                {t('This host tool result was truncated and may be incomplete.')}
+                {t(
+                  'This host tool result was truncated and may be incomplete.'
+                )}
               </AlertDescription>
             </Alert>
           ) : null}

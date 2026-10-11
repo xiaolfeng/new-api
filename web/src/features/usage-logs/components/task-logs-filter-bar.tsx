@@ -115,34 +115,38 @@ export function TaskLogsFilterBar<TData>(props: TaskLogsFilterBarProps<TData>) {
     []
   )
 
-  const handleApply = useCallback(() => {
+  const handleApply = useCallback(async () => {
     const filterParams = buildSearchParams(filters, props.logCategory)
-    navigate({
-      to: '/usage-logs/$section',
-      params: { section: props.logCategory },
-      search: {
-        ...filterParams,
-        page: 1,
-      },
-    })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
+    await Promise.resolve(
+      navigate({
+        to: '/usage-logs/$section',
+        params: { section: props.logCategory },
+        search: {
+          ...filterParams,
+          page: 1,
+        },
+      })
+    )
+    await queryClient.invalidateQueries({ queryKey: ['logs'] })
   }, [filters, navigate, props.logCategory, queryClient])
 
-  const handleReset = useCallback(() => {
+  const handleReset = useCallback(async () => {
     const { start, end } = getDefaultTimeRange()
     const resetFilters: TaskLogsFilters = { startTime: start, endTime: end }
     setFilters(resetFilters)
 
-    navigate({
-      to: '/usage-logs/$section',
-      params: { section: props.logCategory },
-      search: {
-        page: 1,
-        startTime: start.getTime(),
-        endTime: end.getTime(),
-      },
-    })
-    queryClient.invalidateQueries({ queryKey: ['logs'] })
+    await Promise.resolve(
+      navigate({
+        to: '/usage-logs/$section',
+        params: { section: props.logCategory },
+        search: {
+          page: 1,
+          startTime: start.getTime(),
+          endTime: end.getTime(),
+        },
+      })
+    )
+    await queryClient.invalidateQueries({ queryKey: ['logs'] })
   }, [navigate, props.logCategory, queryClient])
 
   const handleKeyDown = useCallback(

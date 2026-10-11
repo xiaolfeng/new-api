@@ -7002,7 +7002,8 @@
     "Length": "Độ dài",
     "Code User": "Người dùng mã",
     "Expand all": "Mở rộng tất cả",
-    "Delete model \"{{name}}\"? This cannot be undone.": "Xóa mô hình \"{{name}}\"? Thao tác này không thể hoàn tác."
+    "Delete model \"{{name}}\"? This cannot be undone.": "Xóa mô hình \"{{name}}\"? Thao tác này không thể hoàn tác.",
+    "Minimal display": "Hiển thị tối giản"
   },
   "Total Input": "Tổng đầu vào"
 }

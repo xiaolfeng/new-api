@@ -33,6 +33,7 @@ vi.mock('@/features/dashboard/lib', async (importOriginal) => {
 })
 
 import { processChartData } from '@/features/dashboard/lib'
+
 import { ConsumptionDistributionChart } from '../consumption-distribution-chart'
 import { ModelCharts } from '../model-charts'
 

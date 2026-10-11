@@ -32,6 +32,7 @@ import {
   DISPLAYABLE_LOG_TYPES,
   TIMING_LOG_TYPES,
 } from '../constants'
+import type { UsageLog } from '../data/schema'
 import type {
   GetLogsParams,
   GetLogsResponse,
@@ -46,21 +47,135 @@ export { buildQueryParams } from './query-params'
 // 否则每次翻页都会重复请求同一份统计。
 export function buildLogStatsQueryKey<
   T extends { page?: number; pageSize?: number; [key: string]: unknown },
->(searchParams: T, isAdmin: boolean
-) {
+>(searchParams: T, isAdmin: boolean) {
   const { page: _page, pageSize: _pageSize, ...filters } = searchParams
   return ['usage-logs-stats', isAdmin, filters] as const
 }
 
-// getLogRowId 行的稳定身份：request_id 是跨库稳定的唯一键
-//（ClickHouse 部署下列表 id 是展示序号而非主键）；
-// 刷新后新日志插入时避免同位置行复用打开状态串到另一条日志。
-export function getLogRowId<
-  T extends { request_id?: string; id?: number },
->(row: T, index: number): string {
-  if (row.request_id) return row.request_id
+export type LogRowIdentityRecord = {
+  row_key?: string
+  log_entry_id?: string
+  request_id?: string
+  id?: number
+  type?: number
+  created_at?: number
+  channel?: number
+  model_name?: string
+  token_name?: string
+  quota?: number
+  prompt_tokens?: number
+  completion_tokens?: number
+  use_time?: number
+  is_stream?: boolean
+  upstream_request_id?: string
+  content?: string
+  task_id?: string
+  mj_id?: string
+}
+
+function hasImmutableCommonLogFields(row: LogRowIdentityRecord): boolean {
+  return (
+    row.type != null ||
+    row.created_at != null ||
+    row.channel != null ||
+    Boolean(row.model_name) ||
+    Boolean(row.token_name) ||
+    row.quota != null ||
+    row.prompt_tokens != null ||
+    row.completion_tokens != null ||
+    row.use_time != null ||
+    row.is_stream != null ||
+    Boolean(row.upstream_request_id) ||
+    Boolean(row.content)
+  )
+}
+
+function buildLegacyClientLogRowKey(row: LogRowIdentityRecord): string {
+  const parts = [
+    row.request_id ? `req=${row.request_id}` : '',
+    row.type != null ? `t=${row.type}` : '',
+    row.created_at != null ? `ts=${row.created_at}` : '',
+    row.channel != null ? `ch=${row.channel}` : '',
+    row.model_name ? `m=${row.model_name}` : '',
+    row.token_name ? `tokn=${row.token_name}` : '',
+    row.quota != null ? `q=${row.quota}` : '',
+    row.prompt_tokens != null || row.completion_tokens != null
+      ? `tok=${row.prompt_tokens ?? 0}/${row.completion_tokens ?? 0}`
+      : '',
+    row.use_time != null ? `ut=${row.use_time}` : '',
+    row.is_stream != null ? `st=${row.is_stream ? 1 : 0}` : '',
+    row.upstream_request_id ? `up=${row.upstream_request_id}` : '',
+    row.content ? `c=${row.content}` : '',
+  ].filter(Boolean)
+  return `legacy-client:${parts.join('|')}`
+}
+
+// getLogRowId 行的稳定身份：
+// 1. 优先使用服务端下发的独立事件标识 row_key / log_entry_id（避免同 request_id 重试错误与成功日志冲突）；
+// 2. 兼容旧后端响应：当无 row_key 时，按 request_id、type、channel、created_at 等不可变字段组合身份；
+// 3. 仅在无业务字段的极简行回退至 id 或 index。
+export function getLogRowId<T extends LogRowIdentityRecord>(
+  row: T,
+  index: number
+): string {
+  if (row.row_key) return row.row_key
+  if (row.log_entry_id) return row.log_entry_id
+  if (row.task_id) {
+    return row.id != null
+      ? `task:${row.task_id}:${row.id}`
+      : `task:${row.task_id}`
+  }
+  if (row.mj_id) {
+    return row.id != null ? `mj:${row.mj_id}:${row.id}` : `mj:${row.mj_id}`
+  }
+  if (hasImmutableCommonLogFields(row)) {
+    return buildLegacyClientLogRowKey(row)
+  }
+  if (row.request_id) {
+    return row.id != null
+      ? `req:${row.request_id}:id:${row.id}`
+      : row.request_id
+  }
   if (row.id) return String(row.id)
   return String(index)
+}
+
+// ensureUniqueLogRowKeys 对列表数据补齐并去重 row_key，防止旧后端或同秒同渠道完全相同重试行产生重复 React key。
+export function ensureUniqueLogRowKeys<T extends LogRowIdentityRecord>(
+  rows: readonly T[]
+): T[] {
+  if (!rows.length) return []
+  const seen = new Map<string, number>()
+  return rows.map((row, index) => {
+    const baseKey = getLogRowId(row, index)
+    const count = (seen.get(baseKey) ?? 0) + 1
+    seen.set(baseKey, count)
+    const uniqueKey = count > 1 ? `${baseKey}#${count}` : baseKey
+    if (row.row_key === uniqueKey) {
+      return row
+    }
+    return {
+      ...row,
+      row_key: uniqueKey,
+    }
+  })
+}
+
+// getServerLogRowKey 仅提取可作为服务端精确查询凭据的 row_key（新日志 log_entry_id 或关系库 legacy-id），
+// 排除客户端或 ClickHouse 合成的历史指纹 key。
+export function getServerLogRowKey(
+  log: Pick<LogRowIdentityRecord, 'row_key' | 'log_entry_id'>
+): string | undefined {
+  const candidate = (log.row_key || log.log_entry_id || '').trim()
+  if (!candidate) return undefined
+  if (
+    candidate.startsWith('legacy-client:') ||
+    candidate.startsWith('legacy-ch:')
+  ) {
+    return undefined
+  }
+  const hashIdx = candidate.indexOf('#')
+  return hashIdx > 0 ? candidate.slice(0, hashIdx) : candidate
 }
 
 // ============================================================================
@@ -275,7 +390,19 @@ export async function fetchLogsByCategory(
       columnFilters,
       isAdmin,
     })
-    return isAdmin ? await getAllLogs(params) : await getUserLogs(params)
+    const response = isAdmin
+      ? await getAllLogs(params)
+      : await getUserLogs(params)
+    if (response?.data?.items) {
+      return {
+        ...response,
+        data: {
+          ...response.data,
+          items: ensureUniqueLogRowKeys(response.data.items as UsageLog[]),
+        },
+      }
+    }
+    return response
   }
 
   // For drawing and task logs

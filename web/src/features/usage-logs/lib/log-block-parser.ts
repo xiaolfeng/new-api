@@ -278,9 +278,7 @@ export function parseLogDetailRecord(
   record: LogDetailRecord | null
 ): ParsedSections {
   const rawHeaders =
-    record?.headers && typeof record.headers === 'object'
-      ? record.headers
-      : {}
+    record?.headers && typeof record.headers === 'object' ? record.headers : {}
   const headers: Record<string, string> = {}
   for (const [key, value] of Object.entries(rawHeaders)) {
     headers[key] = typeof value === 'string' ? value : String(value)

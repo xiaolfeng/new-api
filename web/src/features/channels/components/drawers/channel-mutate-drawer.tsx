@@ -584,9 +584,8 @@ export function ChannelMutateDrawer({
   const { data: systemOptions } = useSystemOptions()
   const bambooRelayEnabled = useMemo(() => {
     return (
-      systemOptions?.data?.find(
-        (o) => o.key === 'bamboo.enable_bamboo_relay'
-      )?.value === 'true'
+      systemOptions?.data?.find((o) => o.key === 'bamboo.enable_bamboo_relay')
+        ?.value === 'true'
     )
   }, [systemOptions])
 
@@ -2045,17 +2044,26 @@ export function ChannelMutateDrawer({
                 </SelectTrigger>
               </FormControl>
               <SelectContent alignItemWithTrigger={false}>
-                <SelectItem value='auto'>{t('Auto (by channel type)')}</SelectItem>
-                <SelectItem value='openai'>{t('OpenAI Chat Completions')}</SelectItem>
-                <SelectItem value='anthropic'>{t('Anthropic Messages')}</SelectItem>
+                <SelectItem value='auto'>
+                  {t('Auto (by channel type)')}
+                </SelectItem>
+                <SelectItem value='openai'>
+                  {t('OpenAI Chat Completions')}
+                </SelectItem>
+                <SelectItem value='anthropic'>
+                  {t('Anthropic Messages')}
+                </SelectItem>
                 <SelectItem value='gemini'>{t('Google Gemini')}</SelectItem>
-                <SelectItem value='responses'>{t('OpenAI Responses')}</SelectItem>
+                <SelectItem value='responses'>
+                  {t('OpenAI Responses')}
+                </SelectItem>
               </SelectContent>
             </Select>
           </FormItem>
         )}
       />
-      {(bambooUpstreamFormat === 'openai' || bambooUpstreamFormat === 'anthropic') && (
+      {(bambooUpstreamFormat === 'openai' ||
+        bambooUpstreamFormat === 'anthropic') && (
         <FormField
           control={form.control}
           name='bamboo_legacy_compat'
@@ -2081,7 +2089,9 @@ export function ChannelMutateDrawer({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value='false'>{t('Off (Standard)')}</SelectItem>
-                  <SelectItem value='true'>{t('On (Legacy fields)')}</SelectItem>
+                  <SelectItem value='true'>
+                    {t('On (Legacy fields)')}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </FormItem>
@@ -2113,8 +2123,12 @@ export function ChannelMutateDrawer({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value='false'>{t('Off (No cache key)')}</SelectItem>
-                  <SelectItem value='true'>{t('On (Send cache key)')}</SelectItem>
+                  <SelectItem value='false'>
+                    {t('Off (No cache key)')}
+                  </SelectItem>
+                  <SelectItem value='true'>
+                    {t('On (Send cache key)')}
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </FormItem>
@@ -2146,7 +2160,9 @@ export function ChannelMutateDrawer({
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value='false'>{t('Off (Passthrough)')}</SelectItem>
+                  <SelectItem value='false'>
+                    {t('Off (Passthrough)')}
+                  </SelectItem>
                   <SelectItem value='true'>{t('On (Strip tags)')}</SelectItem>
                 </SelectContent>
               </Select>
@@ -2180,8 +2196,12 @@ export function ChannelMutateDrawer({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value='false'>{t('Off (Official OpenAI schema)')}</SelectItem>
-                    <SelectItem value='true'>{t('On (Send plaintext reasoning)')}</SelectItem>
+                    <SelectItem value='false'>
+                      {t('Off (Official OpenAI schema)')}
+                    </SelectItem>
+                    <SelectItem value='true'>
+                      {t('On (Send plaintext reasoning)')}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </FormItem>
@@ -2211,8 +2231,12 @@ export function ChannelMutateDrawer({
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
-                    <SelectItem value='false'>{t('Off (Keep ciphertext)')}</SelectItem>
-                    <SelectItem value='true'>{t('On (Drop ciphertext)')}</SelectItem>
+                    <SelectItem value='false'>
+                      {t('Off (Keep ciphertext)')}
+                    </SelectItem>
+                    <SelectItem value='true'>
+                      {t('On (Drop ciphertext)')}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </FormItem>

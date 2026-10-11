@@ -131,19 +131,21 @@ export function ModelBadge(props: ModelBadgeProps) {
 
   const content = (
     <>
-      <ModelBadgeContent {...props} copyable={false} />
+      <span className='inline-flex max-w-full items-center gap-1 whitespace-nowrap'>
+        <ModelBadgeContent {...props} copyable={false} />
+        {!mismatch && props.actualModel && (
+          <Route
+            className='text-muted-foreground size-3 shrink-0'
+            aria-hidden='true'
+          />
+        )}
+      </span>
       {mismatch && (
         <StatusBadge
           icon={AlertTriangle}
           label={responseModelLabel}
           variant='warning'
           copyable={false}
-        />
-      )}
-      {!mismatch && props.actualModel && (
-        <Route
-          className='text-muted-foreground size-3 shrink-0'
-          aria-hidden='true'
         />
       )}
     </>
@@ -156,7 +158,12 @@ export function ModelBadge(props: ModelBadgeProps) {
         aria-label={modelLabel}
         aria-haspopup='dialog'
         onClick={props.onInspect}
-        className='h-auto min-h-8 max-w-full min-w-0 flex-wrap justify-start gap-1 px-0 py-0 text-left font-normal whitespace-normal'
+        className={cn(
+          'h-auto min-h-8 max-w-full min-w-0 justify-start gap-1 px-0 py-0 text-left font-normal',
+          mismatch || props.wrapText
+            ? 'flex-wrap whitespace-normal'
+            : 'flex-nowrap whitespace-nowrap'
+        )}
       >
         {content}
       </Button>
@@ -170,7 +177,12 @@ export function ModelBadge(props: ModelBadgeProps) {
           <Button
             variant='ghost'
             aria-label={modelLabel}
-            className='h-auto max-w-full min-w-0 flex-wrap justify-start gap-1 p-0 font-normal'
+            className={cn(
+              'h-auto max-w-full min-w-0 justify-start gap-1 p-0 font-normal',
+              mismatch || props.wrapText
+                ? 'flex-wrap'
+                : 'flex-nowrap whitespace-nowrap'
+            )}
           />
         }
       >

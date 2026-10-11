@@ -24,14 +24,14 @@ import { SectionPageLayout } from '@/components/layout'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { UserInfoDialog } from '@/features/usage-logs/components/dialogs/user-info-dialog'
 
-import { ToolLogsTable } from './components/tool-logs-table'
-import { ToolResultDialog } from './components/tool-result-dialog'
 import {
   ToolLogsProvider,
   useToolLogsContext,
   useToolLogsViewScope,
   type LogsViewScope,
 } from './components/tool-logs-provider'
+import { ToolLogsTable } from './components/tool-logs-table'
+import { ToolResultDialog } from './components/tool-result-dialog'
 
 function ToolLogsContent() {
   const { t } = useTranslation()
@@ -68,11 +68,7 @@ function ToolLogsContent() {
       flushPendingUsageLogsNavigation(false)
     }, 300)
     return () => window.clearTimeout(timer)
-  }, [
-    flushPendingUsageLogsNavigation,
-    resultDialogOpen,
-    userInfoDialogOpen,
-  ])
+  }, [flushPendingUsageLogsNavigation, resultDialogOpen, userInfoDialogOpen])
 
   const handleViewScopeChange = useCallback(
     (scope: string) => {

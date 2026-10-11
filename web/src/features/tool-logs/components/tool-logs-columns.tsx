@@ -25,8 +25,8 @@ import { ModelBadge } from '@/features/usage-logs/components/model-badge'
 import { getUserAvatarFallback, getUserAvatarStyle } from '@/lib/avatar'
 import { formatTimestampToDate } from '@/lib/format'
 
-import type { ToolLog } from '../types'
 import { formatDurationMs } from '../lib/utils'
+import type { ToolLog } from '../types'
 import {
   ToolIdentityCell,
   ToolRequestIdCell,

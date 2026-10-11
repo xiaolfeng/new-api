@@ -49,9 +49,7 @@ export function ToolIdentityCell(props: { log: ToolLog }) {
     <TooltipProvider>
       <Tooltip>
         <TooltipTrigger
-          render={
-            <div className='flex min-w-0 cursor-help flex-col gap-0.5' />
-          }
+          render={<div className='flex min-w-0 cursor-help flex-col gap-0.5' />}
         >
           <ToolKindBadge kind={log.kind} />
           <span className='text-muted-foreground truncate font-mono text-[11px]'>

@@ -350,7 +350,8 @@ function buildTypeDetailSegments(
 export function useCommonLogsColumns(
   isAdmin: boolean,
   isRoot: boolean,
-  showBillingSource = false
+  showBillingSource = false,
+  compactMode = false
 ): ColumnDef<UsageLog>[] {
   const { t } = useTranslation()
   const currency = useSystemConfigStore((state) => state.config.currency)
@@ -369,13 +370,15 @@ export function useCommonLogsColumns(
               <span className='truncate font-mono text-xs tabular-nums'>
                 {formatTimestampToDate(timestamp)}
               </span>
-              <StatusBadge
-                label={t(config.label)}
-                variant={config.color as StatusBadgeProps['variant']}
-                size='sm'
-                copyable={false}
-                className='-ml-1.5 !text-xs [&_span]:!text-xs'
-              />
+              {!compactMode && (
+                <StatusBadge
+                  label={t(config.label)}
+                  variant={config.color as StatusBadgeProps['variant']}
+                  size='sm'
+                  copyable={false}
+                  className='-ml-1.5 !text-xs [&_span]:!text-xs'
+                />
+              )}
             </div>
           )
         },
@@ -507,7 +510,7 @@ export function useCommonLogsColumns(
                         </button>
                       )}
                     </div>
-                    {log.channel_name && (
+                    {!compactMode && log.channel_name && (
                       <span className='text-muted-foreground/70 truncate [font-family:var(--font-body)] !text-xs'>
                         {channelName}
                       </span>
@@ -651,7 +654,7 @@ export function useCommonLogsColumns(
                 )}
               </Tooltip>
             </TooltipProvider>
-            {(group || groupRatio != null) && (
+            {!compactMode && (group || groupRatio != null) && (
               <span className='block max-w-full truncate text-xs leading-none'>
                 {group ? (
                   <GroupBadge
@@ -686,7 +689,7 @@ export function useCommonLogsColumns(
           const modelInfo = formatModelName(log)
 
           return (
-            <div className='flex w-fit flex-col gap-0.5'>
+            <div className='flex w-fit items-center whitespace-nowrap'>
               <ModelBadge
                 modelName={modelInfo.name}
                 actualModel={modelInfo.actualModel}
@@ -818,22 +821,22 @@ export function useCommonLogsColumns(
               {!mainSessionName &&
                 mainSessionId &&
                 renderSessionId(mainSessionId)}
-              {subSessionName && (
+              {!compactMode && subSessionName && (
                 <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                   ↳ {subSessionName}
                 </span>
               )}
-              {!subSessionName && subSessionId && (
+              {!compactMode && !subSessionName && subSessionId && (
                 <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                   ↳ {renderSessionId(subSessionId)}
                 </span>
               )}
-              {subAgentName && (
+              {!compactMode && subAgentName && (
                 <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                   ↳ {subAgentName}
                 </span>
               )}
-              {!subAgentName && subAgentId && (
+              {!compactMode && !subAgentName && subAgentId && (
                 <span className='text-muted-foreground/60 truncate pl-2 text-[11px]'>
                   ↳ {renderSessionId(subAgentId)}
                 </span>
@@ -956,7 +959,7 @@ export function useCommonLogsColumns(
                   {t('N/A')}
                 </span>
               )}
-              {rateRow}
+              {!compactMode && rateRow}
             </div>
           )
         },
@@ -992,20 +995,21 @@ export function useCommonLogsColumns(
                 {promptTokens.toLocaleString()} /{' '}
                 {completionTokens.toLocaleString()}
               </span>
-              {(cacheReadTokens > 0 || cacheWriteTokens > 0) && (
-                <div className='flex items-center gap-1 text-[11px]'>
-                  {cacheReadTokens > 0 && (
-                    <span className='text-muted-foreground/60'>
-                      {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
-                    </span>
-                  )}
-                  {cacheWriteTokens > 0 && (
-                    <span className='text-muted-foreground/60'>
-                      ↑ {cacheWriteTokens.toLocaleString()}
-                    </span>
-                  )}
-                </div>
-              )}
+              {!compactMode &&
+                (cacheReadTokens > 0 || cacheWriteTokens > 0) && (
+                  <div className='flex items-center gap-1 text-[11px]'>
+                    {cacheReadTokens > 0 && (
+                      <span className='text-muted-foreground/60'>
+                        {t('Cache')}↓ {cacheReadTokens.toLocaleString()}
+                      </span>
+                    )}
+                    {cacheWriteTokens > 0 && (
+                      <span className='text-muted-foreground/60'>
+                        ↑ {cacheWriteTokens.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                )}
             </div>
           )
         },
@@ -1103,7 +1107,13 @@ export function useCommonLogsColumns(
 
           const other = parseLogOther(log.other)
 
-          return <TimingMetricsCell log={log} other={other} />
+          return (
+            <TimingMetricsCell
+              log={log}
+              other={other}
+              singleLine={compactMode}
+            />
+          )
         },
       },
 
@@ -1113,7 +1123,7 @@ export function useCommonLogsColumns(
         cell: function DetailsCell({ row }) {
           const { t, i18n } = useTranslation()
           const [dialogOpen, setDialogOpen] = useState(false)
-          // 懒挂载：首次点击详情才渲染 DetailsDialog，避免整页行解析大字段。
+          // 懒挂载：首次点击详情才渲染 DetailsDialog，关闭时卸载以释放大字段引用。
           const [detailMounted, setDetailMounted] = useState(false)
           const log = row.original
           const other = parseLogOther(log.other)
@@ -1191,7 +1201,12 @@ export function useCommonLogsColumns(
                   isAdmin={isAdmin}
                   isRoot={isRoot}
                   open={dialogOpen}
-                  onOpenChange={setDialogOpen}
+                  onOpenChange={(nextOpen) => {
+                    setDialogOpen(nextOpen)
+                    if (!nextOpen) {
+                      setDetailMounted(false)
+                    }
+                  }}
                 />
               )}
             </>
@@ -1205,5 +1220,5 @@ export function useCommonLogsColumns(
     return columns
     // Log formatters read currency settings from the store.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, isAdmin, isRoot, showBillingSource, currency])
+  }, [t, isAdmin, isRoot, showBillingSource, compactMode, currency])
 }

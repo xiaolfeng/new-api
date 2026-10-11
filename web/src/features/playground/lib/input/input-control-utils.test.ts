@@ -14,10 +14,7 @@ describe('getImageUrlsFromFiles', () => {
         { url: 'https://example.com/a.png', mediaType: 'image/png' },
         { url: 'https://example.com/a.txt', mediaType: 'text/plain' },
       ])
-    ).toEqual([
-      'data:image/png;base64,aaa',
-      'https://example.com/a.png',
-    ])
+    ).toEqual(['data:image/png;base64,aaa', 'https://example.com/a.png'])
   })
 })
 

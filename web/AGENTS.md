@@ -30,16 +30,16 @@ web/
 
 优先复用项目已有组件与能力；项目内无合适实现时，再评估已安装依赖及成熟开源库。仅在复用、组合或合理扩展仍无法满足需求时自行实现，并说明具体能力缺口。
 
-| 任务 | 位置 | 说明 |
-|------|------|------|
-| 加一个页面 | `src/features/<feature>/` + `src/routes/` | feature 放 UI / api / hooks；route 只做接线 |
-| 改登录 / OAuth / Passkey | `src/features/auth/` | 含 otp、secure-verification |
-| 改渠道管理 | `src/features/channels/` | 表格、抽屉、模型映射 |
-| 改系统设置 | `src/features/system-settings/` | 按 auth / billing / models / integrations 分子目录 |
-| 改 Playground 对话 | `src/features/playground/` + `components/ai-elements/` | 流式在 `use-stream-request.ts` |
-| 改通用表格 | `src/components/data-table/` | 不要在 feature 里再造一套 |
-| 改 i18n | `src/i18n/locales/*.json` | 键为英文源文案；改完 `bun run i18n:sync` |
-| 调 API | 各 feature 的 `api.ts` | 统一 axios 实例，React Query 缓存 |
+| 任务                     | 位置                                                   | 说明                                               |
+| ------------------------ | ------------------------------------------------------ | -------------------------------------------------- |
+| 加一个页面               | `src/features/<feature>/` + `src/routes/`              | feature 放 UI / api / hooks；route 只做接线        |
+| 改登录 / OAuth / Passkey | `src/features/auth/`                                   | 含 otp、secure-verification                        |
+| 改渠道管理               | `src/features/channels/`                               | 表格、抽屉、模型映射                               |
+| 改系统设置               | `src/features/system-settings/`                        | 按 auth / billing / models / integrations 分子目录 |
+| 改 Playground 对话       | `src/features/playground/` + `components/ai-elements/` | 流式在 `use-stream-request.ts`                     |
+| 改通用表格               | `src/components/data-table/`                           | 不要在 feature 里再造一套                          |
+| 改 i18n                  | `src/i18n/locales/*.json`                              | 键为英文源文案；改完 `bun run i18n:sync`           |
+| 调 API                   | 各 feature 的 `api.ts`                                 | 统一 axios 实例，React Query 缓存                  |
 
 ## 约定
 

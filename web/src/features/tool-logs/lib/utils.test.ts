@@ -34,9 +34,9 @@ describe('tool log helpers', () => {
   })
 
   it('prefers url for fetch and query for search', () => {
-    expect(
-      toolTarget('筱锋', 'https://example.com', 'fetch')
-    ).toBe('https://example.com')
+    expect(toolTarget('筱锋', 'https://example.com', 'fetch')).toBe(
+      'https://example.com'
+    )
     expect(toolTarget('', 'https://example.com', 'fetch')).toBe(
       'https://example.com'
     )

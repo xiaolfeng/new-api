@@ -266,7 +266,7 @@ func PostWssConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, mod
 		Record:           record,
 		FullLog:          fullLog,
 		Tps:              tpsValue,
-		TokenTiming:      BuildTokenRecordTiming(relayInfo),
+		TokenTiming:      BuildTokenRecordTimingForConsume(ctx, relayInfo, &dto.Usage{CompletionTokens: usage.OutputTokens}, usage.OutputTokens, int(useTimeSeconds)),
 	})
 }
 
@@ -297,6 +297,7 @@ func CalcOpenRouterCacheCreateTokens(usage dto.Usage, priceData types.PriceData)
 }
 
 func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, usage *dto.Usage, extraContent string) {
+	originUsage := usage
 	if usage == nil {
 		usage = &dto.Usage{PromptTokens: relayInfo.GetEstimatePromptTokens(), TotalTokens: relayInfo.GetEstimatePromptTokens()}
 	}
@@ -413,7 +414,7 @@ func PostAudioConsumeQuota(ctx *gin.Context, relayInfo *relaycommon.RelayInfo, u
 		Record:           record,
 		FullLog:          fullLog,
 		Tps:              tpsValue,
-		TokenTiming:      BuildTokenRecordTiming(relayInfo),
+		TokenTiming:      BuildTokenRecordTimingForConsume(ctx, relayInfo, originUsage, usage.CompletionTokens, int(useTimeSeconds)),
 	})
 	relayInfo.PerformanceOutputTokens = int64(usage.CompletionTokens)
 }

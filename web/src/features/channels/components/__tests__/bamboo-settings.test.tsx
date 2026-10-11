@@ -32,12 +32,24 @@ import { channelSchema } from '../../types'
 
 describe('Bamboo channel settings', () => {
   test('maps bamboo fields to request section', () => {
-    expect(getChannelConfigurationSection('bamboo_upstream_format')).toBe('request')
-    expect(getChannelConfigurationSection('bamboo_legacy_compat')).toBe('request')
-    expect(getChannelConfigurationSection('bamboo_legacy_cache_key')).toBe('request')
-    expect(getChannelConfigurationSection('bamboo_strip_think_tags')).toBe('request')
-    expect(getChannelConfigurationSection('bamboo_include_reasoning_content')).toBe('request')
-    expect(getChannelConfigurationSection('bamboo_ignore_encrypted_content')).toBe('request')
+    expect(getChannelConfigurationSection('bamboo_upstream_format')).toBe(
+      'request'
+    )
+    expect(getChannelConfigurationSection('bamboo_legacy_compat')).toBe(
+      'request'
+    )
+    expect(getChannelConfigurationSection('bamboo_legacy_cache_key')).toBe(
+      'request'
+    )
+    expect(getChannelConfigurationSection('bamboo_strip_think_tags')).toBe(
+      'request'
+    )
+    expect(
+      getChannelConfigurationSection('bamboo_include_reasoning_content')
+    ).toBe('request')
+    expect(
+      getChannelConfigurationSection('bamboo_ignore_encrypted_content')
+    ).toBe('request')
   })
 
   test('recognizes configured status when bamboo_upstream_format is set', () => {
