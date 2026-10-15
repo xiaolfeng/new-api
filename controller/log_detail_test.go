@@ -97,6 +97,9 @@ func TestGetLogDetailOwnershipAndPayload(t *testing.T) {
 		assert.True(t, resp.Success)
 		assert.Equal(t, `{"completion":"hi"}`, resp.Data.Record)
 		assert.Equal(t, `{"meta":{}}`, resp.Data.FullLog)
+		assert.True(t, resp.Data.HasDetail)
+		assert.True(t, resp.Data.HasRecord)
+		assert.True(t, resp.Data.HasFullLog)
 	})
 
 	t.Run("user fetches own log", func(t *testing.T) {
@@ -135,31 +138,92 @@ func TestGetLogDetailOwnershipAndPayload(t *testing.T) {
 // 详情按需经 /log/detail 获取。
 func TestLogListOmitsDetailPayload(t *testing.T) {
 	db := setupLogDetailTestDB(t)
+	user := model.User{Id: 7, Username: "detail-code-user", Role: common.RoleCodeUser}
+	require.NoError(t, db.Create(&user).Error)
 
-	logs := make([]model.Log, 0, 3)
-	for i := 0; i < 3; i++ {
-		logs = append(logs, model.Log{
+	cases := []struct {
+		name    string
+		record  string
+		fullLog string
+	}{
+		{name: "record", record: `{"completion":"x"}`},
+		{name: "full-log", fullLog: `{"meta":{}}`},
+		{name: "both", record: `{"completion":"x"}`, fullLog: `{"meta":{}}`},
+		{name: "empty"},
+	}
+	for i := range cases {
+		tc := cases[i]
+		log := model.Log{
 			UserId: 7, CreatedAt: int64(1711454400 + i), Type: model.LogTypeConsume,
-			RequestId: "req-list", Record: `{"completion":"x"}`, FullLog: `{"meta":{}}`,
+			RequestId: "req-" + tc.name, Record: tc.record, FullLog: tc.fullLog,
+			Other: `{"client_source":"OpenCode"}`,
+		}
+		require.NoError(t, db.Create(&log).Error)
+	}
+
+	for i := range cases {
+		tc := cases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			requestID := "req-" + tc.name
+			adminLogs, _, err := model.GetAllLogs(model.LogTypeConsume, 0, 0, "", "", "", 0, 10, 0, "", requestID, "")
+			require.NoError(t, err)
+			selfLogs, _, err := model.GetUserLogs(7, model.LogTypeConsume, 0, 0, "", "", 0, 10, "", requestID, "")
+			require.NoError(t, err)
+			for _, rows := range [][]*model.Log{adminLogs, selfLogs} {
+				require.Len(t, rows, 1)
+				row := rows[0]
+				assert.Empty(t, row.Record, "列表响应必须剥离 record")
+				assert.Empty(t, row.FullLog, "列表响应必须剥离 full_log")
+				assert.NotEmpty(t, row.RowKey)
+				assert.Equal(t, tc.record != "" || tc.fullLog != "", row.HasDetail)
+				assert.Equal(t, tc.record != "", row.HasRecord)
+				assert.Equal(t, tc.fullLog != "", row.HasFullLog)
+			}
+
+			for _, role := range []int{common.RoleAdminUser, common.RoleRootUser, common.RoleCodeUser} {
+				recorder := runGetLogDetail(t, db, role, 7, requestID)
+				var resp struct {
+					Success bool      `json:"success"`
+					Data    model.Log `json:"data"`
+				}
+				require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &resp))
+				require.True(t, resp.Success)
+				assert.Equal(t, tc.record, resp.Data.Record)
+				assert.Equal(t, tc.fullLog, resp.Data.FullLog)
+				assert.Equal(t, tc.record != "" || tc.fullLog != "", resp.Data.HasDetail)
+				assert.Equal(t, tc.record != "", resp.Data.HasRecord)
+				assert.Equal(t, tc.fullLog != "", resp.Data.HasFullLog)
+			}
 		})
 	}
-	require.NoError(t, db.Create(&logs).Error)
 
-	got, _, err := model.GetAllLogs(model.LogTypeConsume, 0, 0, "", "", "", 0, 10, 0, "", "", "")
-	require.NoError(t, err)
-	require.Len(t, got, 3)
-	for _, row := range got {
-		assert.Empty(t, row.Record, "列表响应必须剥离 record")
-		assert.Empty(t, row.FullLog, "列表响应必须剥离 full_log")
-	}
-
+	// Common users must not be offered details that the detail endpoint hides.
+	require.NoError(t, db.Model(&user).Update("role", common.RoleCommonUser).Error)
 	selfLogs, _, err := model.GetUserLogs(7, model.LogTypeConsume, 0, 0, "", "", 0, 10, "", "", "")
 	require.NoError(t, err)
-	require.Len(t, selfLogs, 3)
+	require.Len(t, selfLogs, len(cases))
 	for _, row := range selfLogs {
 		assert.Empty(t, row.Record)
 		assert.Empty(t, row.FullLog)
-		assert.NotEmpty(t, row.RowKey)
+		assert.False(t, row.HasDetail)
+		assert.False(t, row.HasRecord)
+		assert.False(t, row.HasFullLog)
+	}
+	recorder := runGetLogDetail(t, db, common.RoleCommonUser, 7, "req-both")
+	var resp struct {
+		Success bool      `json:"success"`
+		Data    model.Log `json:"data"`
+	}
+	require.NoError(t, common.Unmarshal(recorder.Body.Bytes(), &resp))
+	require.True(t, resp.Success)
+	assert.Empty(t, resp.Data.Record)
+	assert.Empty(t, resp.Data.FullLog)
+	assert.False(t, resp.Data.HasDetail)
+	assert.False(t, resp.Data.HasRecord)
+	assert.False(t, resp.Data.HasFullLog)
+
+	for _, column := range []string{"has_detail", "has_record", "has_full_log"} {
+		assert.False(t, db.Migrator().HasColumn(&model.Log{}, column))
 	}
 }
 

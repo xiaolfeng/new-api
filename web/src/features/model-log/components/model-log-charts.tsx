@@ -17,11 +17,24 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { VChart } from '@visactor/react-vchart'
-import { Activity, Gauge } from 'lucide-react'
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react'
+import { Activity, Gauge, Layers, ShieldAlert } from 'lucide-react'
+import {
+  type ReactNode,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Badge } from '@/components/ui/badge'
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+} from '@/components/ui/empty'
 import { useTheme } from '@/context/theme-provider'
 import { cn } from '@/lib/utils'
 import { VCHART_OPTION } from '@/lib/vchart'
@@ -43,25 +56,33 @@ interface ModelLogChartsProps {
   locale?: string
 }
 
-interface TpsChartPanelProps {
+interface MetricChartPanelProps {
   title: string
   description: string
   icon: ReactNode
   badge?: string
   badgeClassName?: string
+  emptyMessage?: string
   children: ReactNode
 }
 
-function TpsChartPanel(props: TpsChartPanelProps) {
+function MetricChartPanel(props: MetricChartPanelProps) {
+  const titleId = useId()
+
   return (
-    <section className='bg-card/70 overflow-hidden rounded-xl border shadow-xs'>
+    <section
+      aria-labelledby={titleId}
+      className='bg-card/70 overflow-hidden rounded-xl border shadow-xs'
+    >
       <div className='border-border/60 flex flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5'>
         <div className='flex min-w-0 items-start gap-2.5'>
           <span className='bg-muted text-muted-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg'>
             {props.icon}
           </span>
           <div className='min-w-0'>
-            <h3 className='text-sm font-semibold'>{props.title}</h3>
+            <h3 id={titleId} className='text-sm font-semibold'>
+              {props.title}
+            </h3>
             <p className='text-muted-foreground mt-0.5 max-w-3xl text-xs leading-relaxed'>
               {props.description}
             </p>
@@ -76,7 +97,18 @@ function TpsChartPanel(props: TpsChartPanelProps) {
           </Badge>
         )}
       </div>
-      {props.children}
+      <div className='h-[280px] p-1.5 sm:h-96 sm:p-2'>
+        {props.emptyMessage ? (
+          <Empty className='h-full'>
+            <EmptyHeader>
+              <EmptyMedia variant='icon'>{props.icon}</EmptyMedia>
+              <EmptyDescription>{props.emptyMessage}</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
+        ) : (
+          props.children
+        )}
+      </div>
     </section>
   )
 }
@@ -124,6 +156,18 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
   const { outputTokenData, averageTpsData, failureRateData } = useMemo(
     () => transformChartData(props.sortedItems, props.selectedModels),
     [props.sortedItems, props.selectedModels]
+  )
+
+  const hasOutputTokenData = outputTokenData.some(
+    (point) => (point.SampleCount ?? 0) > 0 || (point.Value ?? 0) > 0
+  )
+  const hasFailureRateData = failureRateData.some(
+    (point) => point.Value !== null
+  )
+  const hasFailedRequests = props.sortedItems.some(
+    (item) =>
+      props.selectedModels.has(item.model_name) &&
+      item.cells.some((cell) => cell.failed_count > 0)
   )
 
   const phaseLabels = useMemo(
@@ -225,6 +269,7 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
           <button
             key={tab.value}
             type='button'
+            aria-pressed={activeTab === tab.value}
             onClick={() => setActiveTab(tab.value)}
             className={`shrink-0 rounded-md px-3 text-xs font-medium transition-colors ${
               activeTab === tab.value
@@ -237,21 +282,41 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
         ))}
       </div>
 
-      {activeTab === 'tps' ? (
-        <div className='space-y-4'>
-          <TpsChartPanel
+      {activeTab === 'output_tokens' && (
+        <MetricChartPanel
+          title={t('Output Token Trend')}
+          description={t(
+            'Hourly output token volume for each model in the selected time range.'
+          )}
+          icon={<Layers className='size-4' aria-hidden='true' />}
+          emptyMessage={
+            hasOutputTokenData
+              ? undefined
+              : t('No output token data in the selected time range.')
+          }
+        >
+          {renderChart(specs.output_tokens, 'output-tokens')}
+        </MetricChartPanel>
+      )}
+
+      {activeTab === 'tps' && (
+        <div className='flex flex-col gap-4'>
+          <MetricChartPanel
             title={t('Average TPS Trend')}
             description={t(
               'Average TPS uses the total output tokens and request duration recorded for each model.'
             )}
             icon={<Gauge className='size-4' aria-hidden='true' />}
+            emptyMessage={
+              averageTpsData.some((point) => point.Value !== null)
+                ? undefined
+                : t('No average TPS data in the selected time range.')
+            }
           >
-            <div className='h-[280px] p-1.5 sm:h-96 sm:p-2'>
-              {renderChart(specs.average_tps, 'average-tps')}
-            </div>
-          </TpsChartPanel>
+            {renderChart(specs.average_tps, 'average-tps')}
+          </MetricChartPanel>
 
-          <TpsChartPanel
+          <MetricChartPanel
             title={t('Estimated Phase TPS Trend')}
             description={t(
               'Thinking, output, and tool rates are estimated from streamed content and shown separately from the average.'
@@ -259,24 +324,40 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
             icon={<Activity className='size-4' aria-hidden='true' />}
             badge={t('Estimated')}
             badgeClassName='border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
+            emptyMessage={
+              estimatedTpsData.length > 0
+                ? undefined
+                : t('No estimated phase TPS data in the selected time range.')
+            }
           >
-            {estimatedTpsData.length > 0 ? (
-              <div className='h-[280px] p-1.5 sm:h-96 sm:p-2'>
-                {renderChart(specs.estimated_tps, 'estimated-tps')}
-              </div>
-            ) : (
-              <div className='text-muted-foreground flex min-h-44 items-center justify-center px-6 text-center text-sm'>
-                {t('No estimated phase TPS data in the selected time range.')}
-              </div>
-            )}
-          </TpsChartPanel>
+            {renderChart(specs.estimated_tps, 'estimated-tps')}
+          </MetricChartPanel>
         </div>
-      ) : (
-        <div className='h-[300px] p-1.5 sm:h-96 sm:p-2'>
-          {activeTab === 'output_tokens'
-            ? renderChart(specs.output_tokens, activeTab)
-            : renderChart(specs.failure_rate, activeTab)}
-        </div>
+      )}
+
+      {activeTab === 'failure_rate' && (
+        <MetricChartPanel
+          title={t('Failure Rate Trend')}
+          description={t(
+            'Hourly request failure rates for each model help identify model or upstream issues.'
+          )}
+          icon={<ShieldAlert className='size-4' aria-hidden='true' />}
+          badge={
+            hasFailureRateData && !hasFailedRequests
+              ? t('No failed requests')
+              : t('Percentage')
+          }
+          badgeClassName={cn(
+            hasFailureRateData && !hasFailedRequests && 'bg-muted/60'
+          )}
+          emptyMessage={
+            hasFailureRateData
+              ? undefined
+              : t('No request data in the selected time range.')
+          }
+        >
+          {renderChart(specs.failure_rate, 'failure-rate')}
+        </MetricChartPanel>
       )}
     </div>
   )

@@ -1,8 +1,4 @@
 {
-  "Doubao": "Doubao",
-  "Responses WebSocket": "Responses WebSocket",
-  "SGLang": "SGLang",
-  "Zhipu GLM": "Zhipu GLM",
   "Active Models": "Active Models",
   "Agent Name": "Agent Name",
   "Anthropic Messages": "Anthropic Messages",
@@ -16,6 +12,7 @@
   "Customization": "Customization",
   "Deselect All": "Deselect All",
   "Detailed Record": "Detailed Record",
+  "Doubao": "Doubao",
   "Enable 5-Minute Full Logging": "Enable 5-Minute Full Logging",
   "Enable Record Logging": "Enable Record Logging",
   "Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.": "Enter Markdown or HTML for the homepage, or a URL to embed as an iframe.",
@@ -50,10 +47,12 @@
   "Parent Session": "Parent Session",
   "Parent Session ID": "Parent Session ID",
   "Record summary request content, response content, tool calls, and filtered HTTP headers": "Record summary request content, response content, tool calls, and filtered HTTP headers",
+  "Responses WebSocket": "Responses WebSocket",
   "Select All": "Select All",
   "Session ID": "Session ID",
   "Session Info": "Session Info",
   "Session Name": "Session Name",
+  "SGLang": "SGLang",
   "Showing successful request output token aggregation, cumulative time, and average TPS for the last 24 hours.": "Showing successful request output token aggregation, cumulative time, and average TPS for the last 24 hours.",
   "Stop (default)": "Stop (default)",
   "Stream Interrupt Degraded Reason": "Stream Interrupt Degraded Reason",
@@ -64,5 +63,6 @@
   "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API.": "When enabled, requests to the Responses API will be automatically converted to Chat Completions format for upstream providers that don't support the Responses API.",
   "When enabled, uses legacy field names (e.g., max_tokens instead of max_completion_tokens) and omits reasoning_effort / parallel_tool_calls. Enable for endpoints that do not support the latest OpenAI/Anthropic schema.": "When enabled, uses legacy field names (e.g., max_tokens instead of max_completion_tokens) and omits reasoning_effort / parallel_tool_calls. Enable for endpoints that do not support the latest OpenAI/Anthropic schema.",
   "When filled, users must accept the privacy policy during registration.": "When filled, users must accept the privacy policy during registration.",
-  "When filled, users must accept the user agreement during registration.": "When filled, users must accept the user agreement during registration."
+  "When filled, users must accept the user agreement during registration.": "When filled, users must accept the user agreement during registration.",
+  "Zhipu GLM": "Zhipu GLM"
 }

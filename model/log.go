@@ -84,8 +84,11 @@ type Log struct {
 	RequestId         string  `json:"request_id,omitempty" gorm:"type:varchar(64);index:idx_logs_request_id;default:''"`
 	UpstreamRequestId string  `json:"upstream_request_id,omitempty" gorm:"type:varchar(128);index:idx_logs_upstream_request_id;default:''"`
 	Other             string  `json:"other"`
-	Record            string  `json:"record" gorm:"type:text"`                 // 消费日志详细记录（管理员/代码用户可见，仍受来源限制）
-	FullLog           string  `json:"full_log" gorm:"type:text"`               // 完整消费日志记录（管理员/代码用户可见，仍受来源限制）
+	Record            string  `json:"record" gorm:"type:text"`   // 消费日志详细记录（管理员/代码用户可见，仍受来源限制）
+	FullLog           string  `json:"full_log" gorm:"type:text"` // 完整消费日志记录（管理员/代码用户可见，仍受来源限制）
+	HasDetail         bool    `json:"has_detail" gorm:"-"`
+	HasRecord         bool    `json:"has_record" gorm:"-"`
+	HasFullLog        bool    `json:"has_full_log" gorm:"-"`
 	Tps               float64 `json:"tps" gorm:"type:decimal(10,2);default:0"` // Tokens Per Second
 }
 
@@ -272,10 +275,13 @@ func FormatRootLogs(logs []*Log) {
 	}
 }
 
-// stripLogDetailPayload 列表响应不携带 record/full_log 大字段；
+// stripLogDetailPayload 保留当前用户可见的详情标记，再剥离 record/full_log 大字段；
 // 详情按需经 GetLogByRequestId 获取，避免翻页一次性返回过多数据。
 func stripLogDetailPayload(logs []*Log) {
 	for i := range logs {
+		logs[i].HasDetail = logs[i].Record != "" || logs[i].FullLog != ""
+		logs[i].HasRecord = logs[i].Record != ""
+		logs[i].HasFullLog = logs[i].FullLog != ""
 		logs[i].Record = ""
 		logs[i].FullLog = ""
 	}

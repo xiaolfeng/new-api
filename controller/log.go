@@ -130,6 +130,9 @@ func GetLogDetail(c *gin.Context) {
 		}
 		model.FormatUserLogs(logList, viewer)
 	}
+	logEntry.HasDetail = logEntry.Record != "" || logEntry.FullLog != ""
+	logEntry.HasRecord = logEntry.Record != ""
+	logEntry.HasFullLog = logEntry.FullLog != ""
 	common.ApiSuccess(c, logEntry)
 }
 

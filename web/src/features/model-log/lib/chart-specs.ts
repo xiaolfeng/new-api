@@ -127,7 +127,12 @@ export function transformChartData(
       const timeLabel = formatTimeLabel(cell.bucket_start_at)
       const base = { Time: timeLabel, Model: item.model_name }
 
-      outputTokenData.push({ ...base, Value: cell.completion_tokens || 0 })
+      const totalRequests = (cell.request_count || 0) + (cell.failed_count || 0)
+      outputTokenData.push({
+        ...base,
+        Value: cell.completion_tokens || 0,
+        SampleCount: totalRequests,
+      })
 
       const avgTps = cell.avg_tps
       const validTps = hasVerifiedAvgTps(avgTps, cell.tps_sample_count)
@@ -137,12 +142,15 @@ export function transformChartData(
         SampleCount: validTps ? (cell.tps_sample_count ?? 1) : 0,
       })
 
-      const totalRequests = (cell.request_count || 0) + (cell.failed_count || 0)
       const rate =
         totalRequests > 0
           ? Number(((cell.failed_count / totalRequests) * 100).toFixed(2))
-          : 0
-      failureRateData.push({ ...base, Value: rate })
+          : null
+      failureRateData.push({
+        ...base,
+        Value: rate,
+        SampleCount: totalRequests,
+      })
     }
   }
 
@@ -280,6 +288,7 @@ export function buildLineChartSpec(
   options?: LineChartSpecOptions
 ): ISpec {
   const isTokens = options?.valueFormat === 'tokens'
+  const isPercent = options?.valueFormat === 'percent'
   const pointFill = options?.isDark ? '#0f172a' : '#ffffff'
 
   return {
@@ -300,6 +309,17 @@ export function buildLineChartSpec(
           ? {
               label: {
                 formatMethod: (val: unknown) => formatTokenUnits(Number(val)),
+              },
+            }
+          : {}),
+        ...(isPercent
+          ? {
+              min: 0,
+              max: 100,
+              nice: false,
+              label: {
+                formatMethod: (val: unknown) =>
+                  `${formatNumber(Number(val), options?.locale)}%`,
               },
             }
           : {}),

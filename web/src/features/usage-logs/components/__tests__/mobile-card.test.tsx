@@ -63,6 +63,7 @@ function Fixture(props: {
 }) {
   const columns = useCommonLogsColumns(props.admin ?? true, false)
   const context = useUsageLogsContext()
+  // oxlint-disable-next-line react/incompatible-library
   const table = useReactTable({
     data: props.logs ?? [log],
     columns,
@@ -96,6 +97,27 @@ function renderLogs(props: Parameters<typeof Fixture>[0] = {}) {
     </QueryClientProvider>
   )
 }
+
+it('opens details from a mobile log whose payload was stripped from the list', async () => {
+  const user = userEvent.setup()
+  renderLogs({
+    logs: [
+      usageLogSchema.parse({
+        ...log,
+        other: '{}',
+        record: '',
+        full_log: '',
+        has_detail: true,
+        has_record: true,
+        has_full_log: false,
+      }),
+    ],
+  })
+  const button = screen.getByRole('button', { name: 'Details' })
+  expect(button).toBeVisible()
+  await user.click(button)
+  expect(await screen.findByRole('dialog')).toBeVisible()
+})
 
 it('shows model mismatch evidence when tapping the mobile model badge', async () => {
   const user = userEvent.setup()
@@ -265,7 +287,9 @@ it.each([false, true])(
 it('retains the user avatar and model badge in the mobile summary', () => {
   renderLogs()
   expect(screen.getByText('P')).toBeVisible()
-  const modelButton = screen.getByRole('button', { name: `Model: ${longName}` })
+  const modelButton = screen.getByRole('button', {
+    name: `Model: ${longName}`,
+  })
   expect(modelButton.querySelector('[data-slot="status-badge"]')).not.toBeNull()
 })
 

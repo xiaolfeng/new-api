@@ -282,6 +282,7 @@ func TestGetRecentTokenRecordSnapshotAccumulatesDuplicateBucketRows(t *testing.T
 
 	bucketStartAt := int64(1711454400)
 	// Drop unique index in SQLite test DB to simulate ClickHouse multiple rows per (model_name, bucket_start_at)
+	require.NoError(t, LOG_DB.Exec("DROP INDEX IF EXISTS idx_token_record_bucket_model").Error)
 	require.NoError(t, LOG_DB.Exec("DROP INDEX IF EXISTS idx_token_record_model_bucket").Error)
 
 	row1 := TokenRecord{

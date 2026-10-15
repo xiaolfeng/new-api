@@ -20,53 +20,54 @@ import {
   CrownIcon,
   Wallet01Icon,
   Wrench01Icon,
-} from '@hugeicons/core-free-icons'
-import { HugeiconsIcon } from '@hugeicons/react'
-import { useTranslation } from 'react-i18next'
+} from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { useTranslation } from "react-i18next";
 
-import { StatusBadge } from '@/components/status-badge'
-import { Badge } from '@/components/ui/badge'
+import { StatusBadge } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
   TooltipTrigger,
-} from '@/components/ui/tooltip'
-import { formatLogQuota } from '@/lib/format'
+} from "@/components/ui/tooltip";
+import { formatLogQuota } from "@/lib/format";
 
-import { hasToolSurcharge } from '../lib/format'
-import type { LogOtherData } from '../types'
+import { hasToolSurcharge } from "../lib/format";
+import type { LogOtherData } from "../types";
 
 interface LogCostDisplayProps {
-  quota: number
-  other: LogOtherData | null
-  showBillingSource?: boolean
+  quota: number;
+  other: LogOtherData | null;
+  showBillingSource?: boolean;
+  compact?: boolean;
 }
 
 function ToolSurchargeMarker() {
-  const { t } = useTranslation()
-  const label = t('Includes tool-call surcharge')
+  const { t } = useTranslation();
+  const label = t("Includes tool-call surcharge");
 
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Badge
-            variant='warning'
-            className='h-5 min-w-5 cursor-help gap-0 rounded-full px-1'
-            role='img'
+            variant="warning"
+            className="h-5 min-w-5 cursor-help gap-0 rounded-full px-1"
+            role="img"
             aria-label={label}
             tabIndex={0}
-            data-tool-surcharge-indicator='true'
+            data-tool-surcharge-indicator="true"
           >
             <HugeiconsIcon
               icon={Wrench01Icon}
               strokeWidth={2}
-              aria-hidden='true'
+              aria-hidden="true"
             />
             <span
-              className='text-[9px] leading-none font-bold'
-              aria-hidden='true'
+              className="text-[9px] leading-none font-bold"
+              aria-hidden="true"
             >
               +
             </span>
@@ -75,56 +76,56 @@ function ToolSurchargeMarker() {
       />
       <TooltipContent>{label}</TooltipContent>
     </Tooltip>
-  )
+  );
 }
 
 export function LogCostDisplay(props: LogCostDisplayProps) {
-  const { t } = useTranslation()
-  const isSubscription = props.other?.billing_source === 'subscription'
-  const showToolSurcharge = hasToolSurcharge(props.other)
+  const { t } = useTranslation();
+  const isSubscription = props.other?.billing_source === "subscription";
+  const showToolSurcharge = hasToolSurcharge(props.other);
   const quota = isSubscription
     ? (props.other?.subscription_consumed ?? props.quota)
-    : props.quota
-  let source: string | undefined
+    : props.quota;
+  let source: string | undefined;
 
   // A log billed to a subscription always names its funding source: that
   // subscription may have expired since, and the viewer may hold no active
   // plan today. Only the wallet marker is contextual and follows
   // showBillingSource.
   if (isSubscription) {
-    source = t('Subscription')
+    source = t("Subscription");
   } else if (
     props.showBillingSource &&
-    props.other?.billing_source === 'wallet'
+    props.other?.billing_source === "wallet"
   ) {
-    source = t('Wallet')
+    source = t("Wallet");
   }
 
   return (
     <TooltipProvider>
-      <div className='inline-flex w-fit items-center gap-1.5'>
+      <div className="inline-flex w-fit items-center gap-1.5">
         <StatusBadge
-          type='badge'
-          variant='neutral'
-          size='lg'
+          type="badge"
+          variant="neutral"
+          size={props.compact ? "sm" : "lg"}
           copyable={false}
-          className='border-border/80 bg-muted/60 text-foreground rounded-md border font-semibold tabular-nums'
+          className="border-border/80 bg-muted/60 text-foreground rounded-md border font-semibold tabular-nums"
         >
           {source ? (
             <Tooltip>
               <TooltipTrigger
                 render={
                   <span
-                    className='inline-flex shrink-0 cursor-help'
-                    role='img'
+                    className="inline-flex shrink-0 cursor-help"
+                    role="img"
                     aria-label={source}
                     tabIndex={0}
                   >
                     <HugeiconsIcon
                       icon={isSubscription ? CrownIcon : Wallet01Icon}
-                      className='size-3.5'
+                      className="size-3.5"
                       strokeWidth={2}
-                      aria-hidden='true'
+                      aria-hidden="true"
                     />
                   </span>
                 }
@@ -132,10 +133,10 @@ export function LogCostDisplay(props: LogCostDisplayProps) {
               <TooltipContent>{source}</TooltipContent>
             </Tooltip>
           ) : null}
-          <span className='whitespace-nowrap'>{formatLogQuota(quota)}</span>
+          <span className="whitespace-nowrap">{formatLogQuota(quota)}</span>
         </StatusBadge>
         {showToolSurcharge ? <ToolSurchargeMarker /> : null}
       </div>
     </TooltipProvider>
-  )
+  );
 }

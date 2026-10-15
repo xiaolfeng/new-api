@@ -33,11 +33,19 @@ import {
   useSystemConfigStore,
 } from '@/stores/system-config-store'
 
-import type { UsageLog } from '../../data/schema'
+import { getLogDetail } from '../../api'
+import { usageLogSchema, type UsageLog } from '../../data/schema'
 import type { LogOtherData } from '../../types'
 import { useCommonLogsColumns } from '../columns/common-logs-columns'
 
 vi.mock('@lobehub/icons', () => ({}))
+vi.mock('../../api', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../api')>()
+  return {
+    ...actual,
+    getLogDetail: vi.fn(async () => ({ success: true })),
+  }
+})
 vi.hoisted(() => {
   vi.stubGlobal('localStorage', {
     getItem: () => null,
@@ -48,7 +56,7 @@ vi.hoisted(() => {
 afterAll(() => vi.unstubAllGlobals())
 
 function makeLog(other: LogOtherData): UsageLog {
-  return {
+  return usageLogSchema.parse({
     id: 1,
     user_id: 1,
     created_at: 1,
@@ -70,12 +78,17 @@ function makeLog(other: LogOtherData): UsageLog {
     other: JSON.stringify(other),
     request_id: 'req-1',
     upstream_request_id: '',
-  }
+  })
 }
 
-function DetailPreview(props: { other: LogOtherData; isAdmin: boolean }) {
+function DetailPreview(props: {
+  other: LogOtherData
+  isAdmin: boolean
+  detailAvailable?: boolean
+}) {
+  // oxlint-disable-next-line react/incompatible-library
   const table = useReactTable({
-    data: [makeLog(props.other)],
+    data: [{ ...makeLog(props.other), has_detail: props.detailAvailable }],
     columns: useCommonLogsColumns(props.isAdmin, false),
     getCoreRowModel: getCoreRowModel(),
   })
@@ -116,11 +129,19 @@ afterEach(() => {
   client.clear()
   useSystemConfigStore.getState().setConfig(previousConfig)
 })
-function renderPreview(other: LogOtherData, isAdmin = true) {
+function renderPreview(
+  other: LogOtherData,
+  isAdmin = true,
+  detailAvailable?: boolean
+) {
   render(
     <I18nextProvider i18n={i18n}>
       <QueryClientProvider client={client}>
-        <DetailPreview other={other} isAdmin={isAdmin} />
+        <DetailPreview
+          other={other}
+          isAdmin={isAdmin}
+          detailAvailable={detailAvailable}
+        />
       </QueryClientProvider>
     </I18nextProvider>
   )
@@ -142,6 +163,39 @@ test('keeps log details open when the parent refreshes with unchanged data', asy
   rerender(<DetailPreview other={other} isAdmin />)
   expect(screen.getByRole('dialog')).toBeVisible()
 })
+
+test('shows a clear details entry for stripped payloads without billing text', async () => {
+  vi.mocked(getLogDetail).mockResolvedValue({
+    success: true,
+    data: { ...makeLog({}), record: '{"completion":"hi"}' },
+  })
+  const preview = renderPreview({}, true, true)
+  expect(preview).toHaveTextContent('Details')
+  expect(preview).not.toHaveTextContent('—')
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(getLogDetail).not.toHaveBeenCalled()
+  fireEvent.click(preview)
+  expect(await screen.findByRole('dialog')).toBeVisible()
+  expect(getLogDetail).toHaveBeenCalledWith('req-1', undefined)
+  expect(
+    await screen.findByRole('button', { name: 'View Record' })
+  ).toBeVisible()
+})
+
+test('marks full details beside the existing billing preview', () => {
+  const preview = renderPreview({ model_price: 0.25 }, true, true)
+  expect(preview).toHaveTextContent('Per-call · $0.25')
+  expect(within(preview).getByLabelText('Details')).toBeVisible()
+})
+
+test.each([false, undefined])(
+  'keeps the empty preview for logs without a detail marker (%s)',
+  (detailAvailable) => {
+    const preview = renderPreview({}, true, detailAvailable)
+    expect(preview).toHaveTextContent('—')
+    expect(within(preview).queryByLabelText('Details')).not.toBeInTheDocument()
+  }
+)
 
 test.each([
   {

@@ -24,6 +24,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { toIntlLocale } from '@/i18n/languages'
 import { api } from '@/lib/api'
 import dayjs from '@/lib/dayjs'
+import { formatNumber, formatTokenUnits } from '@/lib/format'
 
 interface TokenRecordDailyItem {
   date: string
@@ -110,6 +111,7 @@ function UserHeatmapDayLabels() {
 
 export function UserHeatmap() {
   const { t, i18n } = useTranslation()
+  const locale = toIntlLocale(i18n.resolvedLanguage ?? i18n.language)
   const isDark = useIsDark()
   const [data, setData] = useState<TokenRecordDailyItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -271,8 +273,11 @@ export function UserHeatmap() {
           <h3 className='text-sm font-medium'>
             {t('dashboard.models.yourActivity')}
           </h3>
-          <span className='text-muted-foreground text-xs'>
-            {totalTokens.toLocaleString()} {t('tokens')}
+          <span
+            className='text-muted-foreground text-xs'
+            title={`${formatNumber(totalTokens, locale)} ${t('tokens')}`}
+          >
+            {formatTokenUnits(totalTokens)} {t('tokens')}
           </span>
         </div>
         <div className='text-muted-foreground flex items-center gap-1.5 text-[10px]'>
@@ -313,7 +318,7 @@ export function UserHeatmap() {
                       className='hover:outline-foreground/40 relative h-[12px] w-[12px] rounded-[3px] transition-[outline] duration-150 hover:z-10 hover:outline-1'
                       style={{ backgroundColor: bg }}
                       role='gridcell'
-                      aria-label={`${date}: ${tokens.toLocaleString()} ${t('tokens')}`}
+                      aria-label={`${date}: ${formatTokenUnits(tokens)} (${formatNumber(tokens, locale)}) ${t('tokens')}`}
                       onMouseEnter={(e) => handleCellEnter(date, e)}
                       onMouseLeave={handleCellLeave}
                     />
@@ -349,20 +354,39 @@ export function UserHeatmap() {
               <div className='mt-1.5 space-y-1'>
                 <div className='flex items-center justify-between gap-3'>
                   <span className='text-background/60'>{t('Total')}</span>
-                  <span className='font-medium tabular-nums'>
-                    {hovered.record.total_tokens.toLocaleString()} {t('tokens')}
+                  <span
+                    className='font-medium tabular-nums'
+                    title={`${formatNumber(hovered.record.total_tokens, locale)} ${t('tokens')}`}
+                  >
+                    {hovered.record.total_tokens >= 1000
+                      ? `${formatTokenUnits(hovered.record.total_tokens)} (${formatNumber(hovered.record.total_tokens, locale)})`
+                      : formatTokenUnits(hovered.record.total_tokens)}{' '}
+                    {t('tokens')}
                   </span>
                 </div>
                 <div className='flex items-center justify-between gap-3'>
                   <span className='text-background/60'>{t('Prompt')}</span>
-                  <span className='tabular-nums'>
-                    {hovered.record.prompt_tokens.toLocaleString()}
+                  <span
+                    className='tabular-nums'
+                    title={formatNumber(hovered.record.prompt_tokens, locale)}
+                  >
+                    {hovered.record.prompt_tokens >= 1000
+                      ? `${formatTokenUnits(hovered.record.prompt_tokens)} (${formatNumber(hovered.record.prompt_tokens, locale)})`
+                      : formatTokenUnits(hovered.record.prompt_tokens)}
                   </span>
                 </div>
                 <div className='flex items-center justify-between gap-3'>
                   <span className='text-background/60'>{t('Completion')}</span>
-                  <span className='tabular-nums'>
-                    {hovered.record.completion_tokens.toLocaleString()}
+                  <span
+                    className='tabular-nums'
+                    title={formatNumber(
+                      hovered.record.completion_tokens,
+                      locale
+                    )}
+                  >
+                    {hovered.record.completion_tokens >= 1000
+                      ? `${formatTokenUnits(hovered.record.completion_tokens)} (${formatNumber(hovered.record.completion_tokens, locale)})`
+                      : formatTokenUnits(hovered.record.completion_tokens)}
                   </span>
                 </div>
               </div>
