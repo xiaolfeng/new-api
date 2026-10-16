@@ -6,6 +6,7 @@ import (
 
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	pkgErrors "github.com/bamboo-services/bamboo-messages/pkg/errors"
 )
 
 // TestTranslateSDKError_NilError 验证 nil error 返回 nil（防 panic 契约）。
@@ -25,6 +26,20 @@ func TestTranslateSDKError_GenericUpstreamError(t *testing.T) {
 	}
 	if got.GetErrorCode() != types.ErrorCodeDoRequestFailed {
 		t.Errorf("上游错误应映射为 ErrorCodeDoRequestFailed，got=%v", got.GetErrorCode())
+	}
+}
+
+func TestTranslateSDKError_PreservesUpstreamStatus(t *testing.T) {
+	upstreamErr := pkgErrors.NewBambooError("上游", "OpenAI Responses: rate limit", 429)
+	got := translateSDKError(upstreamErr)
+	if got == nil {
+		t.Fatal("应返回非 nil NewAPIError")
+	}
+	if got.StatusCode != 429 {
+		t.Fatalf("status = %d, want 429", got.StatusCode)
+	}
+	if got.GetErrorCode() != types.ErrorCodeDoRequestFailed {
+		t.Fatalf("code = %s", got.GetErrorCode())
 	}
 }
 

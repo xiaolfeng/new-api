@@ -354,7 +354,7 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			if cancelled {
 				return &usage, nil
 			}
-			return &usage, types.NewError(cause, types.ErrorCodeBadResponseBody)
+			return &usage, withBambooStatus(types.NewError(cause, types.ErrorCodeBadResponseBody), cause)
 		}
 
 		collector.observe(event)

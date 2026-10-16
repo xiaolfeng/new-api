@@ -21,12 +21,14 @@ import (
 	appmodel "github.com/QuantumNous/new-api/model"
 	perfmetrics "github.com/QuantumNous/new-api/pkg/perf_metrics"
 	"github.com/QuantumNous/new-api/pkg/wsmanager"
+	"github.com/QuantumNous/new-api/relay/bamboo"
 	relaychannel "github.com/QuantumNous/new-api/relay/channel"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relay/helper"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/reasoning"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -114,6 +116,8 @@ type responsesWSSession struct {
 	lockedKeyIndex  int
 	lockedContext   map[appconstant.ContextKey]any
 	lockedRoute     dto.AdvancedCustomRoute
+	lockedNative    bool
+	bambooMemory    *bamboo.ResponsesWSMemory
 }
 
 func ResponsesWebSocketHelper(c *gin.Context, client *websocket.Conn, runner ResponsesWSRequestRunner) *types.NewAPIError {
@@ -270,6 +274,9 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			return apiErr
 		}
 		billingPrepared = true
+		if !s.lockedNative {
+			return s.runBambooResponsesTurn(c, state, info, create, s.lockedChannelID)
+		}
 		var payload []byte
 		payload, apiErr = buildResponsesWSCreatePayload(c, info, create.Request, create.Generate, create.StreamID)
 		if apiErr != nil {
@@ -304,6 +311,25 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 			}
 			info.RetryIndex = retry.GetRetry()
 			policy.BeginAttempt(channel, info.UsingGroup)
+			if !appmodel.IsResponsesWebSocketNative(channel, modelName) {
+				apiErr = s.runBambooResponsesTurn(c, state, info, create, channel.Id)
+				if apiErr != nil {
+					apiErr = service.NormalizeViolationFeeError(apiErr)
+					service.ResetStatusCode(apiErr, c.GetString("status_code_mapping"))
+					info.LastError = apiErr
+					decision := service.DecideRelayRetry(c, apiErr, common.RetryTimes-retry.GetRetry())
+					service.RecordPolicyFailure(c, channel.Id, apiErr, decision)
+					service.ProcessChannelError(c, *types.NewChannelError(channel.Id, channel.Type, channel.Name, channel.ChannelInfo.IsMultiKey, info.ApiKey, channel.GetAutoBan()), apiErr, info)
+					if decision.Action == "retry" {
+						continue
+					}
+					return apiErr
+				}
+				s.rememberResponsesConnection(c, channel, info, modelName)
+				s.lockedNative = false
+				s.registerChannelClose(channel.Id)
+				return nil
+			}
 			var payload []byte
 			payload, apiErr = buildResponsesWSCreatePayload(c, info, create.Request, create.Generate, create.StreamID)
 			if apiErr != nil {
@@ -347,6 +373,7 @@ func (s *responsesWSSession) runCall(c *gin.Context, state *responsesWSCallState
 				}
 			}
 			s.registerChannelClose(channel.Id)
+			s.lockedNative = true
 			s.startTargetReader(target)
 			apiErr = nil
 			break
@@ -593,6 +620,88 @@ func (s *responsesWSSession) restoreConnectionContext(c *gin.Context, model stri
 	policy := service.RequestPolicy(c)
 	policy.BeginAttempt(channel, s.lockedGroup)
 	policy.AddEvent(service.PolicyEvent{ChannelID: channel.Id, Decision: service.PolicyDecision{Action: "select", Reason: "pinned_channel", Source: "channel_constraint"}})
+	return nil
+}
+
+func (s *responsesWSSession) rememberResponsesConnection(c *gin.Context, channel *appmodel.Channel, info *relaycommon.RelayInfo, modelName string) {
+	s.lockedModel, s.lockedChannelID, s.lockedGroup = modelName, channel.Id, info.UsingGroup
+	s.lockedKey, s.lockedKeyIndex = info.ApiKey, info.ChannelMultiKeyIndex
+	s.lockedRoute, _ = channel.GetOtherSettings().AdvancedCustom.MatchPathForModel(c.Request.URL.Path, modelName)
+	s.lockedContext = make(map[appconstant.ContextKey]any)
+	for _, key := range []appconstant.ContextKey{
+		appconstant.ContextKeyChannelId, appconstant.ContextKeyChannelName, appconstant.ContextKeyChannelType,
+		appconstant.ContextKeyChannelCreateTime, appconstant.ContextKeyChannelSetting, appconstant.ContextKeyChannelOtherSetting,
+		appconstant.ContextKeyChannelParamOverride, appconstant.ContextKeyChannelHeaderOverride, appconstant.ContextKeyChannelOrganization,
+		appconstant.ContextKeyChannelAutoBan, appconstant.ContextKeyChannelModelMapping, appconstant.ContextKeyChannelStatusCodeMapping,
+		appconstant.ContextKeyChannelIsMultiKey, appconstant.ContextKeyChannelMultiKeyIndex, appconstant.ContextKeyChannelKey, appconstant.ContextKeyChannelBaseUrl,
+	} {
+		if value, ok := c.Get(string(key)); ok {
+			s.lockedContext[key] = value
+		}
+	}
+}
+
+func responsesWSSkipGenerate(raw common.RawMessage) bool {
+	if len(bytes.TrimSpace(raw)) == 0 {
+		return false
+	}
+	var flag bool
+	if err := common.Unmarshal(raw, &flag); err != nil {
+		return false
+	}
+	return !flag
+}
+
+func (s *responsesWSSession) runBambooResponsesTurn(c *gin.Context, state *responsesWSCallState, info *relaycommon.RelayInfo, create responsesWSCreateRequest, channelID int) *types.NewAPIError {
+	if err := helper.ModelMappedHelper(c, info, &create.Request); err != nil {
+		return types.NewError(err, types.ErrorCodeChannelModelMappedError, types.ErrOptionWithSkipRetry())
+	}
+	if err := helper.ApplyReasoningModelSuffix(c, info, &create.Request); err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+	if create.Request.Reasoning != nil && create.Request.Reasoning.Effort != "" {
+		create.Request.Reasoning.Effort = reasoning.NormalizeEffort(create.Request.Reasoning.Effort)
+	}
+	body, err := common.Marshal(&create.Request)
+	if err != nil {
+		return types.NewError(err, types.ErrorCodeConvertRequestFailed, types.ErrOptionWithSkipRetry())
+	}
+	info.StreamStatus = relaycommon.NewStreamStatus()
+	info.StreamStatus.RequireTerminal()
+	common.SetContextKey(c, appconstant.ContextKeyResponseStreamStatus, info.StreamStatus)
+	accumulator := service.NewResponsesUsageAccumulator(info)
+	if s.bambooMemory == nil {
+		s.bambooMemory = bamboo.NewResponsesWSMemory()
+	}
+	turnCtx, turnCancel := context.WithCancel(c.Request.Context())
+	defer turnCancel()
+	go func() {
+		select {
+		case <-state.controls:
+			turnCancel()
+		case <-turnCtx.Done():
+		}
+	}()
+	accepted := false
+	result, apiErr := bamboo.StreamResponsesWebSocket(turnCtx, c, info, body, create.StreamID, responsesWSSkipGenerate(create.Generate), s.bambooMemory, func(payload []byte) error {
+		var event dto.ResponsesStreamResponse
+		if common.Unmarshal(payload, &event) == nil {
+			accumulator.Observe(&event)
+		}
+		info.SetFirstResponseTime()
+		if !accepted {
+			accepted = true
+			service.RecordChannelAffinity(c, channelID)
+		}
+		return s.writeClient(websocket.TextMessage, payload)
+	})
+	if apiErr != nil && !result.Delivered {
+		return apiErr
+	}
+	ConsumeResponsesQuota(c, info, accumulator.Finish())
+	if apiErr != nil {
+		state.closeAfter = true
+	}
 	return nil
 }
 

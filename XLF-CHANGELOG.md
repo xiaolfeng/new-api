@@ -104,6 +104,15 @@ cd web && bun run typecheck && cd ..
 
 ## 3. 版本演进历程与核心改动
 
+### 未发布：bamboo-messages v1.1.0 Responses WebSocket
+
+把 bamboo-messages 从 v1.0.15 升到 v1.1.0 对应提交 `b2527b1`。远程仓库尚未推送 `v1.1.0` tag，模块版本写成伪版本 `v1.0.16-0.20261016042438-b2527b1c5c83`，内容就是这个提交。
+
+- **上游错误状态码透传**：Responses / 其他 bamboo 上游的 `BambooError.StatusCode` 写回网关错误，不再把 429/4xx 统一抹成 500。
+- **Responses 上游 WebSocket**：渠道 Base URL 为 `ws://` / `wss://` 时，Responses provider 显式打开 `WithWebSocketMode`。HTTP 入口仍走原来的 bamboo 转换，只是上游传输改走 WebSocket。
+- **下游 Responses WebSocket 双向转换**：`EnableBambooRelay` 开启后，已勾选 Responses WebSocket 的 Anthropic / Gemini / OpenAI 兼容渠道可以接受 `GET /v1/responses`。鉴权、限流、选渠、预扣和结算仍走现有 WebSocket 会话；协议转换、`previous_response_id` 续接和 `generate:false` 预热走 bamboo。OpenAI / Codex / Sub2API / NewAPI 以及无转换器的高级自定义路由仍是原生长连接透传，不改取消和连接复用。
+- **默认关闭时行为不变**：未打开 bamboo 中继时，非原生渠道仍然不能进 Responses WebSocket 选渠。
+
 ### v2.5.2 正式发布
 
 **周期**：2026-10-11 ~ 2026-10-15 | **版本标记**：`v2.5.2`（tag 指向本台账同步提交）

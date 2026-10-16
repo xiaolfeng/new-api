@@ -5,6 +5,7 @@ import (
 
 	"github.com/QuantumNous/new-api/constant"
 	"github.com/QuantumNous/new-api/dto"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 )
 
 var filterEvalOrder = []dto.ChannelFilterKind{
@@ -110,21 +111,50 @@ func channelMatchesFilter(ch *Channel, modelName string, filter dto.ChannelFilte
 		}
 		return slices.Contains(filter.TaskPluginChannelTypes, ch.Type)
 	case dto.FilterResponsesWebSocket:
-		if !ch.GetSetting().ResponsesWebSocketEnabled {
-			return false
-		}
-		switch ch.Type {
-		case constant.ChannelTypeOpenAI, constant.ChannelTypeCodex, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI:
-			return true
-		case constant.ChannelTypeAdvancedCustom:
-			// The session forwards native Responses events without protocol
-			// conversion, so only a converter-free /v1/responses route qualifies.
-			route, ok := ch.GetOtherSettings().AdvancedCustom.MatchPathForModel("/v1/responses", modelName)
-			return ok && route.IsNative()
-		default:
-			return false
-		}
+		return channelSupportsResponsesWebSocket(ch, modelName)
 	default:
 		return true
+	}
+}
+
+// IsResponsesWebSocketNative reports whether the channel is dialed as a native
+// Responses WebSocket and must not be protocol-converted.
+func IsResponsesWebSocketNative(ch *Channel, modelName string) bool {
+	if ch == nil {
+		return false
+	}
+	switch ch.Type {
+	case constant.ChannelTypeOpenAI, constant.ChannelTypeCodex, constant.ChannelTypeSub2API, constant.ChannelTypeNewAPI:
+		return true
+	case constant.ChannelTypeAdvancedCustom:
+		route, ok := ch.GetOtherSettings().AdvancedCustom.MatchPathForModel("/v1/responses", modelName)
+		return ok && route.IsNative()
+	default:
+		return false
+	}
+}
+
+// channelSupportsResponsesWebSocket keeps the native passthrough allow-list and,
+// once bamboo relay is enabled, also admits channels bamboo can convert into
+// Responses WebSocket events.
+func channelSupportsResponsesWebSocket(ch *Channel, modelName string) bool {
+	if ch == nil || !ch.GetSetting().ResponsesWebSocketEnabled {
+		return false
+	}
+	if IsResponsesWebSocketNative(ch, modelName) {
+		return true
+	}
+	if !model_setting.GetBambooSettings().EnableBambooRelay {
+		return false
+	}
+	switch ch.Type {
+	case constant.ChannelTypeAnthropic, constant.ChannelTypeGemini,
+		constant.ChannelTypeXai, constant.ChannelTypeDeepSeek, constant.ChannelTypeMoonshot,
+		constant.ChannelTypeSiliconFlow, constant.ChannelTypeMistral, constant.ChannelTypeZhipu_v4,
+		constant.ChannelTypePerplexity, constant.ChannelTypeCohere, constant.ChannelTypeMiniMax,
+		constant.ChannelTypeBaiduV2, constant.ChannelTypeOpenRouter, constant.ChannelTypeXinference:
+		return true
+	default:
+		return false
 	}
 }

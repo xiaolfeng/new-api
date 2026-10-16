@@ -351,6 +351,9 @@ func newResponsesProvider(apiKey, baseURL string, headers map[string]string,
 		bambooresponses.WithIncludeReasoningContent(includeReasoningContent),
 		bambooresponses.WithIgnoreEncryptedContent(ignoreEncryptedContent),
 	}
+	if responsesBaseURLUsesWebSocket(baseURL) {
+		opts = append(opts, bambooresponses.WithWebSocketMode(true))
+	}
 	for k, v := range headers {
 		opts = append(opts, bambooresponses.WithHeader(k, v))
 	}
@@ -384,4 +387,11 @@ func buildCompletionsProvider(apiKey, baseURL string, headers map[string]string,
 		opts = append(opts, bamboocompletions.WithInterceptor(interceptor))
 	}
 	return bamboocompletions.NewCompletionsProviderWithOptions(opts...)
+}
+
+// responsesBaseURLUsesWebSocket 判断 Responses 上游是否应走 WebSocket 传输。
+// SDK 也会在 base 为 ws/wss 时自动启用；这里显式打开，避免后续 URL 规范化把协议意图丢掉。
+func responsesBaseURLUsesWebSocket(baseURL string) bool {
+	base := strings.ToLower(strings.TrimSpace(baseURL))
+	return strings.HasPrefix(base, "ws://") || strings.HasPrefix(base, "wss://")
 }

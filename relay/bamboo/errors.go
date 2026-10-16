@@ -4,9 +4,9 @@ import (
 	"errors"
 	"strings"
 
-	pkgErrors "github.com/bamboo-services/bamboo-messages/pkg/errors"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/types"
+	pkgErrors "github.com/bamboo-services/bamboo-messages/pkg/errors"
 )
 
 // ErrUnsupportedProvider 表示该上游 ApiType 未被 bamboo 覆盖，
@@ -37,13 +37,13 @@ func translateCodecError(err error) *types.NewAPIError {
 	}
 	switch {
 	case be.StatusCode == 401 || be.StatusCode == 403:
-		return types.NewError(be, types.ErrorCodeAccessDenied)
+		return withBambooStatus(types.NewError(be, types.ErrorCodeAccessDenied), be)
 	case be.StatusCode == 429:
-		return types.NewError(be, types.ErrorCodeBadResponse)
+		return withBambooStatus(types.NewError(be, types.ErrorCodeBadResponse), be)
 	case be.StatusCode >= 400 && be.StatusCode < 500:
-		return types.NewError(be, types.ErrorCodeInvalidRequest)
+		return withBambooStatus(types.NewError(be, types.ErrorCodeInvalidRequest), be)
 	default:
-		return types.NewError(be, types.ErrorCodeConvertRequestFailed)
+		return withBambooStatus(types.NewError(be, types.ErrorCodeConvertRequestFailed), be)
 	}
 }
 
@@ -74,7 +74,20 @@ func translateSDKError(err error) *types.NewAPIError {
 		return types.NewError(err, types.ErrorCodeChannelParamOverrideInvalid, types.ErrOptionWithSkipRetry())
 	}
 	// 通用兜底（保持与改造前一致的错误码）
-	return types.NewError(err, types.ErrorCodeDoRequestFailed)
+	return withBambooStatus(types.NewError(err, types.ErrorCodeDoRequestFailed), err)
+}
+
+// withBambooStatus 把 SDK v1.1.0 起携带的上游 HTTP 状态码写回网关错误。
+// 状态码缺失或越界时保持 NewError 的默认 500，避免把网络错误伪装成 4xx。
+func withBambooStatus(apiErr *types.NewAPIError, err error) *types.NewAPIError {
+	if apiErr == nil || err == nil {
+		return apiErr
+	}
+	var be *pkgErrors.BambooError
+	if errors.As(err, &be) && be.StatusCode >= 400 && be.StatusCode <= 599 {
+		apiErr.StatusCode = be.StatusCode
+	}
+	return apiErr
 }
 
 // isParamOverrideFailure 启发式判断 error 是否来自 param override 拦截器。

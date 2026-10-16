@@ -20,6 +20,7 @@ import (
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 	"github.com/QuantumNous/new-api/service"
+	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -679,4 +680,32 @@ func TestResponsesWSErrorAttribution(t *testing.T) {
 			assert.Equal(t, tc.controlError, controlError)
 		})
 	}
+}
+
+func TestSelectResponsesWSChannelAcceptsBambooConvertibleChannel(t *testing.T) {
+	require.NoError(t, i18n.Init())
+	settings := model_setting.GetBambooSettings()
+	previous := settings.EnableBambooRelay
+	settings.EnableBambooRelay = true
+	t.Cleanup(func() { settings.EnableBambooRelay = previous })
+	database := setupRelayChannelDB(t)
+	channel := &model.Channel{Name: "anthropic-ws", Key: "sk-test", Status: common.ChannelStatusEnabled, Type: constant.ChannelTypeAnthropic}
+	channel.SetSetting(dto.ChannelSettings{ResponsesWebSocketEnabled: true})
+	require.NoError(t, database.Create(channel).Error)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil)
+	constraints := service.GetChannelConstraints(c)
+	constraints.AddPin(appdto.ChannelPin{ChannelId: channel.Id, Source: appdto.PinSourceToken, Rank: appdto.PinRankToken, RetryMode: appdto.PinRetrySingleAttempt})
+	constraints.AddFilter(appdto.ChannelFilter{Kind: appdto.FilterRequestPath, RequestPath: c.Request.URL.Path})
+	selected, apiErr := selectResponsesWSChannel(c, "ws-model", &service.RetryParam{Ctx: c, ModelName: "ws-model", TokenGroup: "default"})
+	require.Nil(t, apiErr)
+	require.NotNil(t, selected)
+	assert.Equal(t, channel.Id, selected.Id)
+	assert.False(t, model.IsResponsesWebSocketNative(selected, "ws-model"))
+
+	settings.EnableBambooRelay = false
+	selected, apiErr = selectResponsesWSChannel(c, "ws-model", &service.RetryParam{Ctx: c, ModelName: "ws-model", TokenGroup: "default"})
+	require.NotNil(t, apiErr)
+	assert.Nil(t, selected)
+	assert.Equal(t, types.ErrorCode(appdto.FilterResponsesWebSocket), apiErr.GetErrorCode())
 }
