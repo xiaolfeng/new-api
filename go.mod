@@ -12,7 +12,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.10
 	github.com/aws/aws-sdk-go-v2/service/bedrockruntime v1.50.4
 	github.com/aws/smithy-go v1.24.2
-	github.com/bamboo-services/bamboo-messages v1.0.16-0.20261016042438-b2527b1c5c83
+	github.com/bamboo-services/bamboo-messages v1.1.0
 	github.com/bytedance/gopkg v0.1.4
 	github.com/casbin/casbin/v2 v2.135.0
 	github.com/coreos/go-oidc/v3 v3.21.0
