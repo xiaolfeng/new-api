@@ -147,7 +147,7 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 			// 空内容，可重试换 key 再试：不标 skipRetry。
 			return caption, usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody)
 		}
-		service.PostTextConsumeQuota(inner, child, usage, []string{"image_recognize"})
+		service.PostTextConsumeQuota(inner, child, usage, []*rootcommon.Message{rootcommon.NewMessage("image_recognize")})
 		return caption, usage, nil
 	}
 	usageAny, respErr := adaptor.DoResponse(inner, httpResp, child)
@@ -162,7 +162,7 @@ func executeImageRecognizeHop(parentCtx *gin.Context, parent *relaycommon.RelayI
 		return caption, usage, relaykittypes.NewError(fmt.Errorf("image recognition returned empty content"), relaykittypes.ErrorCodeBadResponseBody)
 	}
 
-	service.PostTextConsumeQuota(inner, child, usage, []string{"image_recognize"})
+	service.PostTextConsumeQuota(inner, child, usage, []*rootcommon.Message{rootcommon.NewMessage("image_recognize")})
 	return caption, usage, nil
 }
 

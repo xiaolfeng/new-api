@@ -47,6 +47,8 @@ test:
 	GOWORK=off go test $$root_packages
 	@echo "Testing relaykit Go module..."
 	@cd relaykit && GOWORK=off go test ./...
+	@echo "Testing tokenkit Go module..."
+	@cd tokenkit && GOWORK=off go test ./...
 
 # ============================================================================
 # Docker 构建命令 (推送到 Docker Hub)

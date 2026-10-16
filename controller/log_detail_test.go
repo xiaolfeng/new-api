@@ -165,9 +165,9 @@ func TestLogListOmitsDetailPayload(t *testing.T) {
 		tc := cases[i]
 		t.Run(tc.name, func(t *testing.T) {
 			requestID := "req-" + tc.name
-			adminLogs, _, err := model.GetAllLogs(model.LogTypeConsume, 0, 0, "", "", "", 0, 10, 0, "", requestID, "")
+			adminLogs, _, err := model.GetAllLogs(model.LogFilter{Type: model.LogTypeConsume, RequestId: requestID}, 0, 10)
 			require.NoError(t, err)
-			selfLogs, _, err := model.GetUserLogs(7, model.LogTypeConsume, 0, 0, "", "", 0, 10, "", requestID, "")
+			selfLogs, _, err := model.GetUserLogs(7, model.LogFilter{Type: model.LogTypeConsume, RequestId: requestID}, 0, 10)
 			require.NoError(t, err)
 			for _, rows := range [][]*model.Log{adminLogs, selfLogs} {
 				require.Len(t, rows, 1)
@@ -199,7 +199,7 @@ func TestLogListOmitsDetailPayload(t *testing.T) {
 
 	// Common users must not be offered details that the detail endpoint hides.
 	require.NoError(t, db.Model(&user).Update("role", common.RoleCommonUser).Error)
-	selfLogs, _, err := model.GetUserLogs(7, model.LogTypeConsume, 0, 0, "", "", 0, 10, "", "", "")
+	selfLogs, _, err := model.GetUserLogs(7, model.LogFilter{Type: model.LogTypeConsume}, 0, 10)
 	require.NoError(t, err)
 	require.Len(t, selfLogs, len(cases))
 	for _, row := range selfLogs {

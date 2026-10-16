@@ -42,7 +42,7 @@ type QuotaDataLogParams struct {
 func UpdateQuotaData() {
 	for {
 		if common.DataExportEnabled {
-			common.SysLog("正在更新数据看板数据...")
+			common.SysLog(common.LogText("updating dashboard data..."))
 			SaveQuotaDataCache()
 		}
 		time.Sleep(time.Duration(common.DataExportInterval) * time.Minute)
@@ -136,7 +136,7 @@ func SaveQuotaDataCache() {
 		common.SysError(fmt.Sprintf("保存数据看板数据部分失败，共%d条中%d条保留待重试", size, len(failed)))
 		return
 	}
-	common.SysLog(fmt.Sprintf("保存数据看板数据成功，共保存%d条数据", size))
+	common.SysLog(common.LogText("saved dashboard data, %d records", size))
 }
 
 func increaseQuotaData(quotaData *QuotaData) error {
@@ -149,7 +149,7 @@ func increaseQuotaData(quotaData *QuotaData) error {
 			"token_used": gorm.Expr("token_used + ?", quotaData.TokenUsed),
 		}).Error
 	if err != nil {
-		common.SysError(fmt.Sprintf("increaseQuotaData error: %s", err))
+		common.SysError(common.LogText("increaseQuotaData error: %s", err))
 	}
 	return err
 }

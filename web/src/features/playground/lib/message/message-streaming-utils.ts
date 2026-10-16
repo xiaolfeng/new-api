@@ -183,7 +183,7 @@ export function applyStreamingToolCalls(
  */
 export function finalizeMessage(
   message: Message,
-  apiReasoningContent?: string
+  apiReasoningContent?: string | null
 ): Message {
   const currentVersion = getCurrentVersion(message)
   const parsedThinkTags = currentVersion.content.includes('<think>')
@@ -254,7 +254,7 @@ export function applyChatCompletionChoice(
   return completeAssistantTiming({
     ...finalizeMessage(
       updateCurrentVersionContent(message, choice.message?.content || ''),
-      choice.message?.reasoning_content
+      choice.message?.reasoning_content ?? choice.message?.reasoning
     ),
     toolCalls: choice.message?.tool_calls,
     status: MESSAGE_STATUS.COMPLETE,

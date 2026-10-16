@@ -118,6 +118,12 @@ v2.5.2 之后的协议扩展小版本，让下游 Responses WebSocket 可以转�
 - **原生透传保持不变**：OpenAI、Codex、Sub2API、NewAPI 及无转换器的高级自定义路由仍走长连接透传。未开启 bamboo 时，非原生渠道仍不能进入该 WebSocket 选渠。
 - **版本发布** (`c7113147d`)：VERSION 提升至 `v2.5.3`，同步更新全量提交溯源台账。
 
+主线同步（`upstream/main` @ `ca2cae676`，合并进 `newapi-xlf-v2`）：
+
+- 接入上游 Go 1.26、`tokenkit/`、moejs，以及日志内容结构化（`[]*common.Message`）和 `LogFilter`。
+- 保留封顶计数 `countLogsCapped`、失败看板缓存、`record`/`full_log`、空响应重试、宿主工具附加费、Responses 请求字段回显。
+- Responses WebSocket 转换路径仍在；bamboo-messages 保持 `v1.0.16-0.20261016042438-b2527b1c5c83`。原生透传没有被盖成纯转换，也没有退回旧 SDK。
+
 ### v2.5.2 正式发布
 
 **周期**：2026-10-11 ~ 2026-10-15 | **版本标记**：`v2.5.2`（tag 指向本台账同步提交）

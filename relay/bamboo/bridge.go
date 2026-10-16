@@ -29,8 +29,8 @@ import (
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
 	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
-	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
+	"github.com/QuantumNous/new-api/tokenkit"
 )
 
 // errStreamErrorNoDetail 用于 event.Error 为 nil 但事件类型为 EventError 的兜底。
@@ -485,7 +485,7 @@ func doStreamRelay(c *gin.Context, info *relaycommon.RelayInfo, client bamboosdk
 			}
 		}
 		if allText.Len() > 0 {
-			usage.CompletionTokens = service.CountTextToken(allText.String(), info.OriginModelName)
+			usage.CompletionTokens = tokenkit.Count(info.OriginModelName, allText.String())
 		}
 	}
 
@@ -524,7 +524,7 @@ func accumulateReasoningFromEvent(modelName string, usage *dto.Usage, event *bam
 		return
 	}
 	if delta.Type == bamboosdk.DeltaThinkingDelta && delta.Thinking != "" {
-		tokens := service.CountTextToken(delta.Thinking, modelName)
+		tokens := tokenkit.Count(modelName, delta.Thinking)
 		accumulateReasoning(usage, tokens)
 	}
 }

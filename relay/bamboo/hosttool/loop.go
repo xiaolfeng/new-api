@@ -15,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/service"
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/tokenkit"
 )
 
 type Action string
@@ -211,7 +212,7 @@ func estimateHop2Quota(info *relaycommon.RelayInfo, hop2Req *bamboocodec.RelayRe
 				}
 			}
 		}
-		promptTokens = service.CountTextToken(b.String(), info.OriginModelName)
+		promptTokens = tokenkit.Count(info.OriginModelName, b.String())
 	}
 	maxOut := int64(0)
 	if hop2Req != nil && hop2Req.Config != nil {

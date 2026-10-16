@@ -8,7 +8,8 @@
 new-api 是用 Go 构建的 AI API 网关。它把 40+ 上游供应商（OpenAI、Claude、Gemini、Azure、AWS Bedrock 等）聚合到统一 API 之后，并提供用户管理、计费、限流与管理控制台。前端为单仓 React 19 应用（`web/`）。
 
 技术栈：
-- **后端**：Go 1.25.1+、Gin Web 框架、GORM v2 ORM
+
+- **后端**：Go 1.26（根模块与 `tokenkit/`），`relaykit/` 仍为 Go 1.25.1+；Gin、GORM v2。JavaScript 任务插件运行时为 moejs
 - **前端**：React 19、TypeScript、Rsbuild 2、TanStack Router/Query/Table、Zustand、Base UI、Tailwind CSS 4、Bun
 - **数据库**：同时支持 SQLite / MySQL >= 5.7.8 / PostgreSQL >= 9.6；独立日志库额外支持 ClickHouse
 - **缓存**：Redis (go-redis) + 内存缓存
@@ -48,38 +49,38 @@ new-api/
 
 ## 导航指南
 
-| 任务 | 位置 | 说明 |
-|------|------|------|
-| 找 HTTP 路由 | `router/` | `api-router.go`、`relay-router.go`、`web-router.go` |
-| 找接口处理器 | `controller/` | 文件名对应资源（`user.go`、`channel.go`） |
-| 找业务规则 | `service/` | 计费、选渠道、授权；见 [service 知识库](./service/AGENTS.md) |
-| 找表结构 / 迁移 | `model/` | `main.go` 的 AutoMigrate；见 [model 知识库](./model/AGENTS.md) |
-| 新增 / 修改供应商 | `relay/channel/` | 见 [channel 知识库](./relay/channel/AGENTS.md) |
-| 对话中继内核 | `relay/bamboo/` | 见 [bamboo 知识库](./relay/bamboo/AGENTS.md) |
-| 协议 DTO / 转换 | `relaykit/` | 见 [relaykit 知识库](./relaykit/AGENTS.md) |
-| 计费 / 定价 | `service/` + `setting/ratio_setting/` + `pkg/billingexpr/` | 阶梯计费先读 `pkg/billingexpr/expr.md` |
-| 限流 | `middleware/rate-limit.go`、`middleware/model-rate-limit.go`、`common/limiter/` | 见 [middleware 知识库](./middleware/AGENTS.md) |
-| 配置项 | `setting/` | 按域分子目录 |
-| 前端页面 | `web/src/features/<feature>/` | 见 [web 知识库](./web/AGENTS.md) |
-| 国际化 | 后端 `i18n/`；前端 `web/src/i18n/locales/` | 前端键为英文源文案 |
-| 共享工具 | `common/` | JSON、配额换算、Redis、env |
-| 定制变更 / 防冲突 | `XLF-CHANGELOG.md` | XiaoLFeng 定制版变更历史、防冲突矩阵与主线同步 SOP |
+| 任务              | 位置                                                                            | 说明                                                           |
+| ----------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| 找 HTTP 路由      | `router/`                                                                       | `api-router.go`、`relay-router.go`、`web-router.go`            |
+| 找接口处理器      | `controller/`                                                                   | 文件名对应资源（`user.go`、`channel.go`）                      |
+| 找业务规则        | `service/`                                                                      | 计费、选渠道、授权；见 [service 知识库](./service/AGENTS.md)   |
+| 找表结构 / 迁移   | `model/`                                                                        | `main.go` 的 AutoMigrate；见 [model 知识库](./model/AGENTS.md) |
+| 新增 / 修改供应商 | `relay/channel/`                                                                | 见 [channel 知识库](./relay/channel/AGENTS.md)                 |
+| 对话中继内核      | `relay/bamboo/`                                                                 | 见 [bamboo 知识库](./relay/bamboo/AGENTS.md)                   |
+| 协议 DTO / 转换   | `relaykit/`                                                                     | 见 [relaykit 知识库](./relaykit/AGENTS.md)                     |
+| 计费 / 定价       | `service/` + `setting/ratio_setting/` + `pkg/billingexpr/`                      | 阶梯计费先读 `pkg/billingexpr/expr.md`                         |
+| 限流              | `middleware/rate-limit.go`、`middleware/model-rate-limit.go`、`common/limiter/` | 见 [middleware 知识库](./middleware/AGENTS.md)                 |
+| 配置项            | `setting/`                                                                      | 按域分子目录                                                   |
+| 前端页面          | `web/src/features/<feature>/`                                                   | 见 [web 知识库](./web/AGENTS.md)                               |
+| 国际化            | 后端 `i18n/`；前端 `web/src/i18n/locales/`                                      | 前端键为英文源文案                                             |
+| 共享工具          | `common/`                                                                       | JSON、配额换算、Redis、env                                     |
+| 定制变更 / 防冲突 | `XLF-CHANGELOG.md`                                                              | XiaoLFeng 定制版变更历史、防冲突矩阵与主线同步 SOP             |
 
 ## 代码地图
 
-| 符号 | 类型 | 位置 | 作用 |
-|------|------|------|------|
-| `main` / `InitResources` | 函数 | `main.go` | 进程入口与资源初始化 |
-| `SetRouter` | 函数 | `router/main.go` | 挂载 API / Dashboard / Relay / Web |
-| `GetAdaptor` / `GetTaskAdaptor` | 函数 | `relay/relay_adaptor.go` | 按 apiType 取供应商适配器 |
-| `ChatRelay` | 函数 | `relay/bamboo/bridge.go` | bamboo 对话中继；不支持则 fallback adaptor |
-| `Adaptor` / `TaskAdaptor` | 接口 | `relay/channel/adapter.go` | 同步 / 异步供应商契约 |
-| `RelayInfo` | 结构体 | `relay/common/relay_info.go` | 单次中继上下文（渠道、计费会话、QuotaClamp） |
-| `PreConsumeBilling` / `SettleBilling` | 函数 | `service/billing.go` | 预扣与结算 |
-| `lockForUpdate` | 函数 | `model/locking.go` | 跨库 `SELECT ... FOR UPDATE` |
-| `QuotaFromFloat` / `QuotaRound` / `QuotaFromDecimal` | 函数 | `common/quota_math.go` | 配额换算与饱和 |
-| `AddOtherRatio` | 方法 | `types/price_data.go` | 计费乘数入口（拒绝非正 / NaN / Inf） |
-| `Marshal` / `Unmarshal` | 函数 | `common/json.go` | 宿主唯一 JSON 出入口 |
+| 符号                                                 | 类型   | 位置                         | 作用                                         |
+| ---------------------------------------------------- | ------ | ---------------------------- | -------------------------------------------- |
+| `main` / `InitResources`                             | 函数   | `main.go`                    | 进程入口与资源初始化                         |
+| `SetRouter`                                          | 函数   | `router/main.go`             | 挂载 API / Dashboard / Relay / Web           |
+| `GetAdaptor` / `GetTaskAdaptor`                      | 函数   | `relay/relay_adaptor.go`     | 按 apiType 取供应商适配器                    |
+| `ChatRelay`                                          | 函数   | `relay/bamboo/bridge.go`     | bamboo 对话中继；不支持则 fallback adaptor   |
+| `Adaptor` / `TaskAdaptor`                            | 接口   | `relay/channel/adapter.go`   | 同步 / 异步供应商契约                        |
+| `RelayInfo`                                          | 结构体 | `relay/common/relay_info.go` | 单次中继上下文（渠道、计费会话、QuotaClamp） |
+| `PreConsumeBilling` / `SettleBilling`                | 函数   | `service/billing.go`         | 预扣与结算                                   |
+| `lockForUpdate`                                      | 函数   | `model/locking.go`           | 跨库 `SELECT ... FOR UPDATE`                 |
+| `QuotaFromFloat` / `QuotaRound` / `QuotaFromDecimal` | 函数   | `common/quota_math.go`       | 配额换算与饱和                               |
+| `AddOtherRatio`                                      | 方法   | `types/price_data.go`        | 计费乘数入口（拒绝非正 / NaN / Inf）         |
+| `Marshal` / `Unmarshal`                              | 函数   | `common/json.go`             | 宿主唯一 JSON 出入口                         |
 
 ## 模块架构
 

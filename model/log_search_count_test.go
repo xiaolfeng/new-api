@@ -59,11 +59,11 @@ func TestGetUserLogsCountIsCapped(t *testing.T) {
 	}
 	require.NoError(t, db.CreateInBatches(logs, 500).Error)
 
-	_, total, err := GetUserLogs(7, LogTypeUnknown, 0, 0, "", "", 0, 10, "", "", "")
+	_, total, err := GetUserLogs(7, LogFilter{Type: LogTypeUnknown}, 0, 10)
 	require.NoError(t, err)
 	assert.EqualValues(t, logSearchCountLimit, total, "超过上限时 total 必须封顶在 logSearchCountLimit")
 
-	_, total, err = GetUserLogs(7, LogTypeUnknown, 0, 0, "", "", 0, 10, "", "", "")
+	_, total, err = GetUserLogs(7, LogFilter{Type: LogTypeUnknown}, 0, 10)
 	require.NoError(t, err)
 	assert.EqualValues(t, logSearchCountLimit, total)
 }
@@ -78,7 +78,7 @@ func TestGetUserLogsCountExactBelowCap(t *testing.T) {
 	}
 	require.NoError(t, db.CreateInBatches(logs, 500).Error)
 
-	logsResult, total, err := GetUserLogs(9, LogTypeUnknown, 0, 0, "", "", 0, 10, "", "", "")
+	logsResult, total, err := GetUserLogs(9, LogFilter{Type: LogTypeUnknown}, 0, 10)
 	require.NoError(t, err)
 	assert.EqualValues(t, 42, total)
 	require.Len(t, logsResult, 10)

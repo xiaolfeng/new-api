@@ -294,7 +294,7 @@ func ConsumeResponsesQuota(c *gin.Context, info *relaycommon.RelayInfo, usageDto
 	containsAudioRatios := ratio_setting.ContainsAudioRatio(info.OriginModelName) || ratio_setting.ContainsAudioCompletionRatio(info.OriginModelName)
 
 	if strings.HasPrefix(info.OriginModelName, "gpt-4o-audio") || (containAudioTokens && containsAudioRatios) {
-		service.PostAudioConsumeQuota(c, info, usageDto, "")
+		service.PostAudioConsumeQuota(c, info, usageDto, nil)
 		return
 	}
 	service.PostTextConsumeQuota(c, info, usageDto, nil)
