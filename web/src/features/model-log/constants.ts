@@ -16,16 +16,17 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import type { SortField, ChartTab } from './types'
+import type { SortField, ChartTab } from "./types";
 
 export const SORT_OPTIONS: { value: SortField; labelKey: string }[] = [
-  { value: 'total_tokens', labelKey: 'Output Tokens' },
-  { value: 'failed_rate', labelKey: 'Failure Rate' },
-  { value: 'avg_tps', labelKey: 'Output TPS' },
-]
+  { value: "total_tokens", labelKey: "Output Tokens" },
+  { value: "failed_rate", labelKey: "Failure Rate" },
+  { value: "avg_tps", labelKey: "Output TPS" },
+];
 
 export const CHART_TABS: { value: ChartTab; labelKey: string }[] = [
-  { value: 'output_tokens', labelKey: 'Output Token Trend' },
-  { value: 'tps', labelKey: 'TPS Trends' },
-  { value: 'failure_rate', labelKey: 'Failure Rate Trend' },
-]
+  { value: "output_tokens", labelKey: "Output Token Trend" },
+  { value: "request_count", labelKey: "Request Count Trend" },
+  { value: "tps", labelKey: "TPS Trends" },
+  { value: "failure_rate", labelKey: "Failure Rate Trend" },
+];

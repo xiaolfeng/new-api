@@ -903,16 +903,18 @@ export function useCommonLogsColumns(
           const hasBambooRates =
             thinkingTps != null || outputTps != null || toolTps != null;
 
-          const avgTps = metrics.averageTps;
-          const displayTps = metrics.tokensPerSecond;
+          const overallTps = metrics.overallTps;
+          const trimmedTps = metrics.trimmedTps;
+          const dualTps = metrics.dualTpsLabel;
+          const benchmarkTps = overallTps ?? trimmedTps;
 
           let colorClass = "text-red-600 dark:text-red-400";
-          if (displayTps != null) {
-            if (displayTps >= 81) {
+          if (benchmarkTps != null) {
+            if (benchmarkTps >= 81) {
               colorClass = "text-green-600 dark:text-green-400";
-            } else if (displayTps >= 51) {
+            } else if (benchmarkTps >= 51) {
               colorClass = "text-lime-600 dark:text-lime-400";
-            } else if (displayTps >= 11) {
+            } else if (benchmarkTps >= 11) {
               colorClass = "text-yellow-600 dark:text-yellow-400";
             }
           }
@@ -957,24 +959,23 @@ export function useCommonLogsColumns(
                 )}
               </div>
             );
-          } else if (metrics.legacy && avgTps != null) {
+          } else if (metrics.legacy && metrics.averageTps != null) {
             rateRow = (
               <span className="text-muted-foreground/60 font-mono text-[11px] tabular-nums">
-                {Math.round(avgTps)}
+                {Math.round(metrics.averageTps)}
               </span>
             );
           }
 
           return (
             <div className="flex flex-col gap-0.5">
-              {displayTps != null && (
+              {dualTps !== "N/A" ? (
                 <span
                   className={`font-mono text-sm font-medium tabular-nums ${colorClass}`}
                 >
-                  {displayTps.toFixed(1)}
+                  {dualTps}
                 </span>
-              )}
-              {displayTps == null && (
+              ) : (
                 <span className="text-muted-foreground text-xs">
                   {t("N/A")}
                 </span>
@@ -984,7 +985,7 @@ export function useCommonLogsColumns(
           );
         },
         meta: { label: t("TPS"), mobileHidden: true },
-        size: 80,
+        size: 95,
       },
       {
         accessorKey: "prompt_tokens",

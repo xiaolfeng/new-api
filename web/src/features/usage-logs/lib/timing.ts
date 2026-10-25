@@ -16,70 +16,82 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { formatUseTime } from '@/lib/format'
+import { formatUseTime } from "@/lib/format";
 
-import type { UsageLog } from '../data/schema'
-import type { DeliveryTiming, LogOtherData } from '../types'
+import type { UsageLog } from "../data/schema";
+import type { DeliveryTiming, LogOtherData } from "../types";
 
 export const LEGACY_TIMING_NOTE =
-  'Legacy precision: duration is in whole seconds'
+  "Legacy precision: duration is in whole seconds";
 
 export type TimingLog = Pick<
   UsageLog,
-  'use_time' | 'completion_tokens' | 'is_stream'
->
+  "use_time" | "completion_tokens" | "is_stream"
+>;
 
 function isNonnegativeNumber(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
 }
 
 function isDeliveryTiming(value: unknown): value is DeliveryTiming {
-  if (!value || typeof value !== 'object') return false
-  const timing = value as Record<string, unknown>
+  if (!value || typeof value !== "object") return false;
+  const timing = value as Record<string, unknown>;
   return (
     timing.version === 1 &&
-    timing.source === 'server_delivery' &&
+    timing.source === "server_delivery" &&
     isNonnegativeNumber(timing.total_ms) &&
     (timing.ttft_ms === null ||
       (isNonnegativeNumber(timing.ttft_ms) &&
         timing.ttft_ms <= timing.total_ms)) &&
-    typeof timing.status === 'string' &&
-    ['completed', 'cancelled', 'write_error', 'upstream_error'].includes(
-      timing.status
+    typeof timing.status === "string" &&
+    ["completed", "cancelled", "write_error", "upstream_error"].includes(
+      timing.status,
     )
-  )
+  );
 }
 
 export function formatTimingMs(
   ms: number | null,
-  legacy = false
+  legacy = false,
 ): string | null {
-  if (ms === null) return null
-  return legacy ? formatUseTime(ms / 1000) : `${(ms / 1000).toFixed(3)}s`
+  if (ms === null) return null;
+  return legacy ? formatUseTime(ms / 1000) : `${(ms / 1000).toFixed(3)}s`;
+}
+
+export function formatDualTps(
+  overallTps: number | null | undefined,
+  trimmedTps: number | null | undefined,
+): string {
+  if (overallTps == null && trimmedTps == null) {
+    return "N/A";
+  }
+  const overallStr = overallTps != null ? overallTps.toFixed(1) : "~";
+  const trimmedStr = trimmedTps != null ? trimmedTps.toFixed(1) : "~";
+  return `${overallStr}/${trimmedStr}`;
 }
 
 export function getLogTiming(log: TimingLog, other?: LogOtherData | null) {
-  const invalid = other?.delivery_timing_invalid === true
+  const invalid = other?.delivery_timing_invalid === true;
   const delivery =
     !invalid && isDeliveryTiming(other?.delivery_timing)
       ? other.delivery_timing
-      : null
-  const legacy = delivery === null && !invalid
-  let totalMs: number | null = null
-  if (delivery) totalMs = delivery.total_ms
-  else if (legacy) totalMs = log.use_time * 1000
-  let firstMs: number | null = null
+      : null;
+  const legacy = delivery === null && !invalid;
+  let totalMs: number | null = null;
+  if (delivery) totalMs = delivery.total_ms;
+  else if (legacy) totalMs = log.use_time * 1000;
+  let firstMs: number | null = null;
   if (delivery) {
-    firstMs = delivery.ttft_ms
-  } else if (legacy && typeof other?.frt === 'number' && other.frt > 0) {
-    firstMs = other.frt
+    firstMs = delivery.ttft_ms;
+  } else if (legacy && typeof other?.frt === "number" && other.frt > 0) {
+    firstMs = other.frt;
   }
 
-  let averageTps: number | null = null
+  let averageTps: number | null = null;
   if (delivery) {
-    let generationMs: number | null = delivery.total_ms
+    let generationMs: number | null = delivery.total_ms;
     if (log.is_stream) {
-      generationMs = firstMs === null ? null : delivery.total_ms - firstMs
+      generationMs = firstMs === null ? null : delivery.total_ms - firstMs;
     }
     if (
       generationMs !== null &&
@@ -89,37 +101,54 @@ export function getLogTiming(log: TimingLog, other?: LogOtherData | null) {
       Number.isFinite(log.completion_tokens) &&
       log.completion_tokens > 0
     ) {
-      const rate = log.completion_tokens / (generationMs / 1000)
-      averageTps = Number.isFinite(rate) ? rate : null
+      const rate = log.completion_tokens / (generationMs / 1000);
+      averageTps = Number.isFinite(rate) ? rate : null;
     }
   } else if (legacy) {
     // 保留旧记录的桌面 TPS 算法，不用上游数据补齐新交付指标。
-    const bt = other?.bamboo_timing
-    const ttftMs = bt?.ttft_ms && bt.ttft_ms > 0 ? bt.ttft_ms : firstMs
+    const bt = other?.bamboo_timing;
+    const ttftMs = bt?.ttft_ms && bt.ttft_ms > 0 ? bt.ttft_ms : firstMs;
     const tokens =
       log.completion_tokens > 0
         ? log.completion_tokens
-        : (bt?.output_tokens ?? 0)
+        : (bt?.output_tokens ?? 0);
     const seconds =
       log.is_stream && ttftMs && ttftMs > 0
         ? log.use_time - ttftMs / 1000
-        : log.use_time
-    if (seconds > 0 && tokens > 0) averageTps = tokens / seconds
+        : log.use_time;
+    if (seconds > 0 && tokens > 0) averageTps = tokens / seconds;
   }
 
   const tokensPerSecond =
-    legacy && typeof other?.tps === 'number' && other.tps > 0
+    legacy && typeof other?.tps === "number" && other.tps > 0
       ? other.tps
-      : averageTps
+      : averageTps;
+  // 常规平均 TPS：基于总耗时与输出 Token 计算（全生命周期吞吐）
+  let overallTps: number | null = null;
+  if (
+    totalMs !== null &&
+    totalMs > 0 &&
+    Number.isFinite(log.completion_tokens) &&
+    log.completion_tokens > 0
+  ) {
+    const rate = log.completion_tokens / (totalMs / 1000);
+    overallTps = Number.isFinite(rate) ? rate : null;
+  }
+  // 去除首字 TPS：仅在流式且有效扣除首字时适用；非流式不适用显示 ~
+  const trimmedTps = log.is_stream ? averageTps : null;
   // 移动端旧记录原本按整个请求耗时计算，保持历史数值不变。
-  let mobileTokensPerSecond = tokensPerSecond
+  let mobileTokensPerSecond = tokensPerSecond;
   if (legacy) {
     mobileTokensPerSecond =
       log.use_time > 0 && log.completion_tokens > 0
         ? log.completion_tokens / log.use_time
-        : null
+        : null;
   }
-  const bt = other?.bamboo_timing
+  const bt = other?.bamboo_timing;
+  const isInternal = other?.host_tool_internal === true;
+  const safeOverallTps = isInternal ? null : overallTps;
+  const safeTrimmedTps = isInternal ? null : trimmedTps;
+  const safeTokensPerSecond = isInternal ? null : tokensPerSecond;
 
   return {
     legacy,
@@ -128,11 +157,12 @@ export function getLogTiming(log: TimingLog, other?: LogOtherData | null) {
     firstMs,
     totalLabel: formatTimingMs(totalMs, legacy),
     firstLabel: formatTimingMs(firstMs, legacy),
+    overallTps: safeOverallTps,
+    trimmedTps: safeTrimmedTps,
+    dualTpsLabel: formatDualTps(safeOverallTps, safeTrimmedTps),
     averageTps,
-    tokensPerSecond: other?.host_tool_internal ? null : tokensPerSecond,
-    mobileTokensPerSecond: other?.host_tool_internal
-      ? null
-      : mobileTokensPerSecond,
+    tokensPerSecond: safeTokensPerSecond,
+    mobileTokensPerSecond: isInternal ? null : mobileTokensPerSecond,
     phaseTiming: bt
       ? {
           thinkingMs: bt.thinking_ms,
@@ -140,5 +170,5 @@ export function getLogTiming(log: TimingLog, other?: LogOtherData | null) {
           toolMs: bt.tool_ms,
         }
       : undefined,
-  }
+  };
 }

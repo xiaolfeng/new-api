@@ -16,45 +16,45 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useTranslation } from 'react-i18next'
+import { useTranslation } from "react-i18next";
 
-import { formatNumber } from '@/lib/format'
+import { formatNumber } from "@/lib/format";
 
-import { formatTimingMs, getLogTiming, type TimingLog } from '../../lib/timing'
-import type { DeliveryTiming, LogOtherData, UpstreamTiming } from '../../types'
-import { TimingMetricsCell } from '../timing-metrics-cell'
-import { DetailRow, DetailSection } from './log-detail-layout'
+import { formatTimingMs, getLogTiming, type TimingLog } from "../../lib/timing";
+import type { DeliveryTiming, LogOtherData, UpstreamTiming } from "../../types";
+import { TimingMetricsCell } from "../timing-metrics-cell";
+import { DetailRow, DetailSection } from "./log-detail-layout";
 
-const deliveryStatusLabels: Record<DeliveryTiming['status'], string> = {
-  completed: 'Completed',
-  cancelled: 'Cancelled',
-  write_error: 'Write error',
-  upstream_error: 'Upstream error',
-}
+const deliveryStatusLabels: Record<DeliveryTiming["status"], string> = {
+  completed: "Completed",
+  cancelled: "Cancelled",
+  write_error: "Write error",
+  upstream_error: "Upstream error",
+};
 
 export function LogTimingDetails(props: {
-  log: TimingLog
-  other: LogOtherData | null
+  log: TimingLog;
+  other: LogOtherData | null;
 }) {
-  const { t } = useTranslation()
-  const metrics = getLogTiming(props.log, props.other)
-  const rawHops = props.other?.bamboo_timing_hops
+  const { t } = useTranslation();
+  const metrics = getLogTiming(props.log, props.other);
+  const rawHops = props.other?.bamboo_timing_hops;
   const hops = Array.isArray(rawHops)
     ? rawHops.filter(
-        (hop) => hop && Number.isInteger(hop.hop_index) && hop.hop_index > 0
+        (hop) => hop && Number.isInteger(hop.hop_index) && hop.hop_index > 0,
       )
-    : []
-  const singleTiming = props.other?.bamboo_timing
+    : [];
+  const singleTiming = props.other?.bamboo_timing;
 
   return (
     <>
       <DetailRow
-        label={metrics.legacy ? t('Response Time') : t('Service-side delivery')}
+        label={metrics.legacy ? t("Response Time") : t("Service-side delivery")}
         value={
           <TimingMetricsCell
             log={props.log}
             other={props.other}
-            indicator='dot'
+            indicator="dot"
           />
         }
       />
@@ -62,39 +62,39 @@ export function LogTimingDetails(props: {
         <>
           {metrics.delivery && (
             <DetailRow
-              label={t('Delivery status')}
+              label={t("Delivery status")}
               value={t(deliveryStatusLabels[metrics.delivery.status])}
             />
           )}
           <DetailRow
-            label={t('TPS')}
+            label={t("TPS")}
             value={
-              metrics.tokensPerSecond === null
-                ? t('N/A')
-                : `${metrics.tokensPerSecond.toFixed(1)} t/s`
+              metrics.dualTpsLabel === "N/A"
+                ? t("N/A")
+                : `${metrics.dualTpsLabel} t/s`
             }
             mono
           />
         </>
       )}
       {(hops.length > 1 || props.other?.bamboo_timing) && (
-        <DetailSection label={t('Upstream timing')}>
+        <DetailSection label={t("Upstream timing")}>
           {hops.length > 1
             ? hops.map((hop) => (
                 <div
                   key={hop.hop_index}
-                  className='space-y-1 not-first:border-t not-first:pt-2'
+                  className="space-y-1 not-first:border-t not-first:pt-2"
                 >
-                  <p className='text-muted-foreground text-xs font-medium'>
-                    {t('Upstream hop {{index}}', { index: hop.hop_index })}
+                  <p className="text-muted-foreground text-xs font-medium">
+                    {t("Upstream hop {{index}}", { index: hop.hop_index })}
                   </p>
                   <UpstreamTimingRows timing={hop} />
                 </div>
               ))
             : singleTiming && (
-                <div className='space-y-1'>
-                  <p className='text-muted-foreground text-xs font-medium'>
-                    {t('Last upstream hop')}
+                <div className="space-y-1">
+                  <p className="text-muted-foreground text-xs font-medium">
+                    {t("Last upstream hop")}
                   </p>
                   <UpstreamTimingRows timing={singleTiming} />
                 </div>
@@ -102,28 +102,28 @@ export function LogTimingDetails(props: {
         </DetailSection>
       )}
     </>
-  )
+  );
 }
 
 function UpstreamTimingRows(props: { timing: UpstreamTiming }) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
   const durations: [string, number | undefined][] = [
-    ['Duration', props.timing.total_ms],
-    ['First token', props.timing.ttft_ms],
-    ['Thinking', props.timing.thinking_ms],
-    ['Output', props.timing.content_ms],
-    ['Tool', props.timing.tool_ms],
-  ]
+    ["Duration", props.timing.total_ms],
+    ["First token", props.timing.ttft_ms],
+    ["Thinking", props.timing.thinking_ms],
+    ["Output", props.timing.content_ms],
+    ["Tool", props.timing.tool_ms],
+  ];
   const rates: [string, number | undefined][] = [
-    ['Thinking TPS', props.timing.thinking_tps],
-    ['Output TPS', props.timing.output_tps],
-    ['Tool TPS', props.timing.tool_tps],
-  ]
+    ["Thinking TPS", props.timing.thinking_tps],
+    ["Output TPS", props.timing.output_tps],
+    ["Tool TPS", props.timing.tool_tps],
+  ];
   const tokens: [string, number | undefined][] = [
-    ['Thinking Tokens', props.timing.thinking_tokens],
-    ['Output Tokens', props.timing.output_tokens],
-    ['Tool Tokens', props.timing.tool_tokens],
-  ]
+    ["Thinking Tokens", props.timing.thinking_tokens],
+    ["Output Tokens", props.timing.output_tokens],
+    ["Tool Tokens", props.timing.tool_tokens],
+  ];
   return (
     <>
       {durations.map(([label, ms]) => (
@@ -131,9 +131,9 @@ function UpstreamTimingRows(props: { timing: UpstreamTiming }) {
           key={label}
           label={t(label)}
           value={
-            typeof ms === 'number' && Number.isFinite(ms) && ms >= 0
+            typeof ms === "number" && Number.isFinite(ms) && ms >= 0
               ? formatTimingMs(ms)
-              : t('N/A')
+              : t("N/A")
           }
           mono
         />
@@ -143,9 +143,9 @@ function UpstreamTimingRows(props: { timing: UpstreamTiming }) {
           key={label}
           label={t(label)}
           value={
-            typeof rate === 'number' && Number.isFinite(rate)
-              ? `${rate < 0 ? '~' : ''}${Math.abs(rate).toFixed(1)} t/s`
-              : t('N/A')
+            typeof rate === "number" && Number.isFinite(rate)
+              ? `${rate < 0 ? "~" : ""}${Math.abs(rate).toFixed(1)} t/s`
+              : t("N/A")
           }
           mono
         />
@@ -155,13 +155,13 @@ function UpstreamTimingRows(props: { timing: UpstreamTiming }) {
           key={label}
           label={t(label)}
           value={
-            typeof count === 'number' && Number.isFinite(count) && count >= 0
+            typeof count === "number" && Number.isFinite(count) && count >= 0
               ? formatNumber(count)
-              : t('N/A')
+              : t("N/A")
           }
           mono
         />
       ))}
     </>
-  )
+  );
 }
