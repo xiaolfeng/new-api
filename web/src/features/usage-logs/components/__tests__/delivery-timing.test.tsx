@@ -138,9 +138,7 @@ it("renders matching delivery TTFT and duration in desktop, mobile and the real 
   expect(within(dialog).getByText("Completed")).toBeVisible();
   expect(within(dialog).getByText("Upstream timing")).toBeVisible();
   expect(within(dialog).getByText("80.0 t/s")).toBeVisible();
-  expect(
-    within(screen.getByTestId("desktop-tps")).getByText("7.0/~"),
-  ).toBeVisible();
+  expect(screen.getByTestId("desktop-tps")).toHaveTextContent("7.0/~");
   expect(
     within(screen.getByTestId("desktop-tps")).getByText("Upstream"),
   ).toBeVisible();
@@ -176,7 +174,7 @@ it("renders zero total time in all views rather than hiding the detail timing", 
   })) {
     expect(within(view).getAllByText("0.000s")).toHaveLength(2);
   }
-  expect(screen.getByTestId("desktop-tps")).toHaveTextContent("N/A");
+  expect(screen.getByTestId("desktop-tps")).toHaveTextContent("~");
 });
 
 it("shows unavailable delivery metrics rather than legacy values for the invalid marker", () => {
@@ -198,7 +196,7 @@ it("shows unavailable delivery metrics rather than legacy values for the invalid
     ).not.toBeInTheDocument();
     expect(within(view).queryByText("7.0s")).not.toBeInTheDocument();
   }
-  expect(screen.getByTestId("desktop-tps")).toHaveTextContent("N/A");
+  expect(screen.getByTestId("desktop-tps")).toHaveTextContent("~");
 });
 
 it.each([true, false])(
@@ -268,5 +266,5 @@ it("shows a numeric zero rate distinctly from an unavailable rate", () => {
     </>,
   );
   expect(screen.getByTestId("zero-rate")).toHaveTextContent("0.0 t/s");
-  expect(screen.getByTestId("absent-rate")).toHaveTextContent("N/A");
+  expect(screen.getByTestId("absent-rate")).toHaveTextContent("~");
 });

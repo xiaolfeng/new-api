@@ -20,7 +20,11 @@ import { describe, expect, it } from "vitest";
 
 import type { DeliveryTiming } from "../../types";
 import { parseLogOther } from "../format";
-import { formatDualTps, getLogTiming } from "../timing";
+import {
+  calculateInfraEfficiency,
+  formatDualTps,
+  getLogTiming,
+} from "../timing";
 
 const log = { use_time: 7, is_stream: true, completion_tokens: 50 };
 const delivery: DeliveryTiming = {
@@ -180,8 +184,8 @@ describe("delivery average TPS reliability", () => {
       expect(formatDualTps(54.34, null)).toBe("54.3/~");
     });
 
-    it("formats N/A when neither is available", () => {
-      expect(formatDualTps(null, null)).toBe("N/A");
+    it("formats tilde when neither is available", () => {
+      expect(formatDualTps(null, null)).toBe("~");
     });
 
     it("computes overall and trimmed TPS for tool call scenario where first word matches total time", () => {
@@ -218,6 +222,52 @@ describe("delivery average TPS reliability", () => {
       expect(metrics.overallTps).toBe(50); // 100 / 2s = 50 t/s
       expect(metrics.trimmedTps).toBe(100); // 100 / 1s = 100 t/s
       expect(metrics.dualTpsLabel).toBe("50.0/100.0");
+    });
+
+    describe("INFRA efficiency algorithm", () => {
+      it("returns null when either metric is missing or non-positive", () => {
+        expect(calculateInfraEfficiency(null, 50)).toBeNull();
+        expect(calculateInfraEfficiency(50, null)).toBeNull();
+        expect(calculateInfraEfficiency(0, 50)).toBeNull();
+        expect(calculateInfraEfficiency(50, 0)).toBeNull();
+        expect(calculateInfraEfficiency(-10, 50)).toBeNull();
+      });
+
+      it("calculates high efficiency when TTFT overhead is minimal", () => {
+        const result = calculateInfraEfficiency(90, 100);
+        expect(result).not.toBeNull();
+        expect(result?.efficiencyRate).toBe(90);
+        expect(result?.tpsDrop).toBe(10);
+        expect(result?.tpsDropRate).toBe(10);
+        expect(result?.level).toBe("excellent");
+      });
+
+      it("calculates moderate efficiency when TTFT introduces noticeable latency", () => {
+        const result = calculateInfraEfficiency(50, 75);
+        expect(result).not.toBeNull();
+        expect(Number(result?.efficiencyRate.toFixed(1))).toBe(66.7);
+        expect(result?.tpsDrop).toBe(25);
+        expect(Number(result?.tpsDropRate.toFixed(1))).toBe(33.3);
+        expect(result?.level).toBe("good");
+      });
+
+      it("identifies severe TTFT bottleneck as poor efficiency", () => {
+        const result = calculateInfraEfficiency(15, 60);
+        expect(result).not.toBeNull();
+        expect(result?.efficiencyRate).toBe(25);
+        expect(result?.tpsDrop).toBe(45);
+        expect(result?.tpsDropRate).toBe(75);
+        expect(result?.level).toBe("poor");
+      });
+
+      it("clamps efficiency rate to 100% even if clock jitter makes overall TPS slightly exceed trimmed", () => {
+        const result = calculateInfraEfficiency(105, 100);
+        expect(result).not.toBeNull();
+        expect(result?.efficiencyRate).toBe(100);
+        expect(result?.tpsDrop).toBe(0);
+        expect(result?.tpsDropRate).toBe(0);
+        expect(result?.level).toBe("excellent");
+      });
     });
   });
 });

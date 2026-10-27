@@ -48,24 +48,20 @@ func setupLogSearchCountTestDB(t *testing.T) *gorm.DB {
 	return db
 }
 
-// TestGetUserLogsCountIsCapped 计数封顶必须真正限制统计扫描量：
-// 超过 logSearchCountLimit 时总数封顶返回，而不是全量计数后丢弃精度。
-func TestGetUserLogsCountIsCapped(t *testing.T) {
+// TestGetUserLogsCountNotCapped 验证日志统计总数不设 10000 封顶，真实反映全部数据量。
+func TestGetUserLogsCountNotCapped(t *testing.T) {
 	db := setupLogSearchCountTestDB(t)
 
-	logs := make([]Log, 0, logSearchCountLimit+50)
-	for i := 0; i < logSearchCountLimit+50; i++ {
+	const testCount = 10050
+	logs := make([]Log, 0, testCount)
+	for i := 0; i < testCount; i++ {
 		logs = append(logs, Log{UserId: 7, CreatedAt: int64(1711400000 + i), Type: LogTypeConsume})
 	}
 	require.NoError(t, db.CreateInBatches(logs, 500).Error)
 
 	_, total, err := GetUserLogs(7, LogFilter{Type: LogTypeUnknown}, 0, 10)
 	require.NoError(t, err)
-	assert.EqualValues(t, logSearchCountLimit, total, "超过上限时 total 必须封顶在 logSearchCountLimit")
-
-	_, total, err = GetUserLogs(7, LogFilter{Type: LogTypeUnknown}, 0, 10)
-	require.NoError(t, err)
-	assert.EqualValues(t, logSearchCountLimit, total)
+	assert.EqualValues(t, testCount, total, "超过 10000 条时 total 必须真实统计而非封顶截断")
 }
 
 // TestGetUserLogsCountExactBelowCap 未达上限时 total 保持精确值。

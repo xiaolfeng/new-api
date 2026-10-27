@@ -88,6 +88,7 @@ import { LogCostDisplay } from "../log-cost-display";
 import { ModelBadge } from "../model-badge";
 import { TimingMetricsCell } from "../timing-metrics-cell";
 import { useUsageLogsContext } from "../usage-logs-provider";
+import { TpsInfraTooltipContent } from "../tps-infra-tooltip";
 
 interface DetailSegment {
   text: string;
@@ -102,6 +103,21 @@ function formatRatioCompact(ratio: number | undefined): string {
     : ratio.toFixed(4).replace(/\.?0+$/, "");
 }
 
+function getTpsColorClass(tps: number | null | undefined): string {
+  if (tps == null) {
+    return "text-muted-foreground";
+  }
+  if (tps >= 81) {
+    return "text-green-600 dark:text-green-400";
+  }
+  if (tps >= 51) {
+    return "text-lime-600 dark:text-lime-400";
+  }
+  if (tps >= 11) {
+    return "text-yellow-600 dark:text-yellow-400";
+  }
+  return "text-red-600 dark:text-red-400";
+}
 function getGroupRatio(other: LogOtherData | null): number | null {
   const userGroupRatio = other?.user_group_ratio;
   if (
@@ -905,19 +921,11 @@ export function useCommonLogsColumns(
 
           const overallTps = metrics.overallTps;
           const trimmedTps = metrics.trimmedTps;
-          const dualTps = metrics.dualTpsLabel;
-          const benchmarkTps = overallTps ?? trimmedTps;
-
-          let colorClass = "text-red-600 dark:text-red-400";
-          if (benchmarkTps != null) {
-            if (benchmarkTps >= 81) {
-              colorClass = "text-green-600 dark:text-green-400";
-            } else if (benchmarkTps >= 51) {
-              colorClass = "text-lime-600 dark:text-lime-400";
-            } else if (benchmarkTps >= 11) {
-              colorClass = "text-yellow-600 dark:text-yellow-400";
-            }
-          }
+          const hasDualTps = overallTps != null || trimmedTps != null;
+          const overallColor = getTpsColorClass(overallTps);
+          const trimmedColor = getTpsColorClass(trimmedTps);
+          const overallText = overallTps != null ? overallTps.toFixed(1) : "~";
+          const trimmedText = trimmedTps != null ? trimmedTps.toFixed(1) : "~";
 
           let rateRow: ReactNode = null;
           if (hasBambooRates) {
@@ -969,17 +977,36 @@ export function useCommonLogsColumns(
 
           return (
             <div className="flex flex-col gap-0.5">
-              {dualTps !== "N/A" ? (
-                <span
-                  className={`font-mono text-sm font-medium tabular-nums ${colorClass}`}
-                >
-                  {dualTps}
-                </span>
-              ) : (
-                <span className="text-muted-foreground text-xs">
-                  {t("N/A")}
-                </span>
-              )}
+              <TooltipProvider delay={200}>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      hasDualTps ? (
+                        <span className="font-mono text-sm font-medium tabular-nums cursor-default">
+                          <span className={overallColor}>{overallText}</span>
+                          <span className="text-foreground dark:text-white">
+                            /
+                          </span>
+                          <span className={trimmedColor}>{trimmedText}</span>
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground font-mono text-sm font-medium tabular-nums cursor-default">
+                          ~
+                        </span>
+                      )
+                    }
+                  />
+                  <TooltipContent side="top" className="p-0">
+                    <TpsInfraTooltipContent
+                      overallTps={overallTps}
+                      trimmedTps={trimmedTps}
+                      efficiency={metrics.infraEfficiency}
+                      firstLabel={metrics.firstLabel}
+                      totalLabel={metrics.totalLabel}
+                    />
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               {!compactMode && rateRow}
             </div>
           );

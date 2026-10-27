@@ -802,7 +802,7 @@ func GetAllLogs(filter LogFilter, startIdx int, num int) (logs []*Log, total int
 	if err != nil {
 		return nil, 0, err
 	}
-	err = countLogsCapped(tx, &total)
+	err = countLogs(tx, &total)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -909,20 +909,8 @@ func appendAdminLogSummaries(logs []*Log) {
 	}
 }
 
-const logSearchCountLimit = 10000
-
-// countLogsCapped 用子查询封顶计数：`SELECT count(*) FROM (… LIMIT limit+1)`。
-// 直接 `Limit(n).Count()` 只限制结果行数（恒为 1），不会限制扫描量；
-// 封顶后超出部分的总数固定返回 limit，换取计数成本有界。
-func countLogsCapped(tx *gorm.DB, total *int64) error {
-	subQuery := tx.Session(&gorm.Session{}).Model(&Log{}).Select("1").Limit(logSearchCountLimit + 1)
-	if err := LOG_DB.Table("(?) as capped_logs", subQuery).Count(total).Error; err != nil {
-		return err
-	}
-	if *total > logSearchCountLimit {
-		*total = logSearchCountLimit
-	}
-	return nil
+func countLogs(tx *gorm.DB, total *int64) error {
+	return tx.Session(&gorm.Session{}).Model(&Log{}).Count(total).Error
 }
 
 func GetUserLogs(userId int, filter LogFilter, startIdx int, num int) (logs []*Log, total int64, err error) {
@@ -930,7 +918,7 @@ func GetUserLogs(userId int, filter LogFilter, startIdx int, num int) (logs []*L
 	if err != nil {
 		return nil, 0, err
 	}
-	err = countLogsCapped(tx, &total)
+	err = countLogs(tx, &total)
 	if err != nil {
 		common.SysError(common.LogText("failed to count user logs: %s", err.Error()))
 		return nil, 0, common.NewMessage("Failed to query logs")

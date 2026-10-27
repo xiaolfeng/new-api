@@ -291,14 +291,18 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
   const { t } = useTranslation();
   const showStreamError =
     props.isStream && props.streamStatus && props.streamStatus.status !== "ok";
-  let tpsLabel = props.deliveryTiming ? t("N/A") : "—";
-  if (props.dualTps && props.dualTps !== "N/A") {
+  let tpsLabel = props.deliveryTiming ? "~" : "—";
+  const hasDualTps =
+    Boolean(props.dualTps) && props.dualTps !== "N/A" && props.dualTps !== "~";
+  if (hasDualTps) {
     tpsLabel = `${props.dualTps} t/s`;
   } else if (props.tokensPerSecond != null) {
     const rate = props.deliveryTiming
       ? props.tokensPerSecond.toFixed(1)
       : Math.round(props.tokensPerSecond);
     tpsLabel = `${rate} t/s`;
+  } else if (props.dualTps === "~") {
+    tpsLabel = "~";
   }
   let streamLabel = props.isStream ? t("Stream") : t("Non-stream");
   if (props.isTask) {
@@ -345,7 +349,7 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
       </span>
       {(!props.compact ||
         props.deliveryTiming ||
-        props.dualTps != null ||
+        hasDualTps ||
         (props.isStream && props.tokensPerSecond != null)) && (
         <span className="text-muted-foreground/60 px-0.5 tabular-nums">
           {tpsLabel}

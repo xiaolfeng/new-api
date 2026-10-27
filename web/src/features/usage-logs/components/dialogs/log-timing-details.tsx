@@ -69,8 +69,10 @@ export function LogTimingDetails(props: {
           <DetailRow
             label={t("TPS")}
             value={
+              !metrics.dualTpsLabel ||
+              metrics.dualTpsLabel === "~" ||
               metrics.dualTpsLabel === "N/A"
-                ? t("N/A")
+                ? "~"
                 : `${metrics.dualTpsLabel} t/s`
             }
             mono
@@ -145,7 +147,7 @@ function UpstreamTimingRows(props: { timing: UpstreamTiming }) {
           value={
             typeof rate === "number" && Number.isFinite(rate)
               ? `${rate < 0 ? "~" : ""}${Math.abs(rate).toFixed(1)} t/s`
-              : t("N/A")
+              : "~"
           }
           mono
         />
