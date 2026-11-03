@@ -89,6 +89,7 @@ func StreamResponsesWebSocket(
 			relayReq.Config.MaxTokens = int64(def)
 		}
 	}
+	applyChannelConstraints(info, relayReq.Config)
 
 	streamIDFromReq, _ := provider.GetExtraString(relayReq.Config.ProviderExtra, "stream_id")
 	if streamID == "" {

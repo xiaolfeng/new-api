@@ -131,6 +131,8 @@ func ChatRelay(c *gin.Context, info *relaycommon.RelayInfo,
 		}
 	}
 
+	applyChannelConstraints(info, relayReq.Config)
+
 	info.BambooRelayData = extractBambooRelayData(relayReq)
 	writer := newDeliveryWriter(c, info, codecFmt)
 	defer func() {
@@ -686,3 +688,25 @@ func extractBambooRelayData(req *bamboocodec.RelayRequest) *relaycommon.BambooRe
 	}
 	return extract
 }
+
+// applyChannelConstraints 依据渠道安全设置过滤可能产生额外计费或越权透传的字段（如 service_tier 与 speed）。
+func applyChannelConstraints(info *relaycommon.RelayInfo, config *bamboosdk.RequestConfig) {
+	if info == nil || config == nil {
+		return
+	}
+	if model_setting.GetGlobalSettings().PassThroughRequestEnabled || info.ChannelSetting.PassThroughBodyEnabled {
+		return
+	}
+	if !info.ChannelOtherSettings.AllowServiceTier {
+		config.ServiceTier = ""
+		if config.ProviderExtra != nil {
+			delete(config.ProviderExtra, "service_tier")
+		}
+	}
+	if !info.ChannelOtherSettings.AllowSpeed {
+		if config.ProviderExtra != nil {
+			delete(config.ProviderExtra, "speed")
+		}
+	}
+}
+

@@ -32,7 +32,7 @@
 | 子系统 | 高频冲突文件路径 | XiaoLFeng 改动本质与意图 | 主线合并保护策略 (Merge Strategy) |
 | :--- | :--- | :--- | :--- |
 | **Bamboo 中继归一化内核** | `relay/bamboo/**`<br>`relay/bamboo/hosttool/**` | 独立的中继协议归一化引擎，将 40+ 上游供应商统一为结构化流，内建 SDK 拦截器与流式重试机制 | **全量保留**。上游主线无此目录；若主线修改了 `relay/relay_adaptor.go`，须确保 `bamboo.ChatRelay` 优先分发逻辑不被删除 |
-| **Responses WebSocket 跨协议** | `relay/responses_websocket.go`<br>`relay/responses_websocket_test.go`<br>`controller/responses_websocket.go`<br>`model/channel_constraint.go`<br>`go.mod` | v2.5.3：下游 Responses WebSocket 在 `EnableBambooRelay` 打开后，可把 Anthropic / Gemini / OpenAI 兼容渠道经 bamboo 转成 Responses 事件。原生 OpenAI、Codex、Sub2API、NewAPI 及无转换器高级自定义路由仍走长连接透传。bamboo-messages 固定为已发布的 `v1.1.0`（`b2527b1`） | **合并时保留转换分支**。主线若改了上述 WebSocket 文件，保留 `runBambooResponsesTurn`、`IsResponsesWebSocketNative`、`channelSupportsResponsesWebSocket` 与 `WithWebSocketMode`；不要把 `go.mod` 的 bamboo-messages 退回 v1.0.15 |
+| **Responses WebSocket 跨协议** | `relay/responses_websocket.go`<br>`relay/responses_websocket_test.go`<br>`controller/responses_websocket.go`<br>`model/channel_constraint.go`<br>`go.mod` | v2.5.3：下游 Responses WebSocket 在 `EnableBambooRelay` 打开后，可把 Anthropic / Gemini / OpenAI 兼容渠道经 bamboo 转成 Responses 事件。原生 OpenAI、Codex、Sub2API、NewAPI 及无转换器高级自定义路由仍走长连接透传。bamboo-messages 固定为已发布的 `v1.1.1` | **合并时保留转换分支**。主线若改了上述 WebSocket 文件，保留 `runBambooResponsesTurn`、`IsResponsesWebSocketNative`、`channelSupportsResponsesWebSocket` 与 `WithWebSocketMode`；不要把 `go.mod` 的 bamboo-messages 退回旧版本 |
 | **真实交付计时体系** | `relay/common/delivery_timing.go`<br>`relay/common/relay_info.go`<br>`relay/bamboo/delivery.go`<br>`service/log_info_generate.go`<br>`pkg/perf_metrics/metrics.go` | 突破主线粗粒度整秒 `use_time` 限制，引入纳秒级服务端首字写出 (`ttft_ms`)、总交付耗时 (`total_ms`)、多跳追踪 (`bamboo_timing_hops`)，提供 `FirstResponseDurationMs()` 彻底解决零值纪元偏移污染指标的问题 | **必须保留定制字段与守卫**。主线若更新了 `RelayInfo`，合并时保留 `DeliveryTiming`、`BambooTiming`、`FirstResponseDurationMs()`；`metrics.go` 须保留安全首字耗时判断 |
 | **协议双向转换桥** | `relaykit/relayconvert/**` | 支持 OpenAI Responses 协议与标准 Chat 格式的双向无损转换，包含 output item ID 对齐、原请求字段回显与工具调用提升 | **必须保留扩展转换逻辑**。改动后必须执行 `cd relaykit && GOWORK=off go build ./...` 确保独立模块契约不被破坏 |
 | **深度日志与会话感知** | `common/client_profile.go`<br>`model/log.go`<br>`controller/log.go`<br>`router/api-router.go`<br>`web/src/features/usage-logs/**` | 1. 自动识别 Claude Code / Codex / ZCode / Pi 客户端与 SubAgent 会话；<br>2. 列表响应剥离 `record`/`full_log` 大字段，改由 `/api/log/detail` 按需拉取；<br>3. 前端稳定行 ID 与详情弹层自动暂停刷新 | **禁止回退大字段列表**。若主线修改 `GetAllLogs`/`GetUserLogs`，必须保留 `stripLogDetailPayload`；保留 `/api/log/detail` 路由与控制器方法；保留前端 `getLogRowId` |
@@ -72,7 +72,7 @@ git merge upstream/main
 
 - **遇到 `relay/` 冲突**：保留 `relay/bamboo/` 目录全量代码；保留 `RelayInfo` 中的 `DeliveryTiming`、`BambooTiming`、`FirstResponseDurationMs()`；
 
-- **遇到 Responses WebSocket 冲突**（`relay/responses_websocket.go`、`controller/responses_websocket.go`、`model/channel_constraint.go`、`go.mod`）：保留 bamboo 转换路径，不要覆盖成纯透传；`go.mod` 的 `github.com/bamboo-services/bamboo-messages` 保持 `v1.1.0`；
+- **遇到 Responses WebSocket 冲突**（`relay/responses_websocket.go`、`controller/responses_websocket.go`、`model/channel_constraint.go`、`go.mod`）：保留 bamboo 转换路径，不要覆盖成纯透传；`go.mod` 的 `github.com/bamboo-services/bamboo-messages` 保持 `v1.1.1`；
 
 - **遇到 `model/` 冲突**：重点保护 `countLogsCapped`、`id IN (SELECT id ... LIMIT n)` 批量删除、`RecordFailedTokenRecord` CAS 乐观锁与 `SaveQuotaDataCache` 失败保留；
 

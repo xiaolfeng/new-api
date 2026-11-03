@@ -12,6 +12,7 @@ import (
 	"github.com/QuantumNous/new-api/setting/model_setting"
 	"github.com/gin-gonic/gin"
 	relaycommon "github.com/QuantumNous/new-api/relay/common"
+	"github.com/QuantumNous/new-api/relaykit/dto"
 	"github.com/QuantumNous/new-api/relaykit/types"
 )
 
@@ -134,4 +135,127 @@ func TestChatRelay_ModelMappingPrecedence(t *testing.T) {
 		t.Fatalf("expected mapped model %q, got %q", "gemini-2.5-flash", relayReq.Config.Model)
 	}
 }
+
+func TestApplyChannelConstraints_ServiceTierAndSpeed(t *testing.T) {
+	tests := []struct {
+		name            string
+		otherSettings   dto.ChannelOtherSettings
+		passThrough     bool
+		initialTier     string
+		initialExtra    map[string]any
+		wantTier        string
+		wantSpeed       any
+		wantServiceTier any
+	}{
+		{
+			name: "default settings filter service_tier and speed",
+			otherSettings: dto.ChannelOtherSettings{
+				AllowServiceTier: false,
+				AllowSpeed:       false,
+			},
+			initialTier: "priority",
+			initialExtra: map[string]any{
+				"service_tier": "priority",
+				"speed":        "fast",
+				"other":        "keep",
+			},
+			wantTier:        "",
+			wantSpeed:       nil,
+			wantServiceTier: nil,
+		},
+		{
+			name: "allow service_tier preserves tier but filters speed",
+			otherSettings: dto.ChannelOtherSettings{
+				AllowServiceTier: true,
+				AllowSpeed:       false,
+			},
+			initialTier: "priority",
+			initialExtra: map[string]any{
+				"service_tier": "priority",
+				"speed":        "fast",
+				"other":        "keep",
+			},
+			wantTier:        "priority",
+			wantSpeed:       nil,
+			wantServiceTier: "priority",
+		},
+		{
+			name: "allow speed preserves speed but filters service_tier",
+			otherSettings: dto.ChannelOtherSettings{
+				AllowServiceTier: false,
+				AllowSpeed:       true,
+			},
+			initialTier: "priority",
+			initialExtra: map[string]any{
+				"service_tier": "priority",
+				"speed":        "fast",
+				"other":        "keep",
+			},
+			wantTier:        "",
+			wantSpeed:       "fast",
+			wantServiceTier: nil,
+		},
+		{
+			name: "pass through preserves everything",
+			otherSettings: dto.ChannelOtherSettings{
+				AllowServiceTier: false,
+				AllowSpeed:       false,
+			},
+			passThrough: true,
+			initialTier: "priority",
+			initialExtra: map[string]any{
+				"service_tier": "priority",
+				"speed":        "fast",
+			},
+			wantTier:        "priority",
+			wantSpeed:       "fast",
+			wantServiceTier: "priority",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			info := &relaycommon.RelayInfo{
+				ChannelMeta: &relaycommon.ChannelMeta{
+					ChannelOtherSettings: tt.otherSettings,
+					ChannelSetting: dto.ChannelSettings{
+						PassThroughBodyEnabled: tt.passThrough,
+					},
+				},
+			}
+			cfg := &bamboosdk.RequestConfig{
+				ServiceTier:   tt.initialTier,
+				ProviderExtra: make(map[string]any),
+			}
+			for k, v := range tt.initialExtra {
+				cfg.ProviderExtra[k] = v
+			}
+
+			applyChannelConstraints(info, cfg)
+
+			if cfg.ServiceTier != tt.wantTier {
+				t.Errorf("ServiceTier = %q, want %q", cfg.ServiceTier, tt.wantTier)
+			}
+			if tt.wantSpeed == nil {
+				if _, exists := cfg.ProviderExtra["speed"]; exists {
+					t.Errorf("expected speed to be removed, got %v", cfg.ProviderExtra["speed"])
+				}
+			} else {
+				if cfg.ProviderExtra["speed"] != tt.wantSpeed {
+					t.Errorf("speed = %v, want %v", cfg.ProviderExtra["speed"], tt.wantSpeed)
+				}
+			}
+			if tt.wantServiceTier == nil {
+				if _, exists := cfg.ProviderExtra["service_tier"]; exists {
+					t.Errorf("expected extra service_tier to be removed, got %v", cfg.ProviderExtra["service_tier"])
+				}
+			} else {
+				if cfg.ProviderExtra["service_tier"] != tt.wantServiceTier {
+					t.Errorf("extra service_tier = %v, want %v", cfg.ProviderExtra["service_tier"], tt.wantServiceTier)
+				}
+			}
+		})
+	}
+}
+
 
