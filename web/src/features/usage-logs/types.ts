@@ -234,6 +234,7 @@ export interface LogOtherData {
   cache_creation_tokens?: number
   cache_creation_tokens_5m?: number
   cache_creation_tokens_1h?: number
+  cache_creation_tokens_12h?: number
   // Authoritative total input tokens for cache-hit rate (written by backend).
   input_tokens_total?: number
   claude?: boolean
@@ -248,6 +249,7 @@ export interface LogOtherData {
   cache_creation_ratio?: number
   cache_creation_ratio_5m?: number
   cache_creation_ratio_1h?: number
+  cache_creation_ratio_12h?: number
   is_model_mapped?: boolean
   upstream_model_name?: string
   // Diagnostic only. Whether the names disagree is derived in the UI via

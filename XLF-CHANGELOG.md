@@ -111,6 +111,21 @@ cd web && bun run typecheck && cd ..
 
 ## 3. 版本演进历程与核心改动
 
+
+### 主线同步 (2026-11-05)
+
+**上游基线**：`upstream/main` @ `706144769`（`v1.0.0-rc.48`，发布于 2026-11-04）合并进 `newapi-xlf-v2`。
+
+- **上游核心演进接入**：
+  - **安全加固**：接入 Redis 用户/令牌/会话缓存签名完整性校验（#8200）；修复 2FA 锁定过期后重试计数重置缺陷（#8172）。
+  - **任务插件与模型能力**：支持用厂商原生 API 路径调用任务插件与原生格式响应（#8117）；Kling 4.0 动态计费与时长范围规范（#8118, #8125）；支持 Vertex AI 渠道 Gemini Omni 视频生成与 Token 计费（#8142, #8153）；引入任务模型定价缺失与插件下线提醒（#8117）。
+  - **渠道与协议增强**：Vertex AI 增加按渠道切换 v1beta1 接口开关（#8179）；Azure 渠道支持加入 Responses WebSocket 透传（#8047, #8075）；支持 gemini-4-argon 思考强度映射（#8177）；Gemini 向量改按上游 usageMetadata 计费（#8182）；修复 prompt_tokens_details 中 cache_creation_input_tokens 计费漏计（#7909）；改写请求时仅按需修改字段并保持原样顺序与数值（#8148）。
+  - **协议修复与高可用**：修复 Claude 转换大整数与非字符串 stop 处理（#7935, #7996）；修复 Gemini 文本与 tool_calls 并存时文本丢失（#7998）；修复单独 `[DONE]` 换行流终止（#8074）；可选开启上游 HTTP/2 健康检查（#8059）。
+- **定制不变量保护与冲突解决**：
+  - **Responses WebSocket 跨协议**：保留 `runBambooResponsesTurn` 与 `channelSupportsResponsesWebSocket` 转换分发；同步吸纳上游 Azure 原生 Responses WebSocket 支持；`bamboo-messages` 稳固维持 `v1.1.1`。
+  - **交付计时与日志体系**：严格保留 `FirstResponseDurationMs()`、`bamboo_timing_hops` 纳秒级交付追踪；保留客户端画像识别与 `/api/log/detail` 按需加载契约。
+  - **数据层可靠性**：保留封顶计数、乐观锁与多库兼容保护；修复 `RecordConsumeLog` 引用适配新签名。
+  - **前端与国际化**：全量保留 Portal 挂载与图表优化；平滑合并上游多币种与 12h 缓存创建展示；7 国语言包 7639 词条无缝合并并通过 `bun run i18n:sync` 规范化。
 ### v2.5.6 正式发布
 
 **周期**：2026-11-04 | **版本标记**：`v2.5.6`（tag 指向本台账同步提交）

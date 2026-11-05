@@ -469,13 +469,17 @@ func responsesRequestToolsToChat(raw json.RawMessage) ([]dto.ToolCallRequest, er
 		return nil, nil
 	}
 
-	var tools []map[string]any
+	var tools []json.RawMessage
 	if err := kitutil.Unmarshal(raw, &tools); err != nil {
 		return nil, fmt.Errorf("invalid tools: %w", err)
 	}
 
 	out := make([]dto.ToolCallRequest, 0, len(tools))
-	for _, tool := range tools {
+	for _, rawTool := range tools {
+		var tool map[string]any
+		if err := kitutil.Unmarshal(rawTool, &tool); err != nil {
+			return nil, fmt.Errorf("invalid tools: %w", err)
+		}
 		toolType := strings.TrimSpace(kitutil.Interface2String(tool["type"]))
 		switch toolType {
 		case "function":
@@ -484,7 +488,7 @@ func responsesRequestToolsToChat(raw json.RawMessage) ([]dto.ToolCallRequest, er
 				Function: dto.FunctionRequest{
 					Name:        strings.TrimSpace(kitutil.Interface2String(tool["name"])),
 					Description: kitutil.Interface2String(tool["description"]),
-					Parameters:  tool["parameters"],
+					Parameters:  kitutil.ObjectMember(rawTool, "parameters"),
 				},
 			})
 		case "namespace":
@@ -498,12 +502,16 @@ func responsesRequestToolsToChat(raw json.RawMessage) ([]dto.ToolCallRequest, er
 				if !ok || strings.TrimSpace(kitutil.Interface2String(sub["type"])) != "function" {
 					continue
 				}
+				var params json.RawMessage
+				if subParams, ok := sub["parameters"]; ok && subParams != nil {
+					params, _ = kitutil.Marshal(subParams)
+				}
 				out = append(out, dto.ToolCallRequest{
 					Type: "function",
 					Function: dto.FunctionRequest{
 						Name:        strings.TrimSpace(kitutil.Interface2String(sub["name"])),
 						Description: kitutil.Interface2String(sub["description"]),
-						Parameters:  sub["parameters"],
+						Parameters:  params,
 					},
 				})
 			}
@@ -569,11 +577,8 @@ func responsesRequestTextToChatResponseFormat(raw json.RawMessage) (*dto.Respons
 
 	out := &dto.ResponseFormat{Type: formatType}
 	if formatType == "json_schema" {
-		schemaRaw, err := kitutil.Marshal(format)
-		if err != nil {
-			return nil, err
-		}
-		out.JsonSchema = schemaRaw
+		// The client's bytes keep the schema's property order.
+		out.JsonSchema = kitutil.ObjectMember(raw, "format")
 	}
 	return out, nil
 }

@@ -113,10 +113,18 @@ const (
 	BambooUpstreamFormatResponses BambooUpstreamFormatType = "responses" // 强制使用 OpenAI Responses 协议
 )
 
+type AwsApiType string
+
+const (
+	AwsApiTypeInvokeModel AwsApiType = "invoke_model"
+	AwsApiTypeMantle      AwsApiType = "mantle"
+)
+
 type ChannelOtherSettings struct {
 	AzureResponsesVersion                 string                `json:"azure_responses_version,omitempty"`
-	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"`   // "json" or "api_key"
-	VertexProjectID                       string                `json:"vertex_project_id,omitempty"` // 仅当 vertex_key_type=api_key 时使用；JSON 模式下从 service account 解析
+	VertexKeyType                         VertexKeyType         `json:"vertex_key_type,omitempty"`    // "json" or "api_key"
+	VertexProjectID                       string                `json:"vertex_project_id,omitempty"`  // 仅当 vertex_key_type=api_key 时使用；JSON 模式下从 service account 解析
+	VertexAPIVersion                      string                `json:"vertex_api_version,omitempty"` // Google 模型（Gemini、Imagen）请求路径版本："v1"（默认）或 "v1beta1"
 	OpenRouterEnterprise                  *bool                 `json:"openrouter_enterprise,omitempty"`
 	ClaudeBetaQuery                       bool                  `json:"claude_beta_query,omitempty"`          // Claude 渠道是否强制追加 ?beta=true
 	AllowServiceTier                      bool                  `json:"allow_service_tier,omitempty"`         // 是否允许 service_tier 透传（默认过滤以避免额外计费）
@@ -128,6 +136,7 @@ type ChannelOtherSettings struct {
 	AllowIncludeObfuscation               bool                  `json:"allow_include_obfuscation,omitempty"`  // 是否允许 stream_options.include_obfuscation 透传（默认过滤以避免关闭流混淆保护）
 	DisableTaskPollingSleep               bool                  `json:"disable_task_polling_sleep,omitempty"` // 是否跳过异步任务轮询间隔
 	AwsKeyType                            AwsKeyType            `json:"aws_key_type,omitempty"`
+	AwsApiType                            AwsApiType            `json:"aws_api_type,omitempty"`
 	BambooUpstreamFormat                  string                `json:"bamboo_upstream_format,omitempty"`                     // bamboo 灰度模式下手动指定上游协议格式
 	BambooLegacyCompat                    *bool                 `json:"bamboo_legacy_compat,omitempty"`                       // bamboo 传统模式：使用 max_tokens 旧字段名而非 max_completion_tokens，不发送 reasoning_effort / parallel_tool_calls
 	BambooLegacyCacheKey                  *bool                 `json:"bamboo_legacy_cache_key,omitempty"`                    // bamboo Legacy 模式下是否发送 prompt_cache_key（如 Kimi/Moonshot 支持，GLM 不支持）
@@ -268,6 +277,8 @@ const (
 	advancedCustomEndpointPathOpenAIResponses        = "/v1/responses"
 	advancedCustomEndpointPathOpenAIResponsesCompact = "/v1/responses/compact"
 	advancedCustomEndpointPathOpenAIAlphaSearch      = "/v1/alpha/search"
+	advancedCustomEndpointPathDeepSeekToolsSearch    = "/v1/tools/search"
+	advancedCustomEndpointPathDeepSeekToolsFetch     = "/v1/tools/fetch"
 	advancedCustomEndpointPathClaudeMessages         = "/v1/messages"
 	advancedCustomEndpointPathJinaRerank             = "/v1/rerank"
 	advancedCustomEndpointPathImageGeneration        = "/v1/images/generations"
@@ -393,6 +404,10 @@ func advancedCustomEndpointTypeFromIncomingPath(incomingPath string) (types.Endp
 		return types.EndpointTypeOpenAIResponseCompact, true
 	case advancedCustomEndpointPathOpenAIAlphaSearch:
 		return types.EndpointTypeOpenAIAlphaSearch, true
+	case advancedCustomEndpointPathDeepSeekToolsSearch:
+		return types.EndpointTypeDeepSeekToolsSearch, true
+	case advancedCustomEndpointPathDeepSeekToolsFetch:
+		return types.EndpointTypeDeepSeekToolsFetch, true
 	case advancedCustomEndpointPathClaudeMessages:
 		return types.EndpointTypeAnthropic, true
 	case advancedCustomEndpointPathJinaRerank:
