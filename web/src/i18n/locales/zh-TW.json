@@ -7639,5 +7639,12 @@
     "Zhipu GLM": "智譜GLM",
     "Zhipu V4": "智譜 V4",
     "Zoom": "縮放"
-  }
+  },
+  "Time Trends": "時間趨勢",
+  "Time to First Token (TTFT) Trend": "首字時間 (TTFT) 趨勢",
+  "Average time-to-first-token (TTFT) latency measures how quickly models begin streaming responses.": "首字時間（TTFT）平均延遲用於衡量各模型開始串流回應的快慢。",
+  "No TTFT data in the selected time range.": "所選時間範圍內暫無首字時間 (TTFT) 數據。",
+  "Total Duration Trend": "總耗時趨勢",
+  "Average request duration for each model across hourly buckets helps monitor overall response latency.": "各模型按小時統計的平均請求耗時有助於監控整體回應延遲。",
+  "No total duration data in the selected time range.": "所選時間範圍內暫無總耗時數據。"
 }

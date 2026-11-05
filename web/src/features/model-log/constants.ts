@@ -28,5 +28,6 @@ export const CHART_TABS: { value: ChartTab; labelKey: string }[] = [
   { value: "output_tokens", labelKey: "Output Token Trend" },
   { value: "request_count", labelKey: "Request Count Trend" },
   { value: "tps", labelKey: "TPS Trends" },
+  { value: "time", labelKey: "Time Trends" },
   { value: "failure_rate", labelKey: "Failure Rate Trend" },
 ];

@@ -367,4 +367,39 @@ describe("ModelLogCharts metric panels", () => {
     expect(screen.getByText("Estimated")).toBeVisible();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
   });
+
+  it("renders TTFT and Total Duration panels when switching to Time Trends tab", async () => {
+    renderCharts([
+      makeItem("model-a", [
+        makeCell({
+          request_count: 2,
+          completion_tokens: 100,
+          total_use_time: 6,
+          avg_tps: 25,
+          tps_sample_count: 2,
+        }),
+      ]),
+    ]);
+    selectTab("Time Trends");
+    expect(
+      screen.getByRole("region", { name: "Time to First Token (TTFT) Trend" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: "Total Duration Trend" }),
+    ).toBeVisible();
+    expect((await readChart("ttftData")).data[0].values[0].Value).toBe(1);
+    expect((await readChart("totalDurationData")).data[0].values[0].Value).toBe(3);
+  });
+
+  it("shows centered empty messages for Time Trends panels without valid data", async () => {
+    renderCharts([makeItem("model-a", [makeCell()])]);
+    selectTab("Time Trends");
+    expect(
+      await screen.findByText("No TTFT data in the selected time range."),
+    ).toBeVisible();
+    expect(
+      screen.getByText("No total duration data in the selected time range."),
+    ).toBeVisible();
+    expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
 });

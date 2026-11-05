@@ -24,6 +24,7 @@
   "Fully record request content, response content, and HTTP headers (excluding sensitive info), only allowed for 5 minutes": "Fully record request content, response content, and HTTP headers (excluding sensitive info), only allowed for 5 minutes",
   "Google Gemini": "Google Gemini",
   "Last refreshed": "Last refreshed",
+  "Mantle (Messages API)": "Mantle (Messages API)",
   "Midjourney": "Midjourney",
   "MidjourneyPlus": "MidjourneyPlus",
   "Model Count": "Model Count",

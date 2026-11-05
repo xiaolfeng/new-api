@@ -20,9 +20,11 @@ import { VChart } from "@visactor/react-vchart";
 import {
   Activity,
   BarChart3,
+  Clock,
   Gauge,
   Layers,
   ShieldAlert,
+  Timer,
   Zap,
 } from "lucide-react";
 import {
@@ -165,6 +167,8 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
     requestCountData,
     overallTpsData,
     trimmedTpsData,
+    ttftData,
+    totalDurationData,
     failureRateData,
   } = useMemo(
     () => transformChartData(props.sortedItems, props.selectedModels),
@@ -262,6 +266,28 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
           isDark,
         },
       ),
+      ttft: buildLineChartSpec(
+        "ttftData",
+        ttftData,
+        colorDomain,
+        colorRange,
+        {
+          valueFormat: "duration",
+          locale: props.locale,
+          isDark,
+        },
+      ),
+      total_duration: buildLineChartSpec(
+        "totalDurationData",
+        totalDurationData,
+        colorDomain,
+        colorRange,
+        {
+          valueFormat: "duration",
+          locale: props.locale,
+          isDark,
+        },
+      ),
       failure_rate: buildLineChartSpec(
         "failureRateData",
         failureRateData,
@@ -280,13 +306,15 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
       overallTpsData,
       trimmedTpsData,
       estimatedTpsData,
+      ttftData,
+      totalDurationData,
       failureRateData,
       colorDomain,
       colorRange,
       resolvedColorMap,
       props.locale,
       isDark,
-    ],
+    ]
   );
 
   const chartTheme = resolvedTheme === "dark" ? "dark" : "light";
@@ -404,6 +432,40 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
             }
           >
             {renderChart(specs.estimated_tps, "estimated-tps")}
+          </MetricChartPanel>
+        </div>
+      )}
+
+      {activeTab === "time" && (
+        <div className="flex flex-col gap-4">
+          <MetricChartPanel
+            title={t("Time to First Token (TTFT) Trend")}
+            description={t(
+              "Average time-to-first-token (TTFT) latency measures how quickly models begin streaming responses.",
+            )}
+            icon={<Timer className="size-4" aria-hidden="true" />}
+            emptyMessage={
+              ttftData.some((point) => point.Value !== null)
+                ? undefined
+                : t("No TTFT data in the selected time range.")
+            }
+          >
+            {renderChart(specs.ttft, "ttft")}
+          </MetricChartPanel>
+
+          <MetricChartPanel
+            title={t("Total Duration Trend")}
+            description={t(
+              "Average request duration for each model across hourly buckets helps monitor overall response latency.",
+            )}
+            icon={<Clock className="size-4" aria-hidden="true" />}
+            emptyMessage={
+              totalDurationData.some((point) => point.Value !== null)
+                ? undefined
+                : t("No total duration data in the selected time range.")
+            }
+          >
+            {renderChart(specs.total_duration, "total-duration")}
           </MetricChartPanel>
         </div>
       )}

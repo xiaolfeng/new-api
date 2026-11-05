@@ -7639,5 +7639,12 @@
     "Zhipu GLM": "Zhipu GLM",
     "Zhipu V4": "Zhipu V 4",
     "Zoom": "ズーム"
-  }
+  },
+  "Time Trends": "時間トレンド",
+  "Time to First Token (TTFT) Trend": "最初のトークンまでの時間 (TTFT) トレンド",
+  "Average time-to-first-token (TTFT) latency measures how quickly models begin streaming responses.": "最初のトークンまでの平均レイテンシ（TTFT）は、モデルがストリーミング応答を開始する速さを測定します。",
+  "No TTFT data in the selected time range.": "選択した時間範囲に TTFT データはありません。",
+  "Total Duration Trend": "合計所要時間トレンド",
+  "Average request duration for each model across hourly buckets helps monitor overall response latency.": "時間ごとの各モデルの平均リクエスト所要時間は、全体的な応答レイテンシの監視に役立ちます。",
+  "No total duration data in the selected time range.": "選択した時間範囲に合計所要時間データはありません。"
 }

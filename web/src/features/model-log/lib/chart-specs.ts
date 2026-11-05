@@ -117,12 +117,16 @@ export function transformChartData(
   overallTpsData: ChartDataPoint[];
   trimmedTpsData: ChartDataPoint[];
   averageTpsData: ChartDataPoint[];
+  ttftData: ChartDataPoint[];
+  totalDurationData: ChartDataPoint[];
   failureRateData: ChartDataPoint[];
 } {
   const outputTokenData: ChartDataPoint[] = [];
   const requestCountData: ChartDataPoint[] = [];
   const overallTpsData: ChartDataPoint[] = [];
   const trimmedTpsData: ChartDataPoint[] = [];
+  const ttftData: ChartDataPoint[] = [];
+  const totalDurationData: ChartDataPoint[] = [];
   const failureRateData: ChartDataPoint[] = [];
 
   for (const item of items) {
@@ -165,6 +169,37 @@ export function transformChartData(
         SampleCount: validTps ? (cell.tps_sample_count ?? 1) : 0,
       });
 
+      const hasTotalDuration =
+        (cell.request_count || 0) > 0 && (cell.total_use_time || 0) > 0;
+      const totalDurationVal = hasTotalDuration
+        ? Number((cell.total_use_time / cell.request_count).toFixed(3))
+        : null;
+      totalDurationData.push({
+        ...base,
+        Value: totalDurationVal,
+        SampleCount: hasTotalDuration ? cell.request_count : 0,
+      });
+
+      let ttftVal: number | null = null;
+      if (
+        validTps &&
+        (cell.request_count || 0) > 0 &&
+        (cell.completion_tokens || 0) > 0 &&
+        (cell.total_use_time || 0) > 0
+      ) {
+        const totalPerReq = cell.total_use_time / cell.request_count;
+        const genPerReq =
+          cell.completion_tokens / (cell.request_count * avgTps);
+        const diff = totalPerReq - genPerReq;
+        ttftVal = Number(Math.max(0, diff).toFixed(3));
+      }
+      ttftData.push({
+        ...base,
+        Value: ttftVal,
+        SampleCount:
+          ttftVal !== null ? (cell.tps_sample_count ?? cell.request_count) : 0,
+      });
+
       const rate =
         totalRequests > 0
           ? Number(((cell.failed_count / totalRequests) * 100).toFixed(2))
@@ -183,6 +218,8 @@ export function transformChartData(
     overallTpsData,
     trimmedTpsData,
     averageTpsData: trimmedTpsData,
+    ttftData,
+    totalDurationData,
     failureRateData,
   };
 }
@@ -279,7 +316,7 @@ export function transformEstimatedTpsData(
 }
 
 export interface LineChartSpecOptions {
-  valueFormat?: "tokens" | "tps" | "percent" | "number";
+  valueFormat?: "tokens" | "tps" | "percent" | "duration" | "number";
   locale?: Intl.LocalesArgument;
   isDark?: boolean;
 }
@@ -303,6 +340,9 @@ function formatTooltipMetricValue(
   if (format === "tps") {
     return `${formatNumber(raw, options?.locale)} tok/s`;
   }
+  if (format === "duration") {
+    return `${formatNumber(raw, options?.locale)} s`;
+  }
   return formatNumber(raw, options?.locale);
 }
 
@@ -315,6 +355,7 @@ export function buildLineChartSpec(
 ): ISpec {
   const isTokens = options?.valueFormat === "tokens";
   const isPercent = options?.valueFormat === "percent";
+  const isDuration = options?.valueFormat === "duration";
   const pointFill = options?.isDark ? "#0f172a" : "#ffffff";
 
   return {
@@ -346,6 +387,15 @@ export function buildLineChartSpec(
               label: {
                 formatMethod: (val: unknown) =>
                   `${formatNumber(Number(val), options?.locale)}%`,
+              },
+            }
+          : {}),
+        ...(isDuration
+          ? {
+              min: 0,
+              label: {
+                formatMethod: (val: unknown) =>
+                  `${formatNumber(Number(val), options?.locale)} s`,
               },
             }
           : {}),

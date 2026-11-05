@@ -204,6 +204,64 @@ describe("model log TPS chart data and sorting", () => {
     expect(result.trimmedTpsData).toEqual(result.averageTpsData);
   });
 
+  it("calculates total duration and TTFT correctly and handles breaks on zero requests", () => {
+    const items = [
+      makeItem("model-a", [
+        makeCell(1711454400, {
+          request_count: 2,
+          completion_tokens: 100,
+          total_use_time: 6,
+          avg_tps: 25,
+          tps_sample_count: 2,
+        }),
+        makeCell(1711458000, {
+          request_count: 0,
+          completion_tokens: 0,
+          total_use_time: 0,
+          avg_tps: null,
+          tps_sample_count: 0,
+        }),
+      ]),
+    ];
+
+    const result = transformChartData(items, new Set(["model-a"]));
+
+    expect(result.totalDurationData).toEqual([
+      expect.objectContaining({
+        Model: "model-a",
+        Value: 3,
+        SampleCount: 2,
+      }),
+      expect.objectContaining({
+        Model: "model-a",
+        Value: null,
+        SampleCount: 0,
+      }),
+    ]);
+
+    expect(result.ttftData).toEqual([
+      expect.objectContaining({
+        Model: "model-a",
+        Value: 1,
+        SampleCount: 2,
+      }),
+      expect.objectContaining({
+        Model: "model-a",
+        Value: null,
+        SampleCount: 0,
+      }),
+    ]);
+
+    const durationSpec = buildLineChartSpec(
+      "totalDurationData",
+      result.totalDurationData,
+      ["model-a"],
+      ["#0ea5e9"],
+      { valueFormat: "duration" },
+    ) as Record<string, unknown>;
+    expect(durationSpec.invalidType).toBe("break");
+  });
+
   it("formats missing summary TPS as N/A and sorts missing avg_tps last in both asc and desc", () => {
     expect(formatModelTpsSummary(null, 0)).toBe("N/A");
     expect(formatModelTpsSummary(18.4, 0)).toBe("N/A");
