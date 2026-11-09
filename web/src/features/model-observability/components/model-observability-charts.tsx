@@ -28,23 +28,9 @@ import {
   Timer,
   Zap,
 } from "lucide-react";
-import {
-  type ReactNode,
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/components/ui/badge";
-import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-} from "@/components/ui/empty";
 import { useTheme } from "@/context/theme-provider";
 import { cn } from "@/lib/utils";
 import { VCHART_OPTION } from "@/lib/vchart";
@@ -58,69 +44,13 @@ import {
   transformEstimatedTpsData,
 } from "../lib/chart-specs";
 import type { ChartTab, TokenRecordRecentItem } from "../types";
+import { MetricChartPanel } from "./metric-chart-panel";
 
 interface ModelObservabilityChartsProps {
   sortedItems: TokenRecordRecentItem[];
   selectedModels: Set<string>;
   modelColorMap?: ReadonlyMap<string, string>;
   locale?: string;
-}
-
-interface MetricChartPanelProps {
-  title: string;
-  description: string;
-  icon: ReactNode;
-  badge?: string;
-  badgeClassName?: string;
-  emptyMessage?: string;
-  children: ReactNode;
-}
-
-function MetricChartPanel(props: MetricChartPanelProps) {
-  const titleId = useId();
-
-  return (
-    <section
-      aria-labelledby={titleId}
-      className="bg-card/70 overflow-hidden rounded-xl border shadow-xs"
-    >
-      <div className="border-border/60 flex flex-col gap-2 border-b px-4 py-3 sm:flex-row sm:items-start sm:justify-between sm:px-5">
-        <div className="flex min-w-0 items-start gap-2.5">
-          <span className="bg-muted text-muted-foreground mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg">
-            {props.icon}
-          </span>
-          <div className="min-w-0">
-            <h3 id={titleId} className="text-sm font-semibold">
-              {props.title}
-            </h3>
-            <p className="text-muted-foreground mt-0.5 max-w-3xl text-xs leading-relaxed">
-              {props.description}
-            </p>
-          </div>
-        </div>
-        {props.badge && (
-          <Badge
-            variant="outline"
-            className={cn("w-fit shrink-0", props.badgeClassName)}
-          >
-            {props.badge}
-          </Badge>
-        )}
-      </div>
-      <div className="h-[280px] p-1.5 sm:h-96 sm:p-2">
-        {props.emptyMessage ? (
-          <Empty className="h-full">
-            <EmptyHeader>
-              <EmptyMedia variant="icon">{props.icon}</EmptyMedia>
-              <EmptyDescription>{props.emptyMessage}</EmptyDescription>
-            </EmptyHeader>
-          </Empty>
-        ) : (
-          props.children
-        )}
-      </div>
-    </section>
-  );
 }
 
 export function ModelObservabilityCharts(props: ModelObservabilityChartsProps) {

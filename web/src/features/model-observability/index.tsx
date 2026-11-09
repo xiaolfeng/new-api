@@ -36,6 +36,7 @@ import { toIntlLocale } from '@/i18n/languages'
 
 import { ModelFilter } from './components/model-filter'
 import { ModelObservabilityCharts } from './components/model-observability-charts'
+import { ModelRanking } from './components/model-ranking'
 import { SummaryCards } from './components/summary-cards'
 import { TokenHeatmap } from './components/token-heatmap'
 import { SORT_OPTIONS } from './constants'
@@ -294,6 +295,15 @@ export function ModelObservabilityPage() {
       </SectionPageLayout.Actions>
       <SectionPageLayout.Content>
         <div className='space-y-4'>
+          {!loading && (
+            <ModelRanking
+              items={items}
+              selectedModels={effectiveSelected}
+              modelColorMap={modelColorMap}
+              locale={locale}
+            />
+          )}
+
           {summaryContent}
 
           {!loading && (

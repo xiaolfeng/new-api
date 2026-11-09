@@ -19,7 +19,6 @@ For commercial licensing, please contact support@quantumnous.com
 import type { ISpec } from "@visactor/vchart";
 
 import { formatNumber, formatTokenUnits } from "@/lib/format";
-import { calculateInfraEfficiency } from "@/lib/infra-efficiency";
 
 import type {
   ChartDataPoint,
@@ -30,6 +29,7 @@ import type {
   TokenRecordRecentItem,
 } from "../types";
 import { getPhaseColorVariant, getPhaseLineDash } from "./chart-colors";
+import { computeTokenMetrics, hasVerifiedAvgTps } from "./metrics";
 
 function formatTimeLabel(bucketStartAt: number): string {
   const date = new Date(bucketStartAt * 1000);
@@ -37,19 +37,6 @@ function formatTimeLabel(bucketStartAt: number): string {
   const day = `${date.getDate()}`.padStart(2, "0");
   const hour = `${date.getHours()}`.padStart(2, "0");
   return `${month}-${day} ${hour}:00`;
-}
-
-export function hasVerifiedAvgTps(
-  avgTps: number | null | undefined,
-  sampleCount?: number,
-): avgTps is number {
-  if (typeof avgTps !== "number" || !Number.isFinite(avgTps) || avgTps <= 0) {
-    return false;
-  }
-  if (sampleCount !== undefined && sampleCount <= 0) {
-    return false;
-  }
-  return true;
 }
 
 export function formatModelTpsSummary(
@@ -139,12 +126,12 @@ export function transformChartData(
       const timeLabel = formatTimeLabel(cell.bucket_start_at);
       const base = { Time: timeLabel, Model: item.model_name };
 
-      const totalRequests =
-        (cell.request_count || 0) + (cell.failed_count || 0);
+      const metrics = computeTokenMetrics(cell);
+
       outputTokenData.push({
         ...base,
         Value: cell.completion_tokens || 0,
-        SampleCount: totalRequests,
+        SampleCount: metrics.totalRequests,
       });
 
       requestCountData.push({
@@ -153,41 +140,35 @@ export function transformChartData(
         SampleCount: cell.request_count || 0,
       });
 
-      const hasOverallTps =
-        (cell.total_use_time || 0) > 0 && (cell.completion_tokens || 0) > 0;
-      const overallVal = hasOverallTps
-        ? Number((cell.completion_tokens / cell.total_use_time).toFixed(2))
-        : null;
       overallTpsData.push({
         ...base,
-        Value: overallVal,
-        SampleCount: hasOverallTps ? cell.request_count || 1 : 0,
+        Value:
+          metrics.overallTps === null
+            ? null
+            : Number(metrics.overallTps.toFixed(2)),
+        SampleCount: metrics.overallTps === null ? 0 : cell.request_count || 1,
       });
 
-      const avgTps = cell.avg_tps;
-      const validTps = hasVerifiedAvgTps(avgTps, cell.tps_sample_count);
       trimmedTpsData.push({
         ...base,
-        Value: validTps ? Number(avgTps.toFixed(2)) : null,
-        SampleCount: validTps ? (cell.tps_sample_count ?? 1) : 0,
+        Value:
+          metrics.trimmedTps === null
+            ? null
+            : Number(metrics.trimmedTps.toFixed(2)),
+        SampleCount:
+          metrics.trimmedTps === null ? 0 : (cell.tps_sample_count ?? 1),
       });
 
-      // INFRA 能力：全生命周期吞吐相对去除首字延迟后的吞吐保留率
-      const overallTps = hasOverallTps
-        ? cell.completion_tokens / cell.total_use_time
-        : null;
-      const infraEfficiency = calculateInfraEfficiency(
-        overallTps,
-        validTps ? avgTps : null,
-      );
       infraEfficiencyData.push({
         ...base,
-        Value: infraEfficiency
-          ? Number(infraEfficiency.efficiencyRate.toFixed(2))
-          : null,
-        SampleCount: infraEfficiency
-          ? (cell.tps_sample_count ?? cell.request_count)
-          : 0,
+        Value:
+          metrics.infraEfficiency === null
+            ? null
+            : Number(metrics.infraEfficiency.toFixed(2)),
+        SampleCount:
+          metrics.infraEfficiency === null
+            ? 0
+            : (cell.tps_sample_count ?? cell.request_count),
       });
 
       const hasTotalDuration =
@@ -201,34 +182,22 @@ export function transformChartData(
         SampleCount: hasTotalDuration ? cell.request_count : 0,
       });
 
-      let ttftVal: number | null = null;
-      if (
-        validTps &&
-        (cell.request_count || 0) > 0 &&
-        (cell.completion_tokens || 0) > 0 &&
-        (cell.total_use_time || 0) > 0
-      ) {
-        const totalPerReq = cell.total_use_time / cell.request_count;
-        const genPerReq =
-          cell.completion_tokens / (cell.request_count * avgTps);
-        const diff = totalPerReq - genPerReq;
-        ttftVal = Number(Math.max(0, diff).toFixed(3));
-      }
       ttftData.push({
         ...base,
-        Value: ttftVal,
+        Value: metrics.ttft === null ? null : Number(metrics.ttft.toFixed(3)),
         SampleCount:
-          ttftVal !== null ? (cell.tps_sample_count ?? cell.request_count) : 0,
+          metrics.ttft === null
+            ? 0
+            : (cell.tps_sample_count ?? cell.request_count),
       });
 
-      const rate =
-        totalRequests > 0
-          ? Number(((cell.failed_count / totalRequests) * 100).toFixed(2))
-          : null;
       failureRateData.push({
         ...base,
-        Value: rate,
-        SampleCount: totalRequests,
+        Value:
+          metrics.failureRate === null
+            ? null
+            : Number(metrics.failureRate.toFixed(2)),
+        SampleCount: metrics.totalRequests,
       });
     }
   }
