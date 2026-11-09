@@ -29,6 +29,54 @@ export interface TokenMetricSource {
   total_use_time: number;
   avg_tps: number | null;
   tps_sample_count?: number;
+  thinking_tokens?: number;
+  avg_thinking_tps?: number | null;
+  thinking_sample_count?: number;
+  output_tokens?: number;
+  avg_output_tps?: number | null;
+  output_sample_count?: number;
+  tool_tokens?: number;
+  avg_tool_tps?: number | null;
+  tool_sample_count?: number;
+}
+
+/** 阶段（思考 / 输出 / 工具）字段映射：阶段 TPS 只采信后端校验过的样本。 */
+const PHASE_SOURCES: {
+  phase: TokenPhase;
+  tokensField: "thinking_tokens" | "output_tokens" | "tool_tokens";
+  avgField: "avg_thinking_tps" | "avg_output_tps" | "avg_tool_tps";
+  sampleCountField:
+    | "thinking_sample_count"
+    | "output_sample_count"
+    | "tool_sample_count";
+}[] = [
+  {
+    phase: "thinking",
+    tokensField: "thinking_tokens",
+    avgField: "avg_thinking_tps",
+    sampleCountField: "thinking_sample_count",
+  },
+  {
+    phase: "output",
+    tokensField: "output_tokens",
+    avgField: "avg_output_tps",
+    sampleCountField: "output_sample_count",
+  },
+  {
+    phase: "tool",
+    tokensField: "tool_tokens",
+    avgField: "avg_tool_tps",
+    sampleCountField: "tool_sample_count",
+  },
+];
+export type TokenPhase = "thinking" | "output" | "tool";
+
+export interface PhaseTpsEntry {
+  phase: TokenPhase;
+  /** 该阶段的输出吞吐，tok/s */
+  tps: number;
+  /** 该阶段产出的 token 数 */
+  tokens: number;
 }
 
 export interface TokenMetrics {
@@ -52,6 +100,10 @@ export interface TokenMetrics {
   reliability: number | null;
   /** 使用量权重（对数刻度，避免头部流量线性放大） */
   scale: number;
+  /** 阶段吞吐综合值（按阶段 token 量加权），tok/s */
+  phaseTps: number | null;
+  /** 各阶段吞吐明细 */
+  phaseEntries: PhaseTpsEntry[];
 }
 
 export function hasVerifiedAvgTps(
@@ -103,6 +155,23 @@ export function computeTokenMetrics(source: TokenMetricSource): TokenMetrics {
   const failureRate =
     totalRequests > 0 ? (failedRequests / totalRequests) * 100 : null;
 
+  const phaseEntries: PhaseTpsEntry[] = [];
+  for (const phase of PHASE_SOURCES) {
+    const tps = source[phase.avgField];
+    const sampleCount = source[phase.sampleCountField];
+    const tokens = source[phase.tokensField] ?? 0;
+    if (!hasVerifiedAvgTps(tps, sampleCount) || tokens <= 0) {
+      continue;
+    }
+    phaseEntries.push({ phase: phase.phase, tps, tokens });
+  }
+  const phaseTokens = phaseEntries.reduce((sum, entry) => sum + entry.tokens, 0);
+  const phaseTps =
+    phaseEntries.length > 0 && phaseTokens > 0
+      ? phaseEntries.reduce((sum, entry) => sum + entry.tokens * entry.tps, 0) /
+        phaseTokens
+      : null;
+
   return {
     requests,
     failedRequests,
@@ -114,5 +183,7 @@ export function computeTokenMetrics(source: TokenMetricSource): TokenMetrics {
     failureRate,
     reliability: failureRate === null ? null : 1 - failureRate / 100,
     scale: Math.log1p(totalRequests),
+    phaseTps,
+    phaseEntries,
   };
 }

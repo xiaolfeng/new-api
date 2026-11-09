@@ -23,6 +23,7 @@ import type {
   TokenRecordRecentItem,
   TokenRecordSummary,
 } from "../../types";
+import type { TokenPhase } from "../metrics";
 import { buildModelRanking } from "../ranking";
 
 function makeCell(
@@ -81,6 +82,39 @@ function buildSummary(cells: TokenRecordHourCell[]): TokenRecordSummary {
   }, 0);
   const totalRequests = requestCount + failedCount;
 
+  const phaseSummary = (
+    phase: "thinking" | "output" | "tool",
+  ): {
+    tokens: number;
+    avgTps: number | null;
+    sampleCount: number;
+  } => {
+    const tokensField = `${phase}_tokens` as const;
+    const avgField = `avg_${phase}_tps` as const;
+    const sampleField = `${phase}_sample_count` as const;
+    const tokens = cells.reduce((sum, cell) => sum + cell[tokensField], 0);
+    const sampleCount = cells.reduce(
+      (sum, cell) => sum + (cell[sampleField] ?? 0),
+      0,
+    );
+    const weighted = cells.reduce((sum, cell) => {
+      const avg = cell[avgField];
+      if (avg === null || avg === undefined) {
+        return sum;
+      }
+      return sum + avg * (cell[sampleField] ?? 0);
+    }, 0);
+    return {
+      tokens,
+      avgTps: sampleCount > 0 ? weighted / sampleCount : null,
+      sampleCount,
+    };
+  };
+
+  const thinking = phaseSummary("thinking");
+  const output = phaseSummary("output");
+  const tool = phaseSummary("tool");
+
   return {
     request_count: requestCount,
     prompt_tokens: 0,
@@ -89,18 +123,18 @@ function buildSummary(cells: TokenRecordHourCell[]): TokenRecordSummary {
     total_use_time: totalUseTime,
     avg_tps: tpsSampleCount > 0 ? weightedTps / tpsSampleCount : null,
     tps_sample_count: tpsSampleCount,
-    thinking_tokens: 0,
+    thinking_tokens: thinking.tokens,
     thinking_duration_ms: 0,
-    avg_thinking_tps: null,
-    thinking_sample_count: 0,
-    output_tokens: 0,
+    avg_thinking_tps: thinking.avgTps,
+    thinking_sample_count: thinking.sampleCount,
+    output_tokens: output.tokens,
     output_duration_ms: 0,
-    avg_output_tps: null,
-    output_sample_count: 0,
-    tool_tokens: 0,
+    avg_output_tps: output.avgTps,
+    output_sample_count: output.sampleCount,
+    tool_tokens: tool.tokens,
     tool_duration_ms: 0,
-    avg_tool_tps: null,
-    tool_sample_count: 0,
+    avg_tool_tps: tool.avgTps,
+    tool_sample_count: tool.sampleCount,
     failed_count: failedCount,
     failed_rate: totalRequests > 0 ? (failedCount / totalRequests) * 100 : 0,
     failed_detail: {},
@@ -134,6 +168,7 @@ function makeBucketCell(
     trimmedTps: number;
     ttftSeconds: number;
     failed?: number;
+    phases?: Partial<Record<TokenPhase, { tps: number; tokens: number }>>;
   },
 ): TokenRecordHourCell {
   const generationPerRequest =
@@ -148,6 +183,15 @@ function makeBucketCell(
       Math.round(totalPerRequest * options.requests * 1000) / 1000,
     avg_tps: options.trimmedTps,
     tps_sample_count: options.requests,
+    thinking_tokens: options.phases?.thinking?.tokens ?? 0,
+    avg_thinking_tps: options.phases?.thinking?.tps ?? null,
+    thinking_sample_count: options.phases?.thinking ? options.requests : 0,
+    output_tokens: options.phases?.output?.tokens ?? 0,
+    avg_output_tps: options.phases?.output?.tps ?? null,
+    output_sample_count: options.phases?.output ? options.requests : 0,
+    tool_tokens: options.phases?.tool?.tokens ?? 0,
+    avg_tool_tps: options.phases?.tool?.tps ?? null,
+    tool_sample_count: options.phases?.tool ? options.requests : 0,
   });
 }
 
@@ -389,6 +433,85 @@ describe("model ranking", () => {
     ]);
     expect(result.entries[0].score).toBeCloseTo(96.21, 2);
     expect(result.entries[1].score).toBeCloseTo(93.68, 2);
+  });
+
+  it("adds the phase TPS dimension when every model in the hour has phase data", () => {
+    const items = [
+      makeItem(
+        "model-phase-fast",
+        BUCKETS.map((bucket) =>
+          makeBucketCell(bucket, {
+            requests: 10,
+            completionTokens: 1000,
+            trimmedTps: 100,
+            ttftSeconds: 0.2,
+            phases: {
+              thinking: { tps: 60, tokens: 400 },
+              output: { tps: 100, tokens: 600 },
+            },
+          }),
+        ),
+      ),
+      makeItem(
+        "model-phase-slow",
+        BUCKETS.map((bucket) =>
+          makeBucketCell(bucket, {
+            requests: 10,
+            completionTokens: 1000,
+            trimmedTps: 100,
+            ttftSeconds: 0.2,
+            phases: {
+              thinking: { tps: 20, tokens: 400 },
+              output: { tps: 50, tokens: 600 },
+            },
+          }),
+        ),
+      ),
+    ];
+
+    const result = buildModelRanking(items);
+
+    expect(result.entries[0].modelName).toBe("model-phase-fast");
+    expect(result.entries[0].score).toBeCloseTo(96.53, 2);
+    expect(result.entries[1].score).toBeCloseTo(91.96, 2);
+    expect(result.entries[0].phaseTps).toBeCloseTo(84, 2);
+    expect(result.entries[0].phaseEntries).toHaveLength(2);
+  });
+
+  it("drops the phase dimension when a model in the hour lacks phase data", () => {
+    const items = [
+      makeItem(
+        "model-with-phase",
+        BUCKETS.map((bucket) =>
+          makeBucketCell(bucket, {
+            requests: 10,
+            completionTokens: 1000,
+            trimmedTps: 100,
+            ttftSeconds: 0.2,
+            phases: { output: { tps: 100, tokens: 1000 } },
+          }),
+        ),
+      ),
+      makeItem(
+        "model-without-phase",
+        BUCKETS.map((bucket) =>
+          makeBucketCell(bucket, {
+            requests: 10,
+            completionTokens: 1000,
+            trimmedTps: 100,
+            ttftSeconds: 0.2,
+          }),
+        ),
+      ),
+    ];
+
+    const result = buildModelRanking(items);
+
+    expect(result.entries[0].score).toBeCloseTo(96.21, 2);
+    expect(result.entries[1].score).toBeCloseTo(96.21, 2);
+    expect(result.entries.map((entry) => entry.rank)).toEqual([1, 1]);
+    expect(result.entries[0].phaseTps).toBeCloseTo(100, 2);
+    expect(result.entries[1].phaseTps).toBeNull();
   });
 
   it("penalises failed requests through the reliability dimension", () => {

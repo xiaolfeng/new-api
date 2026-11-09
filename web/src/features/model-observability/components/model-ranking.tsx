@@ -31,12 +31,19 @@ import {
 } from "@/components/ui/table";
 import { formatCompactNumber, formatNumber } from "@/lib/format";
 
+import type { TokenPhase } from "../lib/metrics";
 import { buildModelRanking, type RankingEntry } from "../lib/ranking";
 import type { TokenRecordRecentItem } from "../types";
 import { MetricChartPanel } from "./metric-chart-panel";
 
 type RankingSortKey =
-  "score" | "throughput" | "ttft" | "infra" | "reliability" | "requests";
+  | "score"
+  | "throughput"
+  | "ttft"
+  | "infra"
+  | "reliability"
+  | "phase"
+  | "requests";
 
 interface ModelRankingProps {
   items: TokenRecordRecentItem[];
@@ -59,6 +66,8 @@ function entryValue(entry: RankingEntry, key: RankingSortKey): number | null {
       return entry.infraEfficiency;
     case "reliability":
       return entry.reliability;
+    case "phase":
+      return entry.phaseTps;
     case "requests":
       return entry.requests;
   }
@@ -182,6 +191,23 @@ export function ModelRanking(props: ModelRankingProps) {
     }
   };
 
+  const phaseBreakdownTitle = (entry: RankingEntry) => {
+    if (entry.phaseEntries.length === 0) {
+      return entry.modelName;
+    }
+    const phaseLabels: Record<TokenPhase, string> = {
+      thinking: t("Thinking"),
+      output: t("Output"),
+      tool: t("Tool"),
+    };
+    return entry.phaseEntries
+      .map(
+        (phase) =>
+          `${phaseLabels[phase.phase]}: ${formatNumber(phase.tps, props.locale)} tok/s · ${formatNumber(phase.tokens, props.locale)} tokens`,
+      )
+      .join(" · ");
+  };
+
   const renderRow = (entry: RankingEntry, showRank: boolean) => {
     const color = props.modelColorMap?.get(entry.modelName);
     const score = entry.score;
@@ -240,6 +266,15 @@ export function ModelRanking(props: ModelRankingProps) {
             : `${formatNumber(entry.reliability * 100, props.locale)}%`}
         </TableCell>
         <TableCell className="text-right tabular-nums">
+          {entry.phaseTps === null ? (
+            "—"
+          ) : (
+            <span title={phaseBreakdownTitle(entry)}>
+              {formatNumber(entry.phaseTps, props.locale)}
+            </span>
+          )}
+        </TableCell>
+        <TableCell className="text-right tabular-nums">
           {formatCompactNumber(entry.requests, props.locale)}
         </TableCell>
         <TableCell>{renderSufficiency(entry)}</TableCell>
@@ -274,6 +309,7 @@ export function ModelRanking(props: ModelRankingProps) {
             {renderHeader("ttft", t("First Token"), "text-right")}
             {renderHeader("infra", t("INFRA"), "text-right")}
             {renderHeader("reliability", t("Reliability"), "text-right")}
+            {renderHeader("phase", t("Phase TPS"), "text-right")}
             {renderHeader("requests", t("Requests"), "text-right")}
             <TableHead>{t("Data Sufficiency")}</TableHead>
           </TableRow>
@@ -283,7 +319,7 @@ export function ModelRanking(props: ModelRankingProps) {
           {insufficient.length > 0 && (
             <TableRow className="hover:bg-transparent">
               <TableCell
-                colSpan={9}
+                colSpan={10}
                 className="text-muted-foreground bg-muted/40 text-xs font-medium"
               >
                 {t("Insufficient Samples")}

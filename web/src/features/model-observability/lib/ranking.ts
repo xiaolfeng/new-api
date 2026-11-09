@@ -17,11 +17,16 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import type { TokenRecordRecentItem } from "../types";
-import { computeTokenMetrics, type TokenMetrics } from "./metrics";
+import {
+  computeTokenMetrics,
+  type PhaseTpsEntry,
+  type TokenMetrics,
+} from "./metrics";
 
 /**
  * 排名维度权重（相对分值，合成时按参与维度归一）。
- * throughput 吞吐能力 / ttft 首字延迟 / infra 基础设施效率 / reliability 稳定性 / scale 使用量。
+ * throughput 吞吐能力 / ttft 首字延迟 / infra 基础设施效率 /
+ * reliability 稳定性 / scale 使用量 / phase 阶段吞吐。
  */
 export const RANKING_WEIGHTS = {
   throughput: 30,
@@ -29,6 +34,7 @@ export const RANKING_WEIGHTS = {
   infra: 25,
   reliability: 20,
   scale: 10,
+  phase: 10,
 } as const;
 
 /** 进入主榜所需的最少可比小时数（与其它模型同小时对比过的桶数） */
@@ -54,6 +60,10 @@ export interface RankingEntry {
   infraEfficiency: number | null;
   /** 区间口径的稳定性，0 - 1 */
   reliability: number | null;
+  /** 区间口径的阶段吞吐综合值，tok/s */
+  phaseTps: number | null;
+  /** 区间口径的各阶段吞吐明细 */
+  phaseEntries: PhaseTpsEntry[];
   /** 区间口径的总请求数（成功 + 失败） */
   requests: number;
   /** 与其它模型同小时对比过的小时数 */
@@ -74,6 +84,9 @@ interface BucketBaselines {
   minTtft: number;
   maxTtft: number;
   maxScale: number;
+  /** 该桶内所有参与模型都有阶段吞吐时，阶段维度才可横向比较 */
+  maxPhaseTps: number;
+  phaseComparable: boolean;
 }
 
 interface ScoreAccumulator {
@@ -87,6 +100,8 @@ function computeBaselines(observations: TokenMetrics[]): BucketBaselines {
   let minTtft = Number.POSITIVE_INFINITY;
   let maxTtft = 0;
   let maxScale = 0;
+  let maxPhaseTps = 0;
+  let phaseComparable = observations.length > 0;
 
   for (const metrics of observations) {
     if (metrics.trimmedTps !== null) {
@@ -96,6 +111,11 @@ function computeBaselines(observations: TokenMetrics[]): BucketBaselines {
       minTtft = Math.min(minTtft, metrics.ttft);
       maxTtft = Math.max(maxTtft, metrics.ttft);
     }
+    if (metrics.phaseTps === null) {
+      phaseComparable = false;
+    } else {
+      maxPhaseTps = Math.max(maxPhaseTps, metrics.phaseTps);
+    }
     maxScale = Math.max(maxScale, metrics.scale);
   }
 
@@ -104,6 +124,8 @@ function computeBaselines(observations: TokenMetrics[]): BucketBaselines {
     minTtft: Number.isFinite(minTtft) ? minTtft : 0,
     maxTtft,
     maxScale,
+    maxPhaseTps,
+    phaseComparable,
   };
 }
 
@@ -124,7 +146,8 @@ function normalizeLatency(ttft: number, baselines: BucketBaselines): number {
 
 /**
  * 单个小时桶内把派生指标折算成 0 - 1 的相对值再加权合成 0 - 100 分。
- * 参与排名的模型必然具备全部五个维度，因此合成时权重恒为满分母。
+ * 阶段吞吐维度仅在该桶所有参与模型都有阶段数据时才参与，
+ * 保证同一桶内各模型的评分维度集合一致。
  */
 function composeBucketScore(
   metrics: TokenMetrics,
@@ -161,6 +184,17 @@ function composeBucketScore(
         baselines.maxScale > 0 ? metrics.scale / baselines.maxScale : 0,
     },
   ];
+
+  if (
+    baselines.phaseComparable &&
+    baselines.maxPhaseTps > 0 &&
+    metrics.phaseTps !== null
+  ) {
+    parts.push({
+      weight: RANKING_WEIGHTS.phase,
+      normalized: metrics.phaseTps / baselines.maxPhaseTps,
+    });
+  }
 
   const totalWeight = parts.reduce((sum, part) => sum + part.weight, 0);
   const weighted = parts.reduce(
@@ -263,6 +297,8 @@ export function buildModelRanking(
       throughputTps: summary.trimmedTps,
       ttft: summary.ttft,
       infraEfficiency: summary.infraEfficiency,
+      phaseTps: summary.phaseTps,
+      phaseEntries: summary.phaseEntries,
       reliability: summary.reliability,
       requests: summary.totalRequests,
       comparableBuckets,

@@ -78,6 +78,7 @@ function makeItem(
     completionTokens: number;
     trimmedTps: number;
     ttftSeconds: number;
+    phases?: Partial<Record<TokenPhase, { tps: number; tokens: number }>>;
   },
 ): TokenRecordRecentItem {
   const generationPerRequest =
@@ -92,6 +93,15 @@ function makeItem(
       total_use_time: totalUseTime,
       avg_tps: options.trimmedTps,
       tps_sample_count: options.requests,
+      thinking_tokens: options.phases?.thinking?.tokens ?? 0,
+      avg_thinking_tps: options.phases?.thinking?.tps ?? null,
+      thinking_sample_count: options.phases?.thinking ? options.requests : 0,
+      output_tokens: options.phases?.output?.tokens ?? 0,
+      avg_output_tps: options.phases?.output?.tps ?? null,
+      output_sample_count: options.phases?.output ? options.requests : 0,
+      tool_tokens: options.phases?.tool?.tokens ?? 0,
+      avg_tool_tps: options.phases?.tool?.tps ?? null,
+      tool_sample_count: options.phases?.tool ? options.requests : 0,
     }),
   );
 
@@ -107,18 +117,18 @@ function makeItem(
       total_use_time: totalUseTime * BUCKETS.length,
       avg_tps: options.trimmedTps,
       tps_sample_count: requestCount,
-      thinking_tokens: 0,
+      thinking_tokens: (options.phases?.thinking?.tokens ?? 0) * BUCKETS.length,
       thinking_duration_ms: 0,
-      avg_thinking_tps: null,
-      thinking_sample_count: 0,
-      output_tokens: 0,
+      avg_thinking_tps: options.phases?.thinking?.tps ?? null,
+      thinking_sample_count: options.phases?.thinking ? requestCount : 0,
+      output_tokens: (options.phases?.output?.tokens ?? 0) * BUCKETS.length,
       output_duration_ms: 0,
-      avg_output_tps: null,
-      output_sample_count: 0,
-      tool_tokens: 0,
+      avg_output_tps: options.phases?.output?.tps ?? null,
+      output_sample_count: options.phases?.output ? requestCount : 0,
+      tool_tokens: (options.phases?.tool?.tokens ?? 0) * BUCKETS.length,
       tool_duration_ms: 0,
-      avg_tool_tps: null,
-      tool_sample_count: 0,
+      avg_tool_tps: options.phases?.tool?.tps ?? null,
+      tool_sample_count: options.phases?.tool ? requestCount : 0,
       failed_count: 0,
       failed_rate: 0,
       failed_detail: {},
@@ -171,6 +181,35 @@ describe("ModelRanking", () => {
     expect(within(rows[0]).getByText("96.2")).toBeVisible();
     expect(within(rows[1]).getByText("model-slow")).toBeVisible();
     expect(within(rows[1]).getByText("56.8")).toBeVisible();
+    expect(screen.getByRole("button", { name: "Phase TPS" })).toBeVisible();
+  });
+
+  it("shows the phase TPS with a per-phase breakdown tooltip", async () => {
+    renderRanking([
+      makeItem("model-fast", {
+        requests: 10,
+        completionTokens: 1000,
+        trimmedTps: 100,
+        ttftSeconds: 0.2,
+        phases: {
+          thinking: { tps: 60, tokens: 400 },
+          output: { tps: 100, tokens: 600 },
+        },
+      }),
+      makeItem("model-slow", {
+        requests: 10,
+        completionTokens: 500,
+        trimmedTps: 50,
+        ttftSeconds: 1,
+      }),
+    ]);
+
+    const rows = modelRows();
+    const phaseCell = within(rows[0]).getByTitle(
+      "Thinking: 60 tok/s · 1,200 tokens · Output: 100 tok/s · 1,800 tokens",
+    );
+    expect(phaseCell).toBeVisible();
+    expect(phaseCell).toHaveTextContent("84");
   });
 
   it("re-sorts the board when a dimension header is clicked", async () => {
