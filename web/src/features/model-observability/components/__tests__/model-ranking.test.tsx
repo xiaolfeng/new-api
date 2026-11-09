@@ -23,6 +23,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 
 import en from "@/i18n/locales/en.json";
 
+import type { TokenPhase } from "../../lib/metrics";
 import type { TokenRecordHourCell, TokenRecordRecentItem } from "../../types";
 import { ModelRanking } from "../model-ranking";
 
@@ -149,13 +150,11 @@ function renderRanking(items: TokenRecordRecentItem[]) {
 }
 
 function modelRows(): HTMLElement[] {
-  return screen
-    .getAllByRole("row")
-    .filter((row) => within(row).queryAllByRole("cell").length > 0);
+  return screen.getAllByRole("listitem");
 }
 
 describe("ModelRanking", () => {
-  it("renders the ranking board with rank, model and composite score", async () => {
+  it("renders the ranking board with rank, model, composite score and weights", async () => {
     renderRanking([
       makeItem("model-slow", {
         requests: 10,
@@ -173,6 +172,7 @@ describe("ModelRanking", () => {
 
     const panel = await screen.findByRole("region", { name: "Model Ranking" });
     expect(within(panel).getByText("Weighted Average")).toBeVisible();
+    expect(within(panel).getByText("Weight composition")).toBeVisible();
 
     const rows = modelRows();
     expect(rows).toHaveLength(2);
@@ -181,7 +181,33 @@ describe("ModelRanking", () => {
     expect(within(rows[0]).getByText("96.2")).toBeVisible();
     expect(within(rows[1]).getByText("model-slow")).toBeVisible();
     expect(within(rows[1]).getByText("56.8")).toBeVisible();
-    expect(screen.getByRole("button", { name: "Phase TPS" })).toBeVisible();
+  });
+
+  it("explains the score bar with per-dimension weighted contributions", async () => {
+    renderRanking([
+      makeItem("model-fast", {
+        requests: 10,
+        completionTokens: 1000,
+        trimmedTps: 100,
+        ttftSeconds: 0.2,
+      }),
+      makeItem("model-slow", {
+        requests: 10,
+        completionTokens: 500,
+        trimmedTps: 50,
+        ttftSeconds: 1,
+      }),
+    ]);
+
+    await screen.findByRole("region", { name: "Model Ranking" });
+
+    const throughputSegment = screen.getByTitle(
+      /^Throughput: 30 × 1\.00 = 30\.0$/,
+    );
+    expect(throughputSegment).toBeVisible();
+    expect(
+      screen.getByTitle(/^First Token: 25 × 1\.00 = 25\.0$/),
+    ).toBeVisible();
   });
 
   it("shows the phase TPS with a per-phase breakdown tooltip", async () => {
@@ -205,14 +231,14 @@ describe("ModelRanking", () => {
     ]);
 
     const rows = modelRows();
-    const phaseCell = within(rows[0]).getByTitle(
+    const phaseLine = within(rows[0]).getByTitle(
       "Thinking: 60 tok/s · 1,200 tokens · Output: 100 tok/s · 1,800 tokens",
     );
-    expect(phaseCell).toBeVisible();
-    expect(phaseCell).toHaveTextContent("84");
+    expect(phaseLine).toBeVisible();
+    expect(phaseLine).toHaveTextContent("Thinking 60");
   });
 
-  it("re-sorts the board when a dimension header is clicked", async () => {
+  it("re-sorts the board when a sort control is clicked", async () => {
     renderRanking([
       makeItem("model-slow", {
         requests: 10,
@@ -229,14 +255,14 @@ describe("ModelRanking", () => {
     ]);
 
     await screen.findByRole("region", { name: "Model Ranking" });
-    const firstTokenHeader = screen.getByRole("button", { name: "First Token" });
+    const firstTokenSort = screen.getByRole("button", { name: "First Token" });
 
-    fireEvent.click(firstTokenHeader);
+    fireEvent.click(firstTokenSort);
     let rows = modelRows();
     expect(within(rows[0]).getByText("model-fast")).toBeVisible();
     expect(within(rows[1]).getByText("model-slow")).toBeVisible();
 
-    fireEvent.click(firstTokenHeader);
+    fireEvent.click(firstTokenSort);
     rows = modelRows();
     expect(within(rows[0]).getByText("model-slow")).toBeVisible();
     expect(within(rows[1]).getByText("model-fast")).toBeVisible();
@@ -250,6 +276,6 @@ describe("ModelRanking", () => {
         "No model ranking data in the selected time range.",
       ),
     ).toBeVisible();
-    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.queryAllByRole("listitem")).toHaveLength(0);
   });
 });

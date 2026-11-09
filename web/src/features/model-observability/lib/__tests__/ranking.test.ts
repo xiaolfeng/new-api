@@ -24,7 +24,7 @@ import type {
   TokenRecordSummary,
 } from "../../types";
 import type { TokenPhase } from "../metrics";
-import { buildModelRanking } from "../ranking";
+import { buildModelRanking, RANKING_WEIGHTS } from "../ranking";
 
 function makeCell(
   bucketStartAt: number,
@@ -433,6 +433,71 @@ describe("model ranking", () => {
     ]);
     expect(result.entries[0].score).toBeCloseTo(96.21, 2);
     expect(result.entries[1].score).toBeCloseTo(93.68, 2);
+  });
+
+  it("exposes per-dimension weighted contributions that explain the score", () => {
+    const items = [
+      makeItem(
+        "model-fast",
+        BUCKETS.map((bucket) =>
+          makeBucketCell(bucket, {
+            requests: 10,
+            completionTokens: 1000,
+            trimmedTps: 100,
+            ttftSeconds: 0.2,
+          }),
+        ),
+      ),
+      makeItem(
+        "model-slow",
+        BUCKETS.map((bucket) =>
+          makeBucketCell(bucket, {
+            requests: 10,
+            completionTokens: 500,
+            trimmedTps: 50,
+            ttftSeconds: 1,
+          }),
+        ),
+      ),
+    ];
+
+    const result = buildModelRanking(items);
+    const fast = result.entries[0];
+
+    expect(fast.modelName).toBe("model-fast");
+    const throughput = fast.dimensions.find(
+      (dimension) => dimension.key === "throughput",
+    );
+    expect(throughput?.weight).toBe(RANKING_WEIGHTS.throughput);
+    expect(throughput?.norm).toBeCloseTo(1, 5);
+    expect(throughput?.contribution).toBeCloseTo(
+      RANKING_WEIGHTS.throughput,
+      5,
+    );
+
+    const ttft = fast.dimensions.find(
+      (dimension) => dimension.key === "ttft",
+    );
+    expect(ttft?.norm).toBeCloseTo(1, 5);
+
+    const contributionSum = fast.dimensions.reduce(
+      (sum, dimension) => sum + dimension.contribution,
+      0,
+    );
+    const weightSum = fast.dimensions.reduce(
+      (sum, dimension) => sum + dimension.weight,
+      0,
+    );
+    expect(fast.score).toBeCloseTo(
+      (contributionSum / weightSum) * 100,
+      5,
+    );
+
+    const slow = result.entries[1];
+    const slowThroughput = slow.dimensions.find(
+      (dimension) => dimension.key === "throughput",
+    );
+    expect(slowThroughput?.norm).toBeCloseTo(0.5, 5);
   });
 
   it("adds the phase TPS dimension when every model in the hour has phase data", () => {

@@ -46,6 +46,26 @@ export const RANKING_TIE_TOLERANCE = 0.1;
 
 export type RankingSufficiency = "high" | "medium" | "low" | "insufficient";
 
+/** 排名维度键，与 RANKING_WEIGHTS 一一对应 */
+export type RankingDimensionKey =
+  | "throughput"
+  | "ttft"
+  | "infra"
+  | "reliability"
+  | "scale"
+  | "phase";
+
+/** 单个维度对综合分的贡献：权重 × 归一值 */
+export interface RankingDimension {
+  key: RankingDimensionKey;
+  /** 维度权重 */
+  weight: number;
+  /** 跨小时加权平均后的归一值 0 - 1 */
+  norm: number;
+  /** 对综合分的贡献分值（weight × norm） */
+  contribution: number;
+}
+
 export interface RankingEntry {
   modelName: string;
   /** 综合得分 0 - 100，无可比小时时为 null */
@@ -70,6 +90,8 @@ export interface RankingEntry {
   comparableBuckets: number;
   /** 样本充分度 */
   sufficiency: RankingSufficiency;
+  /** 各维度对综合分的贡献，用于解释「为什么排这么前」 */
+  dimensions: RankingDimension[];
 }
 
 export interface RankingResult {
@@ -89,10 +111,49 @@ interface BucketBaselines {
   phaseComparable: boolean;
 }
 
+interface BucketDimension {
+  key: RankingDimensionKey;
+  weight: number;
+  normalized: number;
+}
+
+interface BucketScore {
+  score: number;
+  dimensions: BucketDimension[];
+}
+
 interface ScoreAccumulator {
   weightedScore: number;
   weight: number;
   comparableBuckets: number;
+  /** 各维度归一值的加权累计与权重累计 */
+  dimensionWeighted: Record<RankingDimensionKey, number>;
+  dimensionWeight: Record<RankingDimensionKey, number>;
+}
+
+const DIMENSION_ORDER: RankingDimensionKey[] = [
+  "throughput",
+  "ttft",
+  "infra",
+  "reliability",
+  "scale",
+  "phase",
+];
+
+function createAccumulator(): ScoreAccumulator {
+  const dimensionWeighted = {} as Record<RankingDimensionKey, number>;
+  const dimensionWeight = {} as Record<RankingDimensionKey, number>;
+  for (const key of DIMENSION_ORDER) {
+    dimensionWeighted[key] = 0;
+    dimensionWeight[key] = 0;
+  }
+  return {
+    weightedScore: 0,
+    weight: 0,
+    comparableBuckets: 0,
+    dimensionWeighted,
+    dimensionWeight,
+  };
 }
 
 function computeBaselines(observations: TokenMetrics[]): BucketBaselines {
@@ -152,33 +213,38 @@ function normalizeLatency(ttft: number, baselines: BucketBaselines): number {
 function composeBucketScore(
   metrics: TokenMetrics,
   baselines: BucketBaselines,
-): number | null {
+): BucketScore | null {
   const trimmedTps = metrics.trimmedTps;
   const ttft = metrics.ttft;
   if (trimmedTps === null || ttft === null) {
     return null;
   }
 
-  const parts: { weight: number; normalized: number }[] = [
+  const dimensions: BucketDimension[] = [
     {
+      key: "throughput",
       weight: RANKING_WEIGHTS.throughput,
       normalized:
         baselines.maxTrimmedTps > 0 ? trimmedTps / baselines.maxTrimmedTps : 0,
     },
     {
+      key: "ttft",
       weight: RANKING_WEIGHTS.ttft,
       normalized: normalizeLatency(ttft, baselines),
     },
     {
+      key: "infra",
       weight: RANKING_WEIGHTS.infra,
       normalized:
         metrics.infraEfficiency === null ? 0 : metrics.infraEfficiency / 100,
     },
     {
+      key: "reliability",
       weight: RANKING_WEIGHTS.reliability,
       normalized: metrics.reliability === null ? 0 : metrics.reliability,
     },
     {
+      key: "scale",
       weight: RANKING_WEIGHTS.scale,
       normalized:
         baselines.maxScale > 0 ? metrics.scale / baselines.maxScale : 0,
@@ -190,18 +256,19 @@ function composeBucketScore(
     baselines.maxPhaseTps > 0 &&
     metrics.phaseTps !== null
   ) {
-    parts.push({
+    dimensions.push({
+      key: "phase",
       weight: RANKING_WEIGHTS.phase,
       normalized: metrics.phaseTps / baselines.maxPhaseTps,
     });
   }
 
-  const totalWeight = parts.reduce((sum, part) => sum + part.weight, 0);
-  const weighted = parts.reduce(
-    (sum, part) => sum + part.weight * part.normalized,
+  const totalWeight = dimensions.reduce((sum, dim) => sum + dim.weight, 0);
+  const weighted = dimensions.reduce(
+    (sum, dim) => sum + dim.weight * dim.normalized,
     0,
   );
-  return (weighted / totalWeight) * 100;
+  return { score: (weighted / totalWeight) * 100, dimensions };
 }
 
 function resolveSufficiency(
@@ -258,18 +325,20 @@ export function buildModelRanking(
     }
     const baselines = computeBaselines(observations.map((o) => o.metrics));
     for (const observation of observations) {
-      const score = composeBucketScore(observation.metrics, baselines);
-      if (score === null) {
+      const bucketScore = composeBucketScore(observation.metrics, baselines);
+      if (bucketScore === null) {
         continue;
       }
-      const accumulator = accumulators.get(observation.modelName) ?? {
-        weightedScore: 0,
-        weight: 0,
-        comparableBuckets: 0,
-      };
-      accumulator.weightedScore += score * observation.metrics.scale;
+      const accumulator =
+        accumulators.get(observation.modelName) ?? createAccumulator();
+      accumulator.weightedScore += bucketScore.score * observation.metrics.scale;
       accumulator.weight += observation.metrics.scale;
       accumulator.comparableBuckets += 1;
+      for (const dimension of bucketScore.dimensions) {
+        accumulator.dimensionWeighted[dimension.key] +=
+          dimension.normalized * observation.metrics.scale;
+        accumulator.dimensionWeight[dimension.key] += observation.metrics.scale;
+      }
       accumulators.set(observation.modelName, accumulator);
     }
   }
@@ -290,6 +359,18 @@ export function buildModelRanking(
       summary.totalRequests,
     );
 
+    const dimensions: RankingDimension[] = [];
+    for (const key of DIMENSION_ORDER) {
+      const dimensionWeight = accumulator?.dimensionWeight[key] ?? 0;
+      if (dimensionWeight <= 0) {
+        continue;
+      }
+      const weight = RANKING_WEIGHTS[key];
+      const norm =
+        (accumulator?.dimensionWeighted[key] ?? 0) / dimensionWeight;
+      dimensions.push({ key, weight, norm, contribution: weight * norm });
+    }
+
     const entry: RankingEntry = {
       modelName: item.model_name,
       score,
@@ -303,6 +384,7 @@ export function buildModelRanking(
       requests: summary.totalRequests,
       comparableBuckets,
       sufficiency,
+      dimensions,
     };
 
     if (sufficiency === "insufficient") {
