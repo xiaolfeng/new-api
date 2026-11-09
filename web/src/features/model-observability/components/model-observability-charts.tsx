@@ -23,6 +23,7 @@ import {
   Clock,
   Gauge,
   Layers,
+  Server,
   ShieldAlert,
   Timer,
   Zap,
@@ -58,7 +59,7 @@ import {
 } from "../lib/chart-specs";
 import type { ChartTab, TokenRecordRecentItem } from "../types";
 
-interface ModelLogChartsProps {
+interface ModelObservabilityChartsProps {
   sortedItems: TokenRecordRecentItem[];
   selectedModels: Set<string>;
   modelColorMap?: ReadonlyMap<string, string>;
@@ -122,7 +123,7 @@ function MetricChartPanel(props: MetricChartPanelProps) {
   );
 }
 
-export function ModelLogCharts(props: ModelLogChartsProps) {
+export function ModelObservabilityCharts(props: ModelObservabilityChartsProps) {
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
   const [activeTab, setActiveTab] = useState<ChartTab>("output_tokens");
@@ -167,6 +168,7 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
     requestCountData,
     overallTpsData,
     trimmedTpsData,
+    infraEfficiencyData,
     ttftData,
     totalDurationData,
     failureRateData,
@@ -257,6 +259,17 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
           isDark,
         },
       ),
+      infra_efficiency: buildLineChartSpec(
+        "infraEfficiencyData",
+        infraEfficiencyData,
+        colorDomain,
+        colorRange,
+        {
+          valueFormat: "percent",
+          locale: props.locale,
+          isDark,
+        },
+      ),
       estimated_tps: buildEstimatedTpsChartSpec(
         "estimatedTpsData",
         estimatedTpsData,
@@ -305,6 +318,7 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
       requestCountData,
       overallTpsData,
       trimmedTpsData,
+      infraEfficiencyData,
       estimatedTpsData,
       ttftData,
       totalDurationData,
@@ -415,6 +429,20 @@ export function ModelLogCharts(props: ModelLogChartsProps) {
             }
           >
             {renderChart(specs.trimmed_tps, "trimmed-tps")}
+          </MetricChartPanel>
+          <MetricChartPanel
+            title={t("Infra Capability Trend")}
+            description={t(
+              "Hourly INFRA efficiency compares total throughput with throughput excluding first-token latency; higher values mean less first-token overhead.",
+            )}
+            icon={<Server className="size-4" aria-hidden="true" />}
+            emptyMessage={
+              infraEfficiencyData.some((point) => point.Value !== null)
+                ? undefined
+                : t("No infra efficiency data in the selected time range.")
+            }
+          >
+            {renderChart(specs.infra_efficiency, "infra-efficiency")}
           </MetricChartPanel>
 
           <MetricChartPanel

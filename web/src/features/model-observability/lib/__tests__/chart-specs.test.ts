@@ -31,7 +31,7 @@ import {
   buildEstimatedTpsChartSpec,
   buildLineChartSpec,
   formatModelTpsSummary,
-  sortModelLogItems,
+  sortModelObservabilityItems,
   transformChartData,
   transformEstimatedTpsData,
 } from "../chart-specs";
@@ -130,7 +130,7 @@ describe("formatTokenUnits", () => {
   });
 });
 
-describe("model log TPS chart data and sorting", () => {
+describe("model observability TPS chart data and sorting", () => {
   it("keeps average TPS grouped by model and preserves null breakpoints instead of 0", () => {
     const items = [
       makeItem("model-a", [
@@ -262,6 +262,63 @@ describe("model log TPS chart data and sorting", () => {
     expect(durationSpec.invalidType).toBe("break");
   });
 
+  it("derives hourly INFRA capability from total and generation TPS", () => {
+    const items = [
+      makeItem("model-a", [
+        makeCell(1711454400, {
+          request_count: 2,
+          completion_tokens: 100,
+          total_use_time: 6,
+          avg_tps: 25,
+          tps_sample_count: 2,
+        }),
+        makeCell(1711458000, {
+          request_count: 1,
+          completion_tokens: 40,
+          total_use_time: 2,
+          avg_tps: null,
+          tps_sample_count: 0,
+        }),
+        makeCell(1711461600, {
+          request_count: 1,
+          completion_tokens: 100,
+          total_use_time: 1,
+          avg_tps: 10,
+          tps_sample_count: 1,
+        }),
+      ]),
+    ];
+
+    const result = transformChartData(items, new Set(["model-a"]));
+
+    expect(result.infraEfficiencyData).toEqual([
+      expect.objectContaining({
+        Model: "model-a",
+        Value: 66.67,
+        SampleCount: 2,
+      }),
+      expect.objectContaining({
+        Model: "model-a",
+        Value: null,
+        SampleCount: 0,
+      }),
+      expect.objectContaining({
+        Model: "model-a",
+        Value: 100,
+        SampleCount: 1,
+      }),
+    ]);
+
+    const infraSpec = buildLineChartSpec(
+      "infraEfficiencyData",
+      result.infraEfficiencyData,
+      ["model-a"],
+      ["#0ea5e9"],
+      { valueFormat: "percent" },
+    ) as unknown as Record<string, unknown>;
+    expect(infraSpec.invalidType).toBe("break");
+  });
+
   it("formats missing summary TPS as N/A and sorts missing avg_tps last in both asc and desc", () => {
     expect(formatModelTpsSummary(null, 0)).toBe("N/A");
     expect(formatModelTpsSummary(18.4, 0)).toBe("N/A");
@@ -274,10 +331,10 @@ describe("model log TPS chart data and sorting", () => {
     ];
 
     expect(
-      sortModelLogItems(items, "avg_tps", "desc").map((i) => i.model_name),
+      sortModelObservabilityItems(items, "avg_tps", "desc").map((i) => i.model_name),
     ).toEqual(["model-fast", "model-slow", "model-missing"]);
     expect(
-      sortModelLogItems(items, "avg_tps", "asc").map((i) => i.model_name),
+      sortModelObservabilityItems(items, "avg_tps", "asc").map((i) => i.model_name),
     ).toEqual(["model-slow", "model-fast", "model-missing"]);
   });
 

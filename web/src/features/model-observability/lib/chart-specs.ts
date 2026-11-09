@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import type { ISpec } from "@visactor/vchart";
 
 import { formatNumber, formatTokenUnits } from "@/lib/format";
+import { calculateInfraEfficiency } from "@/lib/infra-efficiency";
 
 import type {
   ChartDataPoint,
@@ -61,7 +62,7 @@ export function formatModelTpsSummary(
   return `${Number(avgTps.toFixed(2))}`;
 }
 
-export function sortModelLogItems(
+export function sortModelObservabilityItems(
   items: TokenRecordRecentItem[],
   sortField: SortField,
   sortDirection: "asc" | "desc",
@@ -117,6 +118,7 @@ export function transformChartData(
   overallTpsData: ChartDataPoint[];
   trimmedTpsData: ChartDataPoint[];
   averageTpsData: ChartDataPoint[];
+  infraEfficiencyData: ChartDataPoint[];
   ttftData: ChartDataPoint[];
   totalDurationData: ChartDataPoint[];
   failureRateData: ChartDataPoint[];
@@ -125,6 +127,7 @@ export function transformChartData(
   const requestCountData: ChartDataPoint[] = [];
   const overallTpsData: ChartDataPoint[] = [];
   const trimmedTpsData: ChartDataPoint[] = [];
+  const infraEfficiencyData: ChartDataPoint[] = [];
   const ttftData: ChartDataPoint[] = [];
   const totalDurationData: ChartDataPoint[] = [];
   const failureRateData: ChartDataPoint[] = [];
@@ -167,6 +170,24 @@ export function transformChartData(
         ...base,
         Value: validTps ? Number(avgTps.toFixed(2)) : null,
         SampleCount: validTps ? (cell.tps_sample_count ?? 1) : 0,
+      });
+
+      // INFRA 能力：全生命周期吞吐相对去除首字延迟后的吞吐保留率
+      const overallTps = hasOverallTps
+        ? cell.completion_tokens / cell.total_use_time
+        : null;
+      const infraEfficiency = calculateInfraEfficiency(
+        overallTps,
+        validTps ? avgTps : null,
+      );
+      infraEfficiencyData.push({
+        ...base,
+        Value: infraEfficiency
+          ? Number(infraEfficiency.efficiencyRate.toFixed(2))
+          : null,
+        SampleCount: infraEfficiency
+          ? (cell.tps_sample_count ?? cell.request_count)
+          : 0,
       });
 
       const hasTotalDuration =
@@ -218,6 +239,7 @@ export function transformChartData(
     overallTpsData,
     trimmedTpsData,
     averageTpsData: trimmedTpsData,
+    infraEfficiencyData,
     ttftData,
     totalDurationData,
     failureRateData,

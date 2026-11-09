@@ -473,7 +473,7 @@ func GetRecentTokenRecordSnapshot(currentTimestamp int64, hours int64) (TokenRec
 		Find(&records).Error
 	if err != nil {
 		common.SysError("failed to query token records: " + err.Error())
-		return TokenRecordRecentSnapshot{}, errors.New("查询模型日志失败")
+		return TokenRecordRecentSnapshot{}, errors.New("查询模型观测失败")
 	}
 
 	hourIndexMap := make(map[int64]int, len(hoursList))

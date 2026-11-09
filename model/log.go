@@ -591,7 +591,7 @@ type RecordConsumeLogParams struct {
 	Tps            float64           `json:"tps"` // Tokens Per Second
 	TokenTiming    TokenRecordTiming `json:"-"`
 	// Internal 标记内部工具合成请求（如 host-tool builtin），
-	// 不写入 TokenRecord 模型日志统计。
+	// 不写入 TokenRecord 模型观测统计。
 	Internal bool `json:"internal"`
 }
 

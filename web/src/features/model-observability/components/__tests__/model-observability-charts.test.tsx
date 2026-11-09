@@ -28,7 +28,7 @@ import type {
   TokenRecordHourCell,
   TokenRecordRecentItem,
 } from "../../types";
-import { ModelLogCharts } from "../model-log-charts";
+import { ModelObservabilityCharts } from "../model-observability-charts";
 
 interface RenderedChartSpec {
   data: { id: string; values: ChartDataPoint[] }[];
@@ -135,7 +135,7 @@ function renderCharts(
 ) {
   return render(
     <I18nextProvider i18n={i18n}>
-      <ModelLogCharts
+      <ModelObservabilityCharts
         sortedItems={items}
         selectedModels={selectedModels}
         locale="en-US"
@@ -157,7 +157,7 @@ function selectTab(name: string) {
   );
 }
 
-describe("ModelLogCharts metric panels", () => {
+describe("ModelObservabilityCharts metric panels", () => {
   it("shows the output token panel and only the selected model series", async () => {
     renderCharts([
       makeItem("model-a", [
@@ -331,6 +331,35 @@ describe("ModelLogCharts metric panels", () => {
     );
   });
 
+  it("renders the hourly INFRA capability panel in TPS Trends", async () => {
+    renderCharts([
+      makeItem("model-a", [
+        makeCell({
+          request_count: 2,
+          completion_tokens: 100,
+          total_use_time: 6,
+          avg_tps: 25,
+          tps_sample_count: 2,
+        }),
+      ]),
+    ]);
+    selectTab("TPS Trends");
+    const panel = screen.getByRole("region", { name: "Infra Capability Trend" });
+    expect(panel).toBeVisible();
+    expect(
+      within(panel).getByText(
+        "Hourly INFRA efficiency compares total throughput with throughput excluding first-token latency; higher values mean less first-token overhead.",
+      ),
+    ).toBeVisible();
+    const spec = await readChart("infraEfficiencyData");
+    expect(spec.data[0].values[0].Value).toBe(66.67);
+    expect(spec.axes.find((axis) => axis.orient === "left")).toMatchObject({
+      min: 0,
+      max: 100,
+      nice: false,
+    });
+  });
+
   it("renders request count panel when switching to Request Count Trend tab", async () => {
     renderCharts([
       makeItem("model-a", [
@@ -363,6 +392,9 @@ describe("ModelLogCharts metric panels", () => {
       screen.getByText(
         "No estimated phase TPS data in the selected time range.",
       ),
+    ).toBeVisible();
+    expect(
+      screen.getByText("No infra efficiency data in the selected time range."),
     ).toBeVisible();
     expect(screen.getByText("Estimated")).toBeVisible();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();

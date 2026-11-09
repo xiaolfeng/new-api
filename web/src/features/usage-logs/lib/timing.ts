@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { formatUseTime } from "@/lib/format";
+import { calculateInfraEfficiency } from "@/lib/infra-efficiency";
 
 import type { UsageLog } from "../data/schema";
 import type { DeliveryTiming, LogOtherData } from "../types";
@@ -70,58 +71,6 @@ export function formatDualTps(
   return `${overallStr}/${trimmedStr}`;
 }
 
-export interface InfraEfficiencyResult {
-  /** 吞吐保留率 / 效率比率 (0 - 100 范围) */
-  efficiencyRate: number;
-  /** 首字延迟带来的吞吐降低值 (t/s) */
-  tpsDrop: number;
-  /** 首字吞吐损耗比例 (0 - 100 范围) */
-  tpsDropRate: number;
-  /** 效率评级 */
-  level: "excellent" | "good" | "fair" | "poor";
-}
-
-export function calculateInfraEfficiency(
-  overallTps: number | null | undefined,
-  trimmedTps: number | null | undefined,
-): InfraEfficiencyResult | null {
-  if (
-    overallTps == null ||
-    trimmedTps == null ||
-    !Number.isFinite(overallTps) ||
-    !Number.isFinite(trimmedTps) ||
-    trimmedTps <= 0 ||
-    overallTps <= 0
-  ) {
-    return null;
-  }
-
-  // overallTps 代表包含 TTFT 在内的全生命周期吞吐；trimmedTps 代表去除 TTFT 的纯输出吞吐。
-  // 理论上 overallTps <= trimmedTps，做 clamp 保护微小抖动误差
-  const safeOverall = Math.min(overallTps, trimmedTps);
-  const efficiencyRate = Math.min(
-    100,
-    Math.max(0, (safeOverall / trimmedTps) * 100),
-  );
-  const tpsDrop = Math.max(0, trimmedTps - safeOverall);
-  const tpsDropRate = Math.min(100, Math.max(0, (tpsDrop / trimmedTps) * 100));
-
-  let level: "excellent" | "good" | "fair" | "poor" = "poor";
-  if (efficiencyRate >= 80) {
-    level = "excellent";
-  } else if (efficiencyRate >= 60) {
-    level = "good";
-  } else if (efficiencyRate >= 40) {
-    level = "fair";
-  }
-
-  return {
-    efficiencyRate,
-    tpsDrop,
-    tpsDropRate,
-    level,
-  };
-}
 
 export function getLogTiming(log: TimingLog, other?: LogOtherData | null) {
   const invalid = other?.delivery_timing_invalid === true;

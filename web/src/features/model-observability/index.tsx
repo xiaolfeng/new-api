@@ -35,13 +35,13 @@ import { Switch } from '@/components/ui/switch'
 import { toIntlLocale } from '@/i18n/languages'
 
 import { ModelFilter } from './components/model-filter'
-import { ModelLogCharts } from './components/model-log-charts'
+import { ModelObservabilityCharts } from './components/model-observability-charts'
 import { SummaryCards } from './components/summary-cards'
 import { TokenHeatmap } from './components/token-heatmap'
 import { SORT_OPTIONS } from './constants'
-import { useModelLogData } from './hooks/use-model-log-data'
+import { useModelObservabilityData } from './hooks/use-model-observability-data'
 import { buildStableModelColorMap } from './lib/chart-colors'
-import { sortModelLogItems } from './lib/chart-specs'
+import { sortModelObservabilityItems } from './lib/chart-specs'
 import type { SortField, TokenRecordRecentItem } from './types'
 
 const TIME_RANGE_OPTIONS = [
@@ -69,7 +69,7 @@ function SummaryCardsSkeleton() {
   )
 }
 
-export function ModelLogPage() {
+export function ModelObservabilityPage() {
   const { t, i18n } = useTranslation()
   const locale = toIntlLocale(i18n.resolvedLanguage ?? i18n.language)
   const {
@@ -84,14 +84,14 @@ export function ModelLogPage() {
     autoRefresh,
     setAutoRefresh,
     countdown,
-  } = useModelLogData()
+  } = useModelObservabilityData()
 
   const [sortField, setSortField] = useState<SortField>('total_tokens')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
   const [selectedModels, setSelectedModels] = useState<Set<string> | null>(null)
 
   const sortedItems = useMemo(
-    () => sortModelLogItems(items, sortField, sortDirection),
+    () => sortModelObservabilityItems(items, sortField, sortDirection),
     [items, sortField, sortDirection]
   )
 
@@ -177,7 +177,7 @@ export function ModelLogPage() {
   } else if (items.length === 0) {
     modelContent = (
       <div className='text-muted-foreground flex justify-center py-16 text-sm'>
-        {t('No model log data in the selected time range')}
+        {t('No model observability data in the selected time range')}
       </div>
     )
   } else {
@@ -194,7 +194,7 @@ export function ModelLogPage() {
           sortField={sortField}
           locale={locale}
         />
-        <ModelLogCharts
+        <ModelObservabilityCharts
           sortedItems={sortedItems}
           selectedModels={effectiveSelected}
           modelColorMap={modelColorMap}
@@ -209,7 +209,7 @@ export function ModelLogPage() {
       <SectionPageLayout.Title>
         <div className='flex items-center gap-2'>
           <BarChart3 className='text-muted-foreground/60 size-4' />
-          {t('Model Log')}
+          {t('Model Observability')}
         </div>
       </SectionPageLayout.Title>
       <SectionPageLayout.Actions>

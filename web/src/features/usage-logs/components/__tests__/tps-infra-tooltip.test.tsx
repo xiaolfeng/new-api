@@ -19,7 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import { calculateInfraEfficiency } from "../../lib/timing";
+import { calculateInfraEfficiency } from "@/lib/infra-efficiency";
 import { TpsInfraTooltipContent } from "../tps-infra-tooltip";
 
 describe("TpsInfraTooltipContent", () => {

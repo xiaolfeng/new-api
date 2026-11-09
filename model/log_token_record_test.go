@@ -81,7 +81,7 @@ func TestRecordConsumeLogUsesUpstreamModelForTokenRecord(t *testing.T) {
 
 // TestRecordConsumeLogInternalSkipsTokenRecord 验证内部工具合成请求
 // （host-tool builtin，Internal=true）仍写入消费日志，但跳过 TokenRecord
-// 模型日志统计，避免 0-token 内部请求稀释 Model Log 的 TPS / 请求数。
+// 模型观测统计，避免 0-token 内部请求稀释 Model Observability 的 TPS / 请求数。
 func TestRecordConsumeLogInternalSkipsTokenRecord(t *testing.T) {
 	db := setupTokenRecordTestDB(t)
 	require.NoError(t, db.AutoMigrate(&Log{}))

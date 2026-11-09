@@ -113,7 +113,7 @@ export function useSidebarData(badges: SidebarBadges = {}): SidebarData {
             icon: ListTodo,
           },
           {
-            title: t('Model Log'),
+            title: t('Model Observability'),
             url: '/model-log',
             icon: BarChart3,
           },

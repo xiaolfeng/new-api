@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
-import type { InfraEfficiencyResult } from "../lib/timing";
+import type { InfraEfficiencyResult } from "@/lib/infra-efficiency";
 
 const efficiencyBadgeColorMap: Record<InfraEfficiencyResult["level"], string> =
   {

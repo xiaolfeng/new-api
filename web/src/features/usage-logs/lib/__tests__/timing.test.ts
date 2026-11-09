@@ -18,14 +18,11 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { describe, expect, it } from "vitest";
 
+import { calculateInfraEfficiency } from "@/lib/infra-efficiency";
+
 import type { DeliveryTiming } from "../../types";
 import { parseLogOther } from "../format";
-import {
-  calculateInfraEfficiency,
-  formatDualTps,
-  getLogTiming,
-} from "../timing";
-
+import { formatDualTps, getLogTiming } from "../timing";
 const log = { use_time: 7, is_stream: true, completion_tokens: 50 };
 const delivery: DeliveryTiming = {
   version: 1,

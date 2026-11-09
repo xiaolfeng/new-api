@@ -8,7 +8,7 @@ import type { TokenRecordRecentItem, TokenRecordOverallSummary } from '../types'
 const AUTO_REFRESH_INTERVAL_SECONDS = 30
 const MAX_CONSECUTIVE_FAILURES = 3
 
-export function useModelLogData() {
+export function useModelObservabilityData() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [items, setItems] = useState<TokenRecordRecentItem[]>([])

@@ -594,7 +594,7 @@ ORDER BY (created_at, request_id)%s`, clickHouseLogTTLClause(ttlDays))
 
 // clickHouseTokenRecordCreateTableSQL 与 TokenRecord 模型字段对齐。
 // ClickHouse 无唯一约束与原地 UPDATE，桶聚合写入语义受限（见修复记录），
-// 但读路径与列契约必须完整，否则模型日志看板直接不可用。
+// 但读路径与列契约必须完整，否则模型观测看板直接不可用。
 func clickHouseTokenRecordCreateTableSQL() string {
 	return `CREATE TABLE IF NOT EXISTS token_record (
 	id Int64 DEFAULT 0,
