@@ -275,6 +275,11 @@ func writeRelayStreamError(c *gin.Context, format types.RelayFormat, apiError *t
 		_ = helper.ClaudeData(c, dto.ClaudeResponse{Type: "error", Error: apiError.ToClaudeError(upstreamURLs...)})
 		return
 	}
+	if format == types.RelayFormatGemini {
+		// Gemini SSE 没有任何 [DONE] 哨兵，错误帧后禁止追加 helper.Done。
+		_ = helper.ObjectData(c, apiError.ToGeminiError(upstreamURLs...))
+		return
+	}
 	_ = helper.ObjectData(c, gin.H{"error": apiError.ToOpenAIError(upstreamURLs...)})
 	helper.Done(c)
 }

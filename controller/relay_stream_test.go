@@ -273,7 +273,7 @@ func TestRelayKeepAliveHonorsStreamSettings(t *testing.T) {
 }
 
 func TestRelayStreamErrorAfterKeepAlive(t *testing.T) {
-	for _, format := range []types.RelayFormat{types.RelayFormatClaude, types.RelayFormatOpenAI} {
+	for _, format := range []types.RelayFormat{types.RelayFormatClaude, types.RelayFormatGemini, types.RelayFormatOpenAI} {
 		t.Run(string(format), func(t *testing.T) {
 			recorder := httptest.NewRecorder()
 			c, _ := gin.CreateTestContext(recorder)
@@ -294,6 +294,10 @@ func TestRelayStreamErrorAfterKeepAlive(t *testing.T) {
 			require.Equal(t, http.StatusBadRequest, status.OutcomeSnapshot().ErrorStatus)
 			if format == types.RelayFormatClaude {
 				require.Contains(t, recorder.Body.String(), "event: error\n")
+			} else if format == types.RelayFormatGemini {
+				require.Contains(t, recorder.Body.String(), `"status":"INVALID_ARGUMENT"`)
+				require.Contains(t, recorder.Body.String(), `"code":400`)
+				require.NotContains(t, recorder.Body.String(), "[DONE]", "Gemini SSE has no [DONE] sentinel")
 			} else {
 				require.Contains(t, recorder.Body.String(), "data: [DONE]")
 			}

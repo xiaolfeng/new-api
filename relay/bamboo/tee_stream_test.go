@@ -85,6 +85,10 @@ func TestTeeRelayDirectToolUseEmitsNothing(t *testing.T) {
 		require.True(t, relay.forward(cs, ev))
 	}
 
+	// bamboo ≥ v1.2.0 将 message_start 延迟到 usage 就绪或流结束时出帧，
+	// 结束流（等价生产路径的 finish）后再断言。
+	cs.finish()
+
 	// message_start 已写，但没有任何内容块与终止帧。
 	joined := strings.Join(cs.Frames(), "\n")
 	assert.Contains(t, joined, "message_start")

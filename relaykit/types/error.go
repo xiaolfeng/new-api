@@ -23,6 +23,17 @@ type ClaudeError struct {
 	Message string `json:"message,omitempty"`
 }
 
+// GeminiError follows Google's native error envelope: {"error":{"code":...,"message":...,"status":...}}.
+type GeminiError struct {
+	Error GeminiErrorBody `json:"error"`
+}
+
+type GeminiErrorBody struct {
+	Code    int    `json:"code"`
+	Message string `json:"message"`
+	Status  string `json:"status"`
+}
+
 type ErrorType string
 
 const (
@@ -242,6 +253,35 @@ func (e *NewAPIError) ToClaudeError(upstreamURLs ...string) ClaudeError {
 		result.Message = string(e.errorType)
 	}
 	return result
+}
+
+// ToGeminiError masks the upstream addresses like ToOpenAIError and maps the
+// status code onto Google's canonical error codes, mirroring the bamboo Gemini
+// serializer so fallback frames match mid-stream error frames.
+func (e *NewAPIError) ToGeminiError(upstreamURLs ...string) GeminiError {
+	message := e.Error()
+	if e.errorCode != ErrorCodeCountTokenFailed {
+		message = kitutil.MaskSensitiveInfo(message, upstreamURLs...)
+	}
+	if message == "" {
+		message = string(e.errorType)
+	}
+	code, status := http.StatusInternalServerError, "INTERNAL"
+	switch e.StatusCode {
+	case http.StatusBadRequest:
+		code, status = http.StatusBadRequest, "INVALID_ARGUMENT"
+	case http.StatusUnauthorized:
+		code, status = http.StatusUnauthorized, "UNAUTHENTICATED"
+	case http.StatusForbidden:
+		code, status = http.StatusForbidden, "PERMISSION_DENIED"
+	case http.StatusTooManyRequests:
+		code, status = http.StatusTooManyRequests, "RESOURCE_EXHAUSTED"
+	default:
+		if e.StatusCode >= 400 && e.StatusCode < 500 {
+			code, status = http.StatusBadRequest, "INVALID_ARGUMENT"
+		}
+	}
+	return GeminiError{Error: GeminiErrorBody{Code: code, Message: message, Status: status}}
 }
 
 type NewAPIErrorOptions func(*NewAPIError)
