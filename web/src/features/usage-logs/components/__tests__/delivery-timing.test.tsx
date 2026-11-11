@@ -138,7 +138,7 @@ it("renders matching delivery TTFT and duration in desktop, mobile and the real 
   expect(within(dialog).getByText("Completed")).toBeVisible();
   expect(within(dialog).getByText("Upstream timing")).toBeVisible();
   expect(within(dialog).getByText("80.0 t/s")).toBeVisible();
-  expect(screen.getByTestId("desktop-tps")).toHaveTextContent("7.0/~");
+  expect(screen.getByTestId("desktop-tps")).toHaveTextContent("7.0 / ~");
   expect(
     within(screen.getByTestId("desktop-tps")).getByText("Upstream"),
   ).toBeVisible();
@@ -209,10 +209,24 @@ it.each([true, false])(
       },
       stream,
     );
-    const expected = stream ? "25.0/50.0" : "25.0/~";
+    const expected = stream ? "25.0 / 50.0" : "25.0 / ~";
     expect(screen.getByTestId("desktop-tps")).toHaveTextContent(expected);
     expect(within(views[1]).getByText(`${expected} t/s`)).toBeVisible();
     expect(within(views[2]).getByText(`${expected} t/s`)).toBeVisible();
+    if (stream) {
+      // overall=25, trimmed=50 -> INFRA efficiency = 50.0% (fair -> amber label)
+      for (const view of [
+        screen.getByTestId("desktop-tps"),
+        views[1],
+        views[2],
+      ]) {
+        const badge = within(view).getByText("50.0%");
+        expect(badge).toBeVisible();
+        expect(badge.className).toContain("text-amber-600");
+      }
+    } else {
+      expect(within(views[1]).queryByText(/%$/)).not.toBeInTheDocument();
+    }
   },
 );
 

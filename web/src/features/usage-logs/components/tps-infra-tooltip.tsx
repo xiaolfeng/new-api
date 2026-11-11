@@ -20,15 +20,10 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "@/lib/utils";
 
-import type { InfraEfficiencyResult } from "@/lib/infra-efficiency";
-
-const efficiencyBadgeColorMap: Record<InfraEfficiencyResult["level"], string> =
-  {
-    excellent: "text-emerald-600 dark:text-emerald-400 bg-emerald-500/10",
-    good: "text-lime-600 dark:text-lime-400 bg-lime-500/10",
-    fair: "text-amber-600 dark:text-amber-400 bg-amber-500/10",
-    poor: "text-red-600 dark:text-red-400 bg-red-500/10",
-  };
+import {
+  INFRA_EFFICIENCY_BADGE_CLASSES,
+  type InfraEfficiencyResult,
+} from "@/lib/infra-efficiency";
 
 interface TpsInfraTooltipContentProps {
   overallTps: number | null | undefined;
@@ -58,7 +53,7 @@ export function TpsInfraTooltipContent(props: TpsInfraTooltipContentProps) {
           <span
             className={cn(
               "rounded px-1.5 py-0.5 font-mono text-[11px] font-bold tabular-nums",
-              efficiencyBadgeColorMap[efficiency.level],
+              INFRA_EFFICIENCY_BADGE_CLASSES[efficiency.level],
             )}
           >
             {efficiency.efficiencyRate.toFixed(1)}%

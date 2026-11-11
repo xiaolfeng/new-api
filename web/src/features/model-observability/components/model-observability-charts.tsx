@@ -45,6 +45,7 @@ import {
 } from "../lib/chart-specs";
 import type { ChartTab, TokenRecordRecentItem } from "../types";
 import { MetricChartPanel } from "./metric-chart-panel";
+import { ModelRanking } from "./model-ranking";
 
 interface ModelObservabilityChartsProps {
   sortedItems: TokenRecordRecentItem[];
@@ -56,7 +57,7 @@ interface ModelObservabilityChartsProps {
 export function ModelObservabilityCharts(props: ModelObservabilityChartsProps) {
   const { t } = useTranslation();
   const { resolvedTheme } = useTheme();
-  const [activeTab, setActiveTab] = useState<ChartTab>("output_tokens");
+  const [activeTab, setActiveTab] = useState<ChartTab>("ranking");
   const targetTheme = resolvedTheme === "dark" ? "dark" : "light";
   const [readyTheme, setReadyTheme] = useState<"dark" | "light" | null>(null);
   const themeReady = readyTheme === targetTheme;
@@ -295,6 +296,14 @@ export function ModelObservabilityCharts(props: ModelObservabilityChartsProps) {
         ))}
       </div>
 
+      {activeTab === "ranking" && (
+        <ModelRanking
+          items={props.sortedItems}
+          selectedModels={props.selectedModels}
+          modelColorMap={resolvedColorMap}
+          locale={props.locale}
+        />
+      )}
       {activeTab === "output_tokens" && (
         <MetricChartPanel
           title={t("Output Token Trend")}
@@ -360,20 +369,6 @@ export function ModelObservabilityCharts(props: ModelObservabilityChartsProps) {
           >
             {renderChart(specs.trimmed_tps, "trimmed-tps")}
           </MetricChartPanel>
-          <MetricChartPanel
-            title={t("Infra Capability Trend")}
-            description={t(
-              "Hourly INFRA efficiency compares total throughput with throughput excluding first-token latency; higher values mean less first-token overhead.",
-            )}
-            icon={<Server className="size-4" aria-hidden="true" />}
-            emptyMessage={
-              infraEfficiencyData.some((point) => point.Value !== null)
-                ? undefined
-                : t("No infra efficiency data in the selected time range.")
-            }
-          >
-            {renderChart(specs.infra_efficiency, "infra-efficiency")}
-          </MetricChartPanel>
 
           <MetricChartPanel
             title={t("Estimated Phase TPS Trend")}
@@ -392,6 +387,22 @@ export function ModelObservabilityCharts(props: ModelObservabilityChartsProps) {
             {renderChart(specs.estimated_tps, "estimated-tps")}
           </MetricChartPanel>
         </div>
+      )}
+      {activeTab === "infra_efficiency" && (
+        <MetricChartPanel
+          title={t("Infra Capability Trend")}
+          description={t(
+            "Hourly INFRA efficiency compares total throughput with throughput excluding first-token latency; higher values mean less first-token overhead.",
+          )}
+          icon={<Server className="size-4" aria-hidden="true" />}
+          emptyMessage={
+            infraEfficiencyData.some((point) => point.Value !== null)
+              ? undefined
+              : t("No infra efficiency data in the selected time range.")
+          }
+        >
+          {renderChart(specs.infra_efficiency, "infra-efficiency")}
+        </MetricChartPanel>
       )}
 
       {activeTab === "time" && (

@@ -158,6 +158,21 @@ function selectTab(name: string) {
 }
 
 describe("ModelObservabilityCharts metric panels", () => {
+  it("defaults to Model Ranking as the first group tab and isolates Infra Capability Trend", async () => {
+    renderCharts([
+      makeItem("model-a", [
+        makeCell({ request_count: 2, completion_tokens: 120 }),
+      ]),
+    ]);
+
+    const firstButton = screen.getAllByRole("button")[0];
+    expect(firstButton).toHaveTextContent("Model Ranking");
+    expect(firstButton).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("region", { name: "Model Ranking" }),
+    ).toBeVisible();
+  });
+
   it("shows the output token panel and only the selected model series", async () => {
     renderCharts([
       makeItem("model-a", [
@@ -168,6 +183,7 @@ describe("ModelObservabilityCharts metric panels", () => {
       ]),
     ]);
 
+    selectTab("Output Token Trend");
     const panel = screen.getByRole("region", { name: "Output Token Trend" });
     expect(
       within(panel).getByRole("heading", { name: "Output Token Trend" }),
@@ -214,6 +230,7 @@ describe("ModelObservabilityCharts metric panels", () => {
     "shows friendly empty states for %s instead of empty charts",
     async (_label, items, selection) => {
       renderCharts([...items], selection);
+      selectTab("Output Token Trend");
       expect(
         await screen.findByText(
           "No output token data in the selected time range.",
@@ -235,6 +252,7 @@ describe("ModelObservabilityCharts metric panels", () => {
       makeItem("model-a", [makeCell({ request_count: 2 })]),
       makeItem("model-b", [makeCell({ failed_count: 3 })]),
     ]);
+    selectTab("Output Token Trend");
     expect((await readChart("outputTokenData")).data[0].values[0].Value).toBe(
       0,
     );
@@ -331,7 +349,7 @@ describe("ModelObservabilityCharts metric panels", () => {
     );
   });
 
-  it("renders the hourly INFRA capability panel in TPS Trends", async () => {
+  it("renders the hourly INFRA capability panel in its own Infra Capability Trend tab", async () => {
     renderCharts([
       makeItem("model-a", [
         makeCell({
@@ -344,6 +362,11 @@ describe("ModelObservabilityCharts metric panels", () => {
       ]),
     ]);
     selectTab("TPS Trends");
+    expect(
+      screen.queryByRole("region", { name: "Infra Capability Trend" }),
+    ).not.toBeInTheDocument();
+
+    selectTab("Infra Capability Trend");
     const panel = screen.getByRole("region", { name: "Infra Capability Trend" });
     expect(panel).toBeVisible();
     expect(
@@ -394,10 +417,17 @@ describe("ModelObservabilityCharts metric panels", () => {
       ),
     ).toBeVisible();
     expect(
-      screen.getByText("No infra efficiency data in the selected time range."),
-    ).toBeVisible();
+      screen.queryByText("No infra efficiency data in the selected time range."),
+    ).not.toBeInTheDocument();
     expect(screen.getByText("Estimated")).toBeVisible();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+
+    selectTab("Infra Capability Trend");
+    expect(
+      await screen.findByText(
+        "No infra efficiency data in the selected time range.",
+      ),
+    ).toBeVisible();
   });
 
   it("renders TTFT and Total Duration panels when switching to Time Trends tab", async () => {

@@ -68,7 +68,7 @@ export function formatDualTps(
   }
   const overallStr = overallTps != null ? overallTps.toFixed(1) : "~";
   const trimmedStr = trimmedTps != null ? trimmedTps.toFixed(1) : "~";
-  return `${overallStr}/${trimmedStr}`;
+  return `${overallStr} / ${trimmedStr}`;
 }
 
 

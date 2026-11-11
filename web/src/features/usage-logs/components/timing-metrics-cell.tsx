@@ -24,6 +24,7 @@ import {
   textColorMap,
   type StatusVariant,
 } from "@/components/status-badge";
+import { Badge } from "@/components/ui/badge";
 import {
   Tooltip,
   TooltipContent,
@@ -31,6 +32,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import {
+  INFRA_EFFICIENCY_BADGE_CLASSES,
+  type InfraEfficiencyResult,
+} from "@/lib/infra-efficiency";
 
 import { getFirstResponseTimeColor, getResponseTimeColor } from "../lib/format";
 import {
@@ -281,6 +286,7 @@ interface StreamTpsCellProps {
   /** The task request returned its result inline, so it is a synchronous call. */
   isSyncTask?: boolean;
   dualTps?: string;
+  infraEfficiency?: InfraEfficiencyResult | null;
   tokensPerSecond?: number | null;
   deliveryTiming?: boolean;
   streamStatus?: LogOtherData["stream_status"];
@@ -351,8 +357,19 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
         props.deliveryTiming ||
         hasDualTps ||
         (props.isStream && props.tokensPerSecond != null)) && (
-        <span className="text-muted-foreground/60 px-0.5 tabular-nums">
-          {tpsLabel}
+        <span className="text-muted-foreground/60 inline-flex items-center gap-1.5 px-0.5 tabular-nums">
+          <span>{tpsLabel}</span>
+          {props.infraEfficiency != null && (
+            <Badge
+              variant="outline"
+              className={cn(
+                "h-4 rounded px-1 py-0 font-mono text-[10px] font-semibold tabular-nums",
+                INFRA_EFFICIENCY_BADGE_CLASSES[props.infraEfficiency.level],
+              )}
+            >
+              {props.infraEfficiency.efficiencyRate.toFixed(1)}%
+            </Badge>
+          )}
         </span>
       )}
     </div>

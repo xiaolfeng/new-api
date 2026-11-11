@@ -174,11 +174,11 @@ describe("delivery average TPS reliability", () => {
 
   describe("dual TPS display format", () => {
     it("formats pair when both overall and trimmed are present", () => {
-      expect(formatDualTps(54.34, 62.12)).toBe("54.3/62.1");
+      expect(formatDualTps(54.34, 62.12)).toBe("54.3 / 62.1");
     });
 
     it("formats with tilde when trimmed TPS is not applicable (e.g. tool call)", () => {
-      expect(formatDualTps(54.34, null)).toBe("54.3/~");
+      expect(formatDualTps(54.34, null)).toBe("54.3 / ~");
     });
 
     it("formats tilde when neither is available", () => {
@@ -200,7 +200,7 @@ describe("delivery average TPS reliability", () => {
       );
       expect(metrics.overallTps).toBe(50); // 100 / 2s = 50 t/s
       expect(metrics.trimmedTps).toBeNull();
-      expect(metrics.dualTpsLabel).toBe("50.0/~");
+      expect(metrics.dualTpsLabel).toBe("50.0 / ~");
     });
 
     it("computes both overall and trimmed TPS when streaming generation duration is adequate", () => {
@@ -218,7 +218,7 @@ describe("delivery average TPS reliability", () => {
       );
       expect(metrics.overallTps).toBe(50); // 100 / 2s = 50 t/s
       expect(metrics.trimmedTps).toBe(100); // 100 / 1s = 100 t/s
-      expect(metrics.dualTpsLabel).toBe("50.0/100.0");
+      expect(metrics.dualTpsLabel).toBe("50.0 / 100.0");
     });
 
     describe("INFRA efficiency algorithm", () => {

@@ -18,7 +18,10 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from "react-i18next";
 
+import { Badge } from "@/components/ui/badge";
 import { formatNumber } from "@/lib/format";
+import { INFRA_EFFICIENCY_BADGE_CLASSES } from "@/lib/infra-efficiency";
+import { cn } from "@/lib/utils";
 
 import { formatTimingMs, getLogTiming, type TimingLog } from "../../lib/timing";
 import type { DeliveryTiming, LogOtherData, UpstreamTiming } from "../../types";
@@ -71,9 +74,26 @@ export function LogTimingDetails(props: {
             value={
               !metrics.dualTpsLabel ||
               metrics.dualTpsLabel === "~" ||
-              metrics.dualTpsLabel === "N/A"
-                ? "~"
-                : `${metrics.dualTpsLabel} t/s`
+              metrics.dualTpsLabel === "N/A" ? (
+                "~"
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <span>{`${metrics.dualTpsLabel} t/s`}</span>
+                  {metrics.infraEfficiency != null && (
+                    <Badge
+                      variant="outline"
+                      className={cn(
+                        "h-4 rounded px-1 py-0 font-mono text-[10px] font-semibold tabular-nums",
+                        INFRA_EFFICIENCY_BADGE_CLASSES[
+                          metrics.infraEfficiency.level
+                        ],
+                      )}
+                    >
+                      {metrics.infraEfficiency.efficiencyRate.toFixed(1)}%
+                    </Badge>
+                  )}
+                </span>
+              )
             }
             mono
           />

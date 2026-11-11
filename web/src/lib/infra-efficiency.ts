@@ -28,6 +28,17 @@ export interface InfraEfficiencyResult {
   level: "excellent" | "good" | "fair" | "poor";
 }
 
+export const INFRA_EFFICIENCY_BADGE_CLASSES: Record<
+  InfraEfficiencyResult["level"],
+  string
+> = {
+  excellent:
+    "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+  good: "border-lime-500/30 bg-lime-500/10 text-lime-600 dark:text-lime-400",
+  fair: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+  poor: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
+};
+
 /**
  * INFRA 效率：全生命周期吞吐（含首字等待）相对纯输出吞吐（去除首字等待）的保留率。
  *

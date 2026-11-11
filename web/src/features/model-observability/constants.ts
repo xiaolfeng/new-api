@@ -25,9 +25,11 @@ export const SORT_OPTIONS: { value: SortField; labelKey: string }[] = [
 ];
 
 export const CHART_TABS: { value: ChartTab; labelKey: string }[] = [
+  { value: "ranking", labelKey: "Model Ranking" },
   { value: "output_tokens", labelKey: "Output Token Trend" },
   { value: "request_count", labelKey: "Request Count Trend" },
   { value: "tps", labelKey: "TPS Trends" },
+  { value: "infra_efficiency", labelKey: "Infra Capability Trend" },
   { value: "time", labelKey: "Time Trends" },
   { value: "failure_rate", labelKey: "Failure Rate Trend" },
 ];

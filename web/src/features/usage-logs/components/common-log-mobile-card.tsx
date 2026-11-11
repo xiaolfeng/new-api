@@ -194,6 +194,7 @@ export function CommonLogMobileCard<TData>(props: {
                   isTask={other?.is_task === true}
                   isSyncTask={other?.task_sync === true}
                   dualTps={metrics.dualTpsLabel}
+                  infraEfficiency={metrics.infraEfficiency}
                   tokensPerSecond={metrics.mobileTokensPerSecond}
                   deliveryTiming={!metrics.legacy}
                   streamStatus={other?.stream_status}

@@ -24,6 +24,7 @@ import { useTranslation } from "react-i18next";
 import { GroupBadge } from "@/components/group-badge";
 import { StatusBadge, type StatusBadgeProps } from "@/components/status-badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Popover,
@@ -52,6 +53,7 @@ import { getUserAvatarFallback, getUserAvatarStyle } from "@/lib/avatar";
 import { getBadgeStyle, stringToHslColor } from "@/lib/colors";
 import { formatBillingCurrencyFromUSD } from "@/lib/currency";
 import { formatLogQuota, formatTimestampToDate } from "@/lib/format";
+import { INFRA_EFFICIENCY_BADGE_CLASSES } from "@/lib/infra-efficiency";
 import { cn } from "@/lib/utils";
 import { useSystemConfigStore } from "@/stores/system-config-store";
 
@@ -990,12 +992,27 @@ export function useCommonLogsColumns(
                   <TooltipTrigger
                     render={
                       hasDualTps ? (
-                        <span className="font-mono text-sm font-medium tabular-nums cursor-default">
-                          <span className={overallColor}>{overallText}</span>
-                          <span className="text-foreground dark:text-white">
-                            /
+                        <span className="inline-flex cursor-default items-center gap-1.5 font-mono text-sm font-medium tabular-nums">
+                          <span>
+                            <span className={overallColor}>{overallText}</span>
+                            <span className="text-foreground dark:text-white">
+                              {" / "}
+                            </span>
+                            <span className={trimmedColor}>{trimmedText}</span>
                           </span>
-                          <span className={trimmedColor}>{trimmedText}</span>
+                          {metrics.infraEfficiency != null && (
+                            <Badge
+                              variant="outline"
+                              className={cn(
+                                "h-4 rounded px-1 py-0 font-mono text-[10px] font-semibold tabular-nums",
+                                INFRA_EFFICIENCY_BADGE_CLASSES[
+                                  metrics.infraEfficiency.level
+                                ],
+                              )}
+                            >
+                              {metrics.infraEfficiency.efficiencyRate.toFixed(1)}%
+                            </Badge>
+                          )}
                         </span>
                       ) : (
                         <span className="text-muted-foreground font-mono text-sm font-medium tabular-nums cursor-default">
@@ -1020,7 +1037,7 @@ export function useCommonLogsColumns(
           );
         },
         meta: { label: t("TPS"), mobileHidden: true },
-        size: 95,
+        size: 145,
       },
       {
         accessorKey: "prompt_tokens",

@@ -90,9 +90,11 @@ export interface TokenRecordRecentSnapshot {
 export type SortField = "total_tokens" | "failed_rate" | "avg_tps";
 
 export type ChartTab =
+  | "ranking"
   | "output_tokens"
   | "request_count"
   | "tps"
+  | "infra_efficiency"
   | "time"
   | "failure_rate";
 
