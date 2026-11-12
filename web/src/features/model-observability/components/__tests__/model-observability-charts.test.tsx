@@ -22,6 +22,7 @@ import { I18nextProvider } from "react-i18next";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import en from "@/i18n/locales/en.json";
+import zhCN from "@/i18n/locales/zh.json";
 
 import type {
   ChartDataPoint,
@@ -327,11 +328,11 @@ describe("ModelObservabilityCharts metric panels", () => {
     ]);
     selectTab("TPS Trends");
     expect(
-      screen.getByRole("region", { name: "Average TPS Trend" }),
+      screen.getByRole("region", { name: "Average TPS Trend (Incl. TTFT)" }),
     ).toBeVisible();
     expect(
       screen.getByRole("region", {
-        name: "Generation TPS Trend (Excl. First Token)",
+        name: "Generation TPS Trend (Excl. TTFT)",
       }),
     ).toBeVisible();
     const estimated = screen.getByRole("region", {
@@ -463,5 +464,43 @@ describe("ModelObservabilityCharts metric panels", () => {
       screen.getByText("No total duration data in the selected time range."),
     ).toBeVisible();
     expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  });
+
+  it("translates TPS, TTFT, and Time Trends panels cleanly in zhCN locale", async () => {
+    const zhI18n = createInstance();
+    await zhI18n.init({
+      lng: "zhCN",
+      resources: { zhCN },
+      interpolation: { escapeValue: false },
+    });
+
+    render(
+      <I18nextProvider i18n={zhI18n}>
+        <ModelObservabilityCharts
+          sortedItems={[makeItem("model-a", [makeCell()])]}
+          selectedModels={new Set(["model-a"])}
+          locale="zh-CN"
+        />
+      </I18nextProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "TPS 趋势" }));
+    expect(
+      screen.getByRole("region", { name: "平均 TPS 趋势 (含 TTFT)" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: "生成 TPS 趋势 (去除 TTFT)" }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("所选时间范围内暂无去除 TTFT 的生成 TPS 数据。"),
+    ).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "时间趋势" }));
+    expect(
+      screen.getByRole("region", { name: "首字时间 (TTFT) 趋势" }),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("region", { name: "总耗时趋势" }),
+    ).toBeVisible();
   });
 });

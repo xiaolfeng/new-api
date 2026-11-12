@@ -341,7 +341,7 @@ export function ModelObservabilityCharts(props: ModelObservabilityChartsProps) {
       {activeTab === "tps" && (
         <div className="flex flex-col gap-4">
           <MetricChartPanel
-            title={t("Average TPS Trend")}
+            title={t("Average TPS Trend (Incl. TTFT)")}
             description={t(
               "Average TPS uses the total output tokens and total request duration recorded for each model.",
             )}
@@ -356,7 +356,7 @@ export function ModelObservabilityCharts(props: ModelObservabilityChartsProps) {
           </MetricChartPanel>
 
           <MetricChartPanel
-            title={t("Generation TPS Trend (Excl. First Token)")}
+            title={t("Generation TPS Trend (Excl. TTFT)")}
             description={t(
               "Generation TPS excludes initial time-to-first-token (TTFT) latency to measure pure token generation throughput.",
             )}
