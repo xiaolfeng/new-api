@@ -20,7 +20,7 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { formatNumber } from "@/lib/format";
-import { INFRA_EFFICIENCY_BADGE_CLASSES } from "@/lib/infra-efficiency";
+import { getInfraEfficiencyWrapperClass } from "@/lib/infra-efficiency";
 import { cn } from "@/lib/utils";
 
 import { formatTimingMs, getLogTiming, type TimingLog } from "../../lib/timing";
@@ -77,22 +77,15 @@ export function LogTimingDetails(props: {
               metrics.dualTpsLabel === "N/A" ? (
                 "~"
               ) : (
-                <span className="inline-flex items-center gap-1.5">
-                  <span>{`${metrics.dualTpsLabel} t/s`}</span>
-                  {metrics.infraEfficiency != null && (
-                    <Badge
-                      variant="outline"
-                      className={cn(
-                        "h-4 rounded px-1 py-0 font-mono text-[10px] font-semibold tabular-nums",
-                        INFRA_EFFICIENCY_BADGE_CLASSES[
-                          metrics.infraEfficiency.level
-                        ],
-                      )}
-                    >
-                      {metrics.infraEfficiency.efficiencyRate.toFixed(1)}%
-                    </Badge>
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    "font-mono text-xs font-semibold tabular-nums",
+                    getInfraEfficiencyWrapperClass(metrics.infraEfficiency),
                   )}
-                </span>
+                >
+                  {`${metrics.dualTpsLabel} t/s`}
+                </Badge>
               )
             }
             mono

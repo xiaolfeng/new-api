@@ -214,17 +214,32 @@ it.each([true, false])(
     expect(within(views[1]).getByText(`${expected} t/s`)).toBeVisible();
     expect(within(views[2]).getByText(`${expected} t/s`)).toBeVisible();
     if (stream) {
-      // overall=25, trimmed=50 -> INFRA efficiency = 50.0% (fair -> amber label)
-      for (const view of [
-        screen.getByTestId("desktop-tps"),
-        views[1],
-        views[2],
-      ]) {
-        const badge = within(view).getByText("50.0%");
-        expect(badge).toBeVisible();
-        expect(badge.className).toContain("text-amber-600");
-      }
+      // overall=25, trimmed=50 -> INFRA efficiency = 50.0% (fair -> amber badge wrapper)
+      const desktopBadge = within(screen.getByTestId("desktop-tps")).getByText(
+        "25.0",
+      ).closest(".group\\/badge");
+      expect(desktopBadge).not.toBeNull();
+      expect(desktopBadge?.className).toContain("text-amber-700");
+      expect(desktopBadge?.className).toContain("bg-amber-500/10");
+
+      const mobileBadge = within(views[1]).getByText(`${expected} t/s`).closest(".group\\/badge");
+      expect(mobileBadge).not.toBeNull();
+      expect(mobileBadge?.className).toContain("text-amber-700");
+
+      const detailBadge = within(views[2]).getByText(`${expected} t/s`).closest(".group\\/badge");
+      expect(detailBadge).not.toBeNull();
+      expect(detailBadge?.className).toContain("text-amber-700");
+
+      // 验证没有写出额外的百分比文本，只通过颜色感知
+      expect(screen.getByTestId("desktop-tps")).not.toHaveTextContent(/%/);
     } else {
+      // 非流式（单轨无 TTFT 扣除），无 INFRA 效率，Badge 呈现灰色降级底色
+      const desktopBadge = within(screen.getByTestId("desktop-tps")).getByText(
+        "25.0",
+      ).closest(".group\\/badge");
+      expect(desktopBadge).not.toBeNull();
+      expect(desktopBadge?.className).toContain("text-muted-foreground");
+      expect(desktopBadge?.className).toContain("bg-muted/40");
       expect(within(views[1]).queryByText(/%$/)).not.toBeInTheDocument();
     }
   },

@@ -53,7 +53,7 @@ import { getUserAvatarFallback, getUserAvatarStyle } from "@/lib/avatar";
 import { getBadgeStyle, stringToHslColor } from "@/lib/colors";
 import { formatBillingCurrencyFromUSD } from "@/lib/currency";
 import { formatLogQuota, formatTimestampToDate } from "@/lib/format";
-import { INFRA_EFFICIENCY_BADGE_CLASSES } from "@/lib/infra-efficiency";
+import { getInfraEfficiencyWrapperClass } from "@/lib/infra-efficiency";
 import { cn } from "@/lib/utils";
 import { useSystemConfigStore } from "@/stores/system-config-store";
 
@@ -992,28 +992,19 @@ export function useCommonLogsColumns(
                   <TooltipTrigger
                     render={
                       hasDualTps ? (
-                        <span className="inline-flex cursor-default items-center gap-1.5 font-mono text-sm font-medium tabular-nums">
-                          <span>
-                            <span className={overallColor}>{overallText}</span>
-                            <span className="text-foreground dark:text-white">
-                              {" / "}
-                            </span>
-                            <span className={trimmedColor}>{trimmedText}</span>
-                          </span>
-                          {metrics.infraEfficiency != null && (
-                            <Badge
-                              variant="outline"
-                              className={cn(
-                                "h-4 rounded px-1 py-0 font-mono text-[10px] font-semibold tabular-nums",
-                                INFRA_EFFICIENCY_BADGE_CLASSES[
-                                  metrics.infraEfficiency.level
-                                ],
-                              )}
-                            >
-                              {metrics.infraEfficiency.efficiencyRate.toFixed(1)}%
-                            </Badge>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "cursor-default font-mono text-xs font-semibold tabular-nums",
+                            getInfraEfficiencyWrapperClass(
+                              metrics.infraEfficiency,
+                            ),
                           )}
-                        </span>
+                        >
+                          <span className={overallColor}>{overallText}</span>
+                          <span className="text-muted-foreground/60"> / </span>
+                          <span className={trimmedColor}>{trimmedText}</span>
+                        </Badge>
                       ) : (
                         <span className="text-muted-foreground font-mono text-sm font-medium tabular-nums cursor-default">
                           ~
@@ -1037,7 +1028,7 @@ export function useCommonLogsColumns(
           );
         },
         meta: { label: t("TPS"), mobileHidden: true },
-        size: 145,
+        size: 110,
       },
       {
         accessorKey: "prompt_tokens",

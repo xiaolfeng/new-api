@@ -33,7 +33,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import {
-  INFRA_EFFICIENCY_BADGE_CLASSES,
+  getInfraEfficiencyWrapperClass,
   type InfraEfficiencyResult,
 } from "@/lib/infra-efficiency";
 
@@ -357,20 +357,21 @@ export function StreamTpsCell(props: StreamTpsCellProps) {
         props.deliveryTiming ||
         hasDualTps ||
         (props.isStream && props.tokensPerSecond != null)) && (
-        <span className="text-muted-foreground/60 inline-flex items-center gap-1.5 px-0.5 tabular-nums">
-          <span>{tpsLabel}</span>
-          {props.infraEfficiency != null && (
-            <Badge
-              variant="outline"
-              className={cn(
-                "h-4 rounded px-1 py-0 font-mono text-[10px] font-semibold tabular-nums",
-                INFRA_EFFICIENCY_BADGE_CLASSES[props.infraEfficiency.level],
-              )}
-            >
-              {props.infraEfficiency.efficiencyRate.toFixed(1)}%
-            </Badge>
-          )}
-        </span>
+        hasDualTps ? (
+          <Badge
+            variant="outline"
+            className={cn(
+              "font-mono text-xs font-semibold tabular-nums",
+              getInfraEfficiencyWrapperClass(props.infraEfficiency),
+            )}
+          >
+            <span>{tpsLabel}</span>
+          </Badge>
+        ) : (
+          <span className="text-muted-foreground/60 px-0.5 tabular-nums">
+            {tpsLabel}
+          </span>
+        )
       )}
     </div>
   );

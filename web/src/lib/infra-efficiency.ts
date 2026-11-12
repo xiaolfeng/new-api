@@ -39,6 +39,29 @@ export const INFRA_EFFICIENCY_BADGE_CLASSES: Record<
   poor: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
 };
 
+export const INFRA_EFFICIENCY_WRAPPER_CLASSES: Record<
+  InfraEfficiencyResult["level"],
+  string
+> = {
+  excellent:
+    "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
+  good: "border-lime-500/30 bg-lime-500/10 text-lime-700 dark:text-lime-300",
+  fair: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
+  poor: "border-red-500/30 bg-red-500/10 text-red-700 dark:text-red-300",
+};
+
+export const INFRA_EFFICIENCY_WRAPPER_FALLBACK_CLASS =
+  "border-border/60 bg-muted/40 text-muted-foreground";
+
+export function getInfraEfficiencyWrapperClass(
+  efficiency: InfraEfficiencyResult | null | undefined,
+): string {
+  if (!efficiency) {
+    return INFRA_EFFICIENCY_WRAPPER_FALLBACK_CLASS;
+  }
+  return INFRA_EFFICIENCY_WRAPPER_CLASSES[efficiency.level];
+}
+
 /**
  * INFRA 效率：全生命周期吞吐（含首字等待）相对纯输出吞吐（去除首字等待）的保留率。
  *
